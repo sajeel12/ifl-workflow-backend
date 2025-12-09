@@ -1,0 +1,32 @@
+{
+    "name": "ifl-workflow-backend",
+    "version": "1.0.0",
+    "description": "Enterprise Workflow Automation Platform Backend",
+    "type": "module",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node --watch server.js",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "workflow",
+        "automation",
+        "express",
+        "mssql",
+        "sharepoint"
+    ],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.19.2",
+        "jsonwebtoken": "^9.0.2",
+        "ldapjs-promise": "^3.0.0",
+        "nodemailer": "^6.9.13",
+        "sequelize": "^6.37.3",
+        "tedious": "^18.2.0",
+        "winston": "^3.13.0"
+    }
+}
