@@ -16,11 +16,18 @@ const ssoMiddleware = async (req, res, next) => {
     }
 
     try {
-        // Optionally fetch full profile here if needed, or just attach username
-        // For performance, you might cache this or only fetch on specific endpoints
+        // Fetch full profile from AD
+        let adProfile = null;
+        try {
+            adProfile = await adService.findUser(username);
+        } catch (adError) {
+            logger.warn('AD Lookup failed for SSO user', adError);
+        }
+
         req.user = {
             id: username,
-            username: username.split('\\').pop()
+            username: username.split('\\').pop(),
+            ...(adProfile || {})
         };
         next();
     } catch (error) {

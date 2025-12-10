@@ -59,8 +59,13 @@ class ADService {
     }
 
     async validateManager(managerEmail) {
-        // TODO: Implement logic to check if manager exists by email
-        return true;
+        try {
+            const user = await this.findUser(managerEmail);
+            return !!user;
+        } catch (err) {
+            logger.error('Error validating manager', err);
+            return false;
+        }
     }
 }
 

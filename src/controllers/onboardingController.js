@@ -1,12 +1,21 @@
 import workflowService from '../services/workflowService.js';
 import Employee from '../models/Employee.js';
 import logger from '../utils/logger.js';
+import adService from '../services/adService.js';
 
 export const startOnboarding = async (req, res) => {
     const { name, email, department, managerEmail } = req.body;
     const requester = req.user.username; // From SSO Middleware
 
     try {
+        // Validate Manager
+        if (managerEmail) {
+            const isManagerValid = await adService.validateManager(managerEmail);
+            if (!isManagerValid) {
+                return res.status(400).json({ error: `Manager email '${managerEmail}' not found in Active Directory` });
+            }
+        }
+
         // 1. Create/Update Employee Record
         // Check if exists
         let employee = await Employee.findOne({ where: { email } });
