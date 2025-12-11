@@ -81,6 +81,7 @@ class ADService {
 
     async validateManager(managerEmail) {
         try {
+            console.log('Validating manager:', managerEmail);
             const user = await this.findUser(managerEmail);
             return !!user;
         } catch (err) {
