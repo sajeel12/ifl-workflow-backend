@@ -89,6 +89,30 @@ class ADService {
             return false;
         }
     }
+
+    async debugUser(username) {
+        const sAMAccountName = username.split('\\').pop().split('@')[0];
+        const config = this._getConfig();
+        const client = await this._getClient();
+
+        // Fetch ALL attributes
+        const opts = {
+            filter: `(&(objectClass=user)(sAMAccountName=${sAMAccountName}))`,
+            scope: 'sub',
+            attributes: ['*'] // Wildcard for standard attributes
+        };
+
+        try {
+            const results = await client.search(config.baseDN, opts);
+            if (!results || results.length === 0) return { found: false };
+            return results[0];
+        } catch (err) {
+            logger.error('Debug Search Failed', err);
+            throw err;
+        } finally {
+            await client.unbind();
+        }
+    }
 }
 
 export default new ADService();

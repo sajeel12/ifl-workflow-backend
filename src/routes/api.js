@@ -16,4 +16,15 @@ router.get('/health', (req, res) => {
     res.json({ status: 'UP', timestamp: new Date() });
 });
 
+// Debug Route for AD
+import adService from '../services/adService.js';
+router.get('/ad-debug/:username', async (req, res) => {
+    try {
+        const result = await adService.debugUser(req.params.username);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
