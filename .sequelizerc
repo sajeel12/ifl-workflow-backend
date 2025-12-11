@@ -1,7 +1,7 @@
 const path = require('path');
 
 module.exports = {
-  'config': path.resolve('src/config', 'cli-config.cjs'), // We'll create this CJS config
+  'config': path.resolve('src/config', 'cli-config.cjs'),
   'models-path': path.resolve('src', 'models'),
   'seeders-path': path.resolve('src', 'seeders'),
   'migrations-path': path.resolve('src', 'migrations')

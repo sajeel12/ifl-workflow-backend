@@ -1,43 +1,45 @@
-import workflowService from '../services/workflowService.js';
+import AccessRequest from '../models/AccessRequest.js';
 import Employee from '../models/Employee.js';
+import * as workflowService from '../services/workflowService.js';
 import logger from '../utils/logger.js';
-import adService from '../services/adService.js';
 
-export const startOnboarding = async (req, res) => {
-    const { name, email, department, managerEmail } = req.body;
-    const requester = req.user.username; // From SSO Middleware
-
+export const createAccessRequest = async (req, res) => {
     try {
-        // Validate Manager
-        if (managerEmail) {
-            const isManagerValid = await adService.validateManager(managerEmail);
-            if (!isManagerValid) {
-                return res.status(400).json({ error: `Manager email '${managerEmail}' not found in Active Directory` });
+        const { requestType, justification } = req.body;
+        // req.user comes from ssoMiddleware
+        // For now we assume we have user data. If Employee table is empty, we might need to upsert Employee first.
+
+        // Upsert Employee (Ensure they exist in DB)
+        const [emp, created] = await Employee.findOrCreate({
+            where: { email: req.user.email },
+            defaults: {
+                name: req.user.displayName,
+                department: req.user.department || 'Unknown',
+                managerEmail: req.user.manager || 'manager@example.com', // Validation needed
+                status: 'Active'
             }
-        }
+        });
 
-        // 1. Create/Update Employee Record
-        // Check if exists
-        let employee = await Employee.findOne({ where: { email } });
-        if (!employee) {
-            // Generate partial ID or use email as ID for now
-            employee = await Employee.create({
-                employeeId: email, // Simplification
-                name,
-                email,
-                department,
-                managerEmail,
-                status: 'Onboarding'
-            });
-        }
+        const newReq = await AccessRequest.create({
+            employeeId: emp.employeeId,
+            requestType,
+            justification
+        });
 
-        // 2. Start Workflow
-        const request = await workflowService.initiateOnboarding(employee.employeeId, managerEmail, requester);
+        // Start Workflow
+        // Using mock manager if AD manager is null/string-dn
+        const managerEmail = emp.managerEmail.includes('@') ? emp.managerEmail : 'manager@test.com';
 
-        res.json({ success: true, requestId: request.requestId });
+        await workflowService.startAccessRequestWorkflow(
+            newReq.requestId,
+            emp.employeeId,
+            managerEmail,
+            justification
+        );
 
-    } catch (error) {
-        logger.error('Start Onboarding Error', error);
-        res.status(500).json({ error: error.message });
+        res.status(201).json({ message: 'Request submitted successfully', requestId: newReq.requestId });
+    } catch (err) {
+        logger.error(err);
+        res.status(500).json({ error: err.message });
     }
 };

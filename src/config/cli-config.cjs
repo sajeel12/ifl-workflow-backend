@@ -6,7 +6,7 @@ module.exports = {
         password: process.env.DB_PASS,
         database: process.env.DB_NAME,
         host: process.env.DB_HOST,
-        port: parseInt(process.env.DB_PORT) || 1433,
+        port: parseInt(process.env.DB_PORT, 10),
         dialect: 'mssql',
         dialectOptions: {
             options: {
@@ -16,17 +16,6 @@ module.exports = {
         }
     },
     production: {
-        username: process.env.DB_USER,
-        password: process.env.DB_PASS,
-        database: process.env.DB_NAME,
-        host: process.env.DB_HOST,
-        port: parseInt(process.env.DB_PORT) || 1433,
-        dialect: 'mssql',
-        dialectOptions: {
-            options: {
-                encrypt: true, // Usually true in prod
-                trustServerCertificate: false
-            }
-        }
+        // ... similar config
     }
 };

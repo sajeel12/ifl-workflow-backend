@@ -1,37 +1,26 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
-import Employee from './Employee.js';
 
 const TimelineEvent = sequelize.define('TimelineEvent', {
     eventId: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
     },
     employeeId: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        references: {
-            model: Employee,
-            key: 'employeeId'
-        }
+        type: DataTypes.INTEGER
     },
     eventType: {
         type: DataTypes.STRING,
-        allowNull: false // e.g., "ONBOARDING_INITIATED", "ACCESS_REQUESTED"
+        allowNull: false
     },
     description: {
-        type: DataTypes.TEXT,
-        allowNull: true
+        type: DataTypes.TEXT
     },
     timestamp: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW
     }
-}, {
-    timestamps: false
 });
-
-TimelineEvent.belongsTo(Employee, { foreignKey: 'employeeId' });
 
 export default TimelineEvent;

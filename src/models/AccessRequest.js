@@ -1,43 +1,35 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
-import Employee from './Employee.js';
 
 const AccessRequest = sequelize.define('AccessRequest', {
     requestId: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
     },
     employeeId: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        references: {
-            model: Employee,
-            key: 'employeeId'
-        }
+        type: DataTypes.INTEGER,
+        allowNull: false
     },
     requestType: {
-        type: DataTypes.STRING, // e.g., "SAP Access", "VPN"
+        type: DataTypes.STRING,
         allowNull: false
     },
     justification: {
-        type: DataTypes.TEXT,
-        allowNull: true
+        type: DataTypes.TEXT
     },
     status: {
-        type: DataTypes.ENUM('Pending', 'Approved', 'Rejected'),
-        defaultValue: 'Pending'
+        type: DataTypes.STRING,
+        defaultValue: 'Pending' // Pending, Approved, Rejected, Completed
     },
     workflowStage: {
-        type: DataTypes.STRING, // e.g., "Manager Approval", "IT Provisioning"
-        defaultValue: 'Manager Approval'
+        type: DataTypes.STRING,
+        defaultValue: 'ManagerApproval'
+    },
+    createdAt: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW
     }
-}, {
-    timestamps: true
 });
-
-// Association
-AccessRequest.belongsTo(Employee, { foreignKey: 'employeeId' });
-Employee.hasMany(AccessRequest, { foreignKey: 'employeeId' });
 
 export default AccessRequest;

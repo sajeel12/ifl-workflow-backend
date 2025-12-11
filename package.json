@@ -7,10 +7,7 @@
     "scripts": {
         "start": "node server.js",
         "dev": "node --watch server.js",
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "db:migrate": "sequelize-cli db:migrate",
-        "db:create": "sequelize-cli db:create",
-        "db:seed": "sequelize-cli db:seed:all"
+        "test": "echo \"Error: no test specified\" && exit 1"
     },
     "keywords": [
         "workflow",
@@ -31,8 +28,5 @@
         "sequelize": "^6.37.3",
         "tedious": "^18.2.0",
         "winston": "^3.13.0"
-    },
-    "devDependencies": {
-        "sequelize-cli": "^6.6.3"
     }
 }

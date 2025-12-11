@@ -1,120 +1,99 @@
-// Need to export models from index.js first, assuming standard sequelize pattern.
-// Let's quickly create src/models/index.js if it doesn't exist, or just import individually.
-// Importing individually for now to avoid circular deps if index.js isn't set up yet.
-import AccessRequestModel from '../models/AccessRequest.js';
-import WorkflowApprovalModel from '../models/WorkflowApproval.js';
-import TimelineEventModel from '../models/TimelineEvent.js';
-import EmployeeModel from '../models/Employee.js';
-
-import emailService from './emailService.js';
+import AccessRequest from '../models/AccessRequest.js';
+import WorkflowApproval from '../models/WorkflowApproval.js';
+import TimelineEvent from '../models/TimelineEvent.js';
+import { sendApprovalEmail } from './emailService.js';
+import crypto from 'crypto';
 import logger from '../utils/logger.js';
-import sequelize from '../config/database.js';
+// import { findUser } from './adService.js'; // if needed for manager lookup
 
-class WorkflowService {
+export const startAccessRequestWorkflow = async (requestId, employeeId, managerEmail, justification) => {
+    logger.info(`[Workflow] Starting for Request #${requestId}`);
 
-    async initiateOnboarding(employeeId, managerEmail, requesterId) {
-        const t = await sequelize.transaction();
-        try {
-            // 1. Create Request
-            const request = await AccessRequestModel.create({
-                employeeId: employeeId,
-                requestType: 'Onboarding',
-                status: 'Pending',
-                workflowStage: 'Manager Approval'
-            }, { transaction: t });
+    try {
+        // 1. Log Event
+        await TimelineEvent.create({
+            employeeId,
+            eventType: 'RequestSubmitted',
+            description: 'Access request submitted by user.'
+        });
 
-            // 2. Generate Token
-            const token = emailService.generateActionToken(request.requestId);
+        // 2. Create Approval Record for Manager
+        const token = crypto.randomBytes(20).toString('hex');
+        const approval = await WorkflowApproval.create({
+            requestId,
+            approverEmail: managerEmail,
+            status: 'Pending',
+            actionToken: token
+        });
 
-            // 3. Create Approval Record
-            await WorkflowApprovalModel.create({
-                requestId: request.requestId,
-                approverEmail: managerEmail,
-                status: 'Pending',
-                actionToken: token
-            }, { transaction: t });
+        // 3. Send Email
+        // Construct Action Link (Pointing to GET/POST handler)
+        const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+        const actionLink = `${baseUrl}/api/approvals/handle?token=${token}`;
 
-            // 4. Log Event
-            await TimelineEventModel.create({
-                employeeId: employeeId,
-                eventType: 'ONBOARDING_INITIATED',
-                description: `Onboarding initiated by ${requesterId}`
-            }, { transaction: t });
+        await sendApprovalEmail(
+            managerEmail,
+            `Action Required: Access Request #${requestId}`,
+            `User requested access. Justification: "${justification}"`,
+            actionLink
+        );
 
-            await t.commit();
+        // 4. Update Request Status
+        await AccessRequest.update(
+            { status: 'Pending', workflowStage: 'ManagerApproval' },
+            { where: { requestId } }
+        );
 
-            // 5. Send Email (Outside transaction to avoid locking if SMTP is slow)
-            // Fetch details for email
-            const employee = await EmployeeModel.findByPk(employeeId);
-            await emailService.sendApprovalEmail(managerEmail, {
-                requestId: request.requestId,
-                employeeName: employee ? employee.name : employeeId,
-                requestType: 'Onboarding'
-            }, token);
+    } catch (err) {
+        logger.error(`[Workflow] Error starting: ${err.message}`);
+        throw err;
+    }
+};
 
-            return request;
+export const handleApprovalAction = async (token, action, comment) => {
+    logger.info(`[Workflow] Handling action '${action}' for token ${token}`);
 
-        } catch (error) {
-            await t.rollback();
-            logger.error('Error initiating onboarding', error);
-            throw error;
-        }
+    const approval = await WorkflowApproval.findOne({ where: { actionToken: token } });
+    if (!approval) {
+        throw new Error('Invalid Token');
     }
 
-    async handleApprovalAction(token, action, comment) {
-        const t = await sequelize.transaction();
-        try {
-            // 1. Find Approval
-            const approval = await WorkflowApprovalModel.findOne({
-                where: { actionToken: token },
-                include: [AccessRequestModel] // Eager load request
-            });
-
-            if (!approval) {
-                throw new Error('Invalid or Expired Token');
-            }
-
-            if (approval.status !== 'Pending') {
-                return { success: false, message: 'Request already processed' };
-            }
-
-            // 2. Update Approval
-            approval.status = action; // 'Approved' or 'Rejected'
-            approval.decisionDate = new Date();
-            approval.comment = comment;
-            await approval.save({ transaction: t });
-
-            // 3. Update Request Logic (Simple State Machine)
-            const request = await AccessRequestModel.findByPk(approval.requestId, { transaction: t });
-
-            if (action === 'Rejected') {
-                request.status = 'Rejected';
-                request.workflowStage = 'Closed';
-            } else {
-                // If Approved, move to next stage?
-                // For this demo, functionality is: Manager Approves -> Done (or IT Provisioning)
-                request.status = 'Approved';
-                request.workflowStage = 'IT Provisioning';
-                // In a real app, you might trigger next approval here
-            }
-            await request.save({ transaction: t });
-
-            // 4. Log Event
-            await TimelineEventModel.create({
-                employeeId: request.employeeId,
-                eventType: `REQUEST_${action.toUpperCase()}`,
-                description: `Manager ${action} the request. Comment: ${comment || 'None'}`
-            }, { transaction: t });
-
-            await t.commit();
-            return { success: true, message: `Request ${action}` };
-
-        } catch (error) {
-            await t.rollback();
-            logger.error('Error handling approval', error);
-            throw error;
-        }
+    if (approval.status !== 'Pending') {
+        return { status: 'AlreadyProcessed', message: 'This request has already been processed.' };
     }
+
+    // Update Approval
+    approval.status = action; // Approve / Reject
+    approval.decisionDate = new Date();
+    approval.comment = comment;
+    await approval.save();
+
+    // Determine Next Step
+    const req = await AccessRequest.findByPk(approval.requestId);
+
+    if (action === 'Approve') {
+        req.status = 'Approved';
+        req.workflowStage = 'Completed'; // Or trigger IT provisioning step
+        await req.save();
+
+        await TimelineEvent.create({
+            employeeId: req.employeeId,
+            eventType: 'ManagerApproved',
+            description: `Manager approved the request. Comment: ${comment || 'None'}`
+        });
+
+        // Optional: Trigger Provisioning Service here
+    } else {
+        req.status = 'Rejected';
+        req.workflowStage = 'Closed';
+        await req.save();
+
+        await TimelineEvent.create({
+            employeeId: req.employeeId,
+            eventType: 'ManagerRejected',
+            description: `Manager rejected the request. Comment: ${comment || 'None'}`
+        });
+    }
+
+    return { status: 'Success', message: `Request has been ${action}d.` };
 }
-
-export default new WorkflowService();

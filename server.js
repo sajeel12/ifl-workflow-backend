@@ -1,25 +1,24 @@
 import app from './app.js';
 import sequelize from './src/config/database.js';
 import logger from './src/utils/logger.js';
-import dotenv from 'dotenv';
-dotenv.config();
 
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
     try {
-        // Test DB Connection
+        // DB Connection
         await sequelize.authenticate();
-        logger.info('Database connection has been established successfully.');
+        logger.info('Database connected.');
 
-        // Sync Models (Optional: use migrations in production)
-        // await sequelize.sync(); 
+        // Sync Models (Dev only - use Migrations in Prod!)
+        await sequelize.sync({ alter: true });
+        logger.info('Database synced.');
 
         app.listen(PORT, '0.0.0.0', () => {
-            logger.info(`Server is running on http://0.0.0.0:${PORT}`);
+            logger.info(`Server running on port ${PORT}`);
         });
-    } catch (error) {
-        logger.error('Unable to connect to the database:', error);
+    } catch (err) {
+        logger.error(`Failed to start server: ${err.message}`);
         process.exit(1);
     }
 }

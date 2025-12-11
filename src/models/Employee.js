@@ -3,9 +3,9 @@ import sequelize from '../config/database.js';
 
 const Employee = sequelize.define('Employee', {
     employeeId: {
-        type: DataTypes.STRING,
+        type: DataTypes.INTEGER,
         primaryKey: true,
-        unique: true
+        autoIncrement: true
     },
     name: {
         type: DataTypes.STRING,
@@ -14,24 +14,28 @@ const Employee = sequelize.define('Employee', {
     email: {
         type: DataTypes.STRING,
         allowNull: false,
+        unique: true,
         validate: {
             isEmail: true
         }
     },
     department: {
-        type: DataTypes.STRING,
-        allowNull: true
+        type: DataTypes.STRING
     },
     managerEmail: {
         type: DataTypes.STRING,
-        allowNull: true
+        validate: {
+            isEmail: true
+        }
     },
     status: {
-        type: DataTypes.ENUM('Active', 'Inactive', 'Onboarding'),
-        defaultValue: 'Onboarding'
+        type: DataTypes.STRING,
+        defaultValue: 'Active' // Active, Terminated, Onboarding
+    },
+    createdAt: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW
     }
-}, {
-    timestamps: true
 });
 
 export default Employee;

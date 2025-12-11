@@ -1,118 +1,120 @@
 import { Client } from 'ldapjs-promise';
-import logger from '../utils/logger.js';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+
 dotenv.config();
 
-class ADService {
-    constructor() {
-        // Configuration loaded lazily to ensure environment is ready
-    }
+// Configuration from .env
+const adConfig = {
+    url: process.env.AD_URL, // e.g., 'ldap://192.168.1.5'
+    bindDN: process.env.AD_USER, // e.g., 'CN=Service Account,CN=Users,DC=example,DC=com'
+    bindCredentials: process.env.AD_PASSWORD,
+    searchBase: process.env.AD_BASE_DN // e.g., 'DC=example,DC=com'
+};
 
-    _getConfig() {
-        const config = {
-            url: process.env.AD_URL,
-            baseDN: process.env.AD_BASE_DN,
-            user: process.env.AD_USER,
-            pass: process.env.AD_PASSWORD
-        };
+/**
+ * Creates and binds an LDAP client
+ */
+async function getAdClient() {
+    console.log('[AD Service] Initialization...');
+    console.log(`[AD Service] URL: ${adConfig.url}`);
+    console.log(`[AD Service] Bind DN: ${adConfig.bindDN}`);
 
-        if (!config.url || !config.user || !config.pass) {
-            const missing = Object.keys(config).filter(k => !config[k]).join(', ');
-            throw new Error(`Missing AD Configuration: ${missing}. Check your .env file.`);
-        }
-        return config;
-    }
+    const client = new Client({ url: adConfig.url });
 
-    async _getClient() {
-        const config = this._getConfig();
-        const client = new Client({ url: config.url });
-
-        try {
-            await client.bind(config.user, config.pass);
-            logger.info('LDAP Bind Successful');
-            return client;
-        } catch (err) {
-            logger.error('LDAP Bind Failed', err);
-            throw err;
-        }
-    }
-
-    async findUser(username) {
-        // username format: DOMAIN\user or user@domain.com
-        // We strip domain for sAMAccountName search usually
-        const sAMAccountName = username.split('\\').pop().split('@')[0];
-
-        const config = this._getConfig();
-        const client = await this._getClient();
-        const opts = {
-            filter: `(&(objectClass=user)(sAMAccountName=${sAMAccountName}))`,
-            scope: 'sub',
-            attributes: ['cn', 'mail', 'manager', 'department', 'title']
-        };
-
-        try {
-            const results = await client.search(config.baseDN, opts);
-
-            // Debug Log
-            if (process.env.NODE_ENV === 'development') {
-                logger.debug(`LDAP Search Results for ${sAMAccountName}: ${JSON.stringify(results)}`);
-            }
-
-            if (!results || results.length === 0) return null;
-
-            const entry = results[0];
-            if (!entry) return null;
-
-            // Safe access using optional chaining or '||'
-            return {
-                name: entry.cn || entry.name || sAMAccountName,  // Fallback
-                email: entry.mail || entry.userPrincipalName,
-                managerDn: entry.manager,
-                department: entry.department,
-                title: entry.title
-            };
-        } catch (err) {
-            logger.error('LDAP Search Failed', err);
-            return null;
-        } finally {
-            await client.unbind();
-        }
-    }
-
-    async validateManager(managerEmail) {
-        try {
-            console.log('Validating manager:', managerEmail);
-            const user = await this.findUser(managerEmail);
-            return !!user;
-        } catch (err) {
-            logger.error('Error validating manager', err);
-            return false;
-        }
-    }
-
-    async debugUser(username) {
-        const sAMAccountName = username.split('\\').pop().split('@')[0];
-        const config = this._getConfig();
-        const client = await this._getClient();
-
-        // Fetch ALL attributes
-        const opts = {
-            filter: `(&(objectClass=user)(sAMAccountName=${sAMAccountName}))`,
-            scope: 'sub',
-            attributes: ['*'] // Wildcard for standard attributes
-        };
-
-        try {
-            const results = await client.search(config.baseDN, opts);
-            if (!results || results.length === 0) return { found: false };
-            return results[0];
-        } catch (err) {
-            logger.error('Debug Search Failed', err);
-            throw err;
-        } finally {
-            await client.unbind();
-        }
+    try {
+        await client.bind(adConfig.bindDN, adConfig.bindCredentials);
+        console.log('[AD Service] Bind successful.');
+        return client;
+    } catch (err) {
+        console.error('[AD Service] Bind failed:', err.message);
+        throw err;
     }
 }
 
-export default new ADService();
+/**
+ * Find a user by their sAMAccountName or Email
+ * @param {string} query - content to search for (username or email)
+ */
+export async function findUser(query) {
+    const client = await getAdClient();
+
+    // Construct filter: checks sAMAccountName OR mail
+    // Using wildcard to be more permissive in debug
+    const filter = `(&(objectClass=user)(objectCategory=person)(|(sAMAccountName=${query})(mail=${query})))`;
+
+    const opts = {
+        filter: filter,
+        scope: 'sub',
+        attributes: ['sAMAccountName', 'displayName', 'mail', 'manager', 'department', 'title', 'memberOf']
+    };
+
+    console.log(`[AD Service] Searching with filter: ${filter}`);
+
+    try {
+        const response = await client.search(adConfig.searchBase, opts);
+        const entries = response.entries;
+
+        console.log(`[AD Service] Search returned ${entries.length} results.`);
+
+        if (entries.length > 0) {
+            console.log('[AD Service] First match raw data:', JSON.stringify(entries[0], null, 2));
+            return entries[0];
+        }
+        return null;
+    } catch (err) {
+        console.error('[AD Service] Search error:', err);
+        throw err;
+    } finally {
+        await client.unbind();
+    }
+}
+
+/**
+ * DEBUG: Dumps the first 100 users found in the base DN.
+ * Use this to verify what data we are actually getting.
+ */
+export async function debugDumpAD() {
+    console.log('\n=== STARTING AD DEBUG DUMP ===');
+    const client = await getAdClient();
+
+    const opts = {
+        filter: '(&(objectClass=user)(objectCategory=person))',
+        scope: 'sub',
+        sizeLimit: 100, // Limit to prevent flooding
+        attributes: ['sAMAccountName', 'displayName', 'mail', 'manager', 'department']
+    };
+
+    console.log(`[AD Debug] Search Base: ${adConfig.searchBase}`);
+    console.log(`[AD Debug] Filter: ${opts.filter}`);
+    console.log('[AD Debug] Fetching up to 100 users...');
+
+    try {
+        const response = await client.search(adConfig.searchBase, opts);
+        const entries = response.entries;
+
+        console.log(`[AD Debug] Total Users Found: ${entries.length}`);
+
+        entries.forEach((entry, index) => {
+            console.log(`\n--- User #${index + 1} ---`);
+            console.log(`DN: ${entry.dn}`);
+            console.log(`Name: ${entry.displayName}`);
+            console.log(`Email: ${entry.mail}`);
+            console.log(`Account: ${entry.sAMAccountName}`);
+            console.log(`Manager: ${entry.manager}`);
+            // Unwrap extra attributes if they exist as raw buffers sometimes in ldapjs
+            // console.log('Raw:', JSON.stringify(entry, null, 2)); 
+        });
+
+        console.log('\n=== END AD DEBUG DUMP ===');
+    } catch (err) {
+        console.error('[AD Debug] Setup failed:', err);
+    } finally {
+        await client.unbind();
+    }
+}
+
+// Allow direct execution: `node src/services/adService.js`
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+    debugDumpAD().catch(console.error);
+}

@@ -1,46 +1,36 @@
-import workflowService from '../services/workflowService.js';
-import logger from '../utils/logger.js';
+import * as workflowService from '../services/workflowService.js';
 
-export const handleApproval = async (req, res) => {
-    // Supports both GET (Link click) and POST (Adaptive Card Action.Http)
-    let { token, action } = req.query;
-    const bodyAction = req.body.action;
-
-    // Prefer Body action if present (POST), else Query param (GET)
-    const finalAction = bodyAction || action;
-    const tokenToUse = token || req.body.token; // Sometimes token isn't in query in POST if not configured
-
-    if (!tokenToUse || !finalAction) {
-        return res.status(400).send('Missing token or action');
-    }
-
+/**
+ * Handles clicks from Email (GET for links, POST for Adaptive Cards)
+ */
+export const handleApprovalClick = async (req, res) => {
     try {
-        const result = await workflowService.handleApprovalAction(tokenToUse, finalAction, "Via Email");
+        // Support both Query (Link) and Body (Adaptive Card)
+        const token = req.query.token || req.body.token;
+        const action = req.query.action || req.body.action; // 'Approve' or 'Reject'
+        const comment = req.body.comment || '';
 
-        // Response Strategy:
-        // If POST (Adaptive Card), return JSON to update card
-        // If GET (Browser Link), return simple HTML page
+        if (!token || !action) {
+            return res.status(400).send('Missing token or action');
+        }
+
+        const result = await workflowService.handleApprovalAction(token, action, comment);
+
         if (req.method === 'POST') {
-            // Return Adaptive Card update
-            res.set('CARD-UPDATE-IN-BODY', 'true'); // Sometimes required by O365
-            return res.json({
-                type: 'AdaptiveCard',
-                body: [
-                    {
-                        type: 'TextBlock',
-                        text: `Identify Confirmed: Request ${finalAction}`,
-                        weight: 'Bolder',
-                        color: finalAction === 'Approved' ? 'Good' : 'Attention'
-                    }
+            // Adaptive Card expects a specific JSON response to update the card in-place
+            res.set('CARD-UPDATE-IN-BODY', 'true'); // Hint (not strict standard but helpful)
+            res.json({
+                "type": "AdaptiveCard",
+                "body": [
+                    { "type": "TextBlock", "text": result.message, "weight": "Bolder" }
                 ]
             });
         } else {
-            // Simple HTML for browser
-            res.send(`<h1>Request ${finalAction}</h1><p>You can close this window.</p>`);
+            // GET Request (Browser Link) -> Show simple HTML page
+            res.send(`<h1>${result.message}</h1><p>You may close this window.</p>`);
         }
 
-    } catch (error) {
-        logger.error('Approval Controller Error', error);
-        res.status(500).send('Proceesing failed');
+    } catch (err) {
+        res.status(500).send(`Error: ${err.message}`);
     }
 };
