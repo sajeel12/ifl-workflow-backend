@@ -5,19 +5,30 @@ dotenv.config();
 
 class ADService {
     constructor() {
-        this.config = {
+        // Configuration loaded lazily to ensure environment is ready
+    }
+
+    _getConfig() {
+        const config = {
             url: process.env.AD_URL,
             baseDN: process.env.AD_BASE_DN,
             user: process.env.AD_USER,
             pass: process.env.AD_PASSWORD
         };
+
+        if (!config.url || !config.user || !config.pass) {
+            const missing = Object.keys(config).filter(k => !config[k]).join(', ');
+            throw new Error(`Missing AD Configuration: ${missing}. Check your .env file.`);
+        }
+        return config;
     }
 
     async _getClient() {
-        const client = new Client({ url: this.config.url });
-        // In a real scenario, you bind with a service account
+        const config = this._getConfig();
+        const client = new Client({ url: config.url });
+
         try {
-            await client.bind(this.config.user, this.config.pass);
+            await client.bind(config.user, config.pass);
             return client;
         } catch (err) {
             logger.error('LDAP Bind Failed', err);
@@ -30,6 +41,7 @@ class ADService {
         // We strip domain for sAMAccountName search usually
         const sAMAccountName = username.split('\\').pop().split('@')[0];
 
+        const config = this._getConfig();
         const client = await this._getClient();
         const opts = {
             filter: `(&(objectClass=user)(sAMAccountName=${sAMAccountName}))`,
@@ -38,7 +50,7 @@ class ADService {
         };
 
         try {
-            const results = await client.search(this.config.baseDN, opts);
+            const results = await client.search(config.baseDN, opts);
             // Results are typically an array of entries
             if (results.length === 0) return null;
 
