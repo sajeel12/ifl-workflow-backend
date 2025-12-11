@@ -11,8 +11,14 @@ async function startServer() {
         logger.info('Database connected.');
 
         // Sync Models (Dev only - use Migrations in Prod!)
-        await sequelize.sync({ alter: true });
-        logger.info('Database synced.');
+        // Using force:true in development to avoid ALTER TABLE conflicts
+        // WARNING: This drops all tables and recreates them (data loss)
+        const syncOptions = process.env.NODE_ENV === 'production'
+            ? { alter: true }
+            : { force: true };
+
+        await sequelize.sync(syncOptions);
+        logger.info(`Database synced (${process.env.NODE_ENV === 'production' ? 'alter' : 'force'} mode).`);
 
         app.listen(PORT, '0.0.0.0', () => {
             logger.info(`Server running on port ${PORT}`);
