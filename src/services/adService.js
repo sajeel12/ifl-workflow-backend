@@ -88,7 +88,15 @@ export async function findUser(query) {
         client.search(adConfig.searchBase, opts)
             .then(res => {
                 res.on('searchEntry', (entry) => {
-                    entries.push(entry.object);
+                    // Extract entry data (same logic as getAllUsers)
+                    let userData = entry.pojo || entry.object;
+                    if (!userData && entry.attributes) {
+                        userData = {};
+                        entry.attributes.forEach(attr => {
+                            userData[attr.type] = attr.values.length === 1 ? attr.values[0] : attr.values;
+                        });
+                    }
+                    entries.push(userData || entry);
                 });
 
                 res.on('error', (err) => {
@@ -152,7 +160,30 @@ export async function getAllUsers(limit = 100) {
 
                 res.on('searchEntry', (entry) => {
                     console.log('[AD Service] Received search entry');
-                    entries.push(entry.object);
+                    console.log('[AD Service] Entry keys:', Object.keys(entry));
+                    console.log('[AD Service] Entry type:', typeof entry);
+
+                    // Try different ways to extract the entry data
+                    let userData = null;
+                    if (entry.pojo) {
+                        userData = entry.pojo;
+                        console.log('[AD Service] Using entry.pojo');
+                    } else if (entry.object) {
+                        userData = entry.object;
+                        console.log('[AD Service] Using entry.object');
+                    } else if (entry.attributes) {
+                        // Manually construct object from attributes
+                        userData = {};
+                        entry.attributes.forEach(attr => {
+                            userData[attr.type] = attr.values.length === 1 ? attr.values[0] : attr.values;
+                        });
+                        console.log('[AD Service] Constructed from attributes');
+                    } else {
+                        userData = entry;
+                        console.log('[AD Service] Using raw entry');
+                    }
+
+                    entries.push(userData);
                 });
 
                 res.on('error', (err) => {
