@@ -9,8 +9,33 @@ const adConfig = {
     url: process.env.AD_URL, // e.g., 'ldap://192.168.1.5'
     bindDN: process.env.AD_USER, // e.g., 'CN=Service Account,CN=Users,DC=example,DC=com'
     bindCredentials: process.env.AD_PASSWORD,
-    searchBase: process.env.AD_BASE_DN // e.g., 'DC=example,DC=com'
+    searchBase: process.env.AD_BASE_DN, // e.g., 'DC=example,DC=com'
+    domain: process.env.AD_DOMAIN // e.g., 'example.com'
 };
+
+/**
+ * Constructs proper bind DN from username
+ */
+function getBindDN(user, baseDN, domain) {
+    // If already a full DN (contains CN=), use as-is
+    if (user.includes('CN=') || user.includes('cn=')) {
+        return user;
+    }
+
+    // If it's a UPN format (user@domain.com), use as-is
+    if (user.includes('@')) {
+        return user;
+    }
+
+    // Try UPN format first (more modern)
+    if (domain) {
+        return `${user}@${domain}`;
+    }
+
+    // Fallback: construct full DN
+    // Assumes user is in CN=Users container
+    return `CN=${user},CN=Users,${baseDN}`;
+}
 
 /**
  * Creates and binds an LDAP client
@@ -18,16 +43,23 @@ const adConfig = {
 async function getAdClient() {
     console.log('[AD Service] Initialization...');
     console.log(`[AD Service] URL: ${adConfig.url}`);
-    console.log(`[AD Service] Bind DN: ${adConfig.bindDN}`);
+    console.log(`[AD Service] Original User: ${adConfig.bindDN}`);
+    console.log(`[AD Service] Search Base: ${adConfig.searchBase}`);
+    console.log(`[AD Service] Domain: ${adConfig.domain}`);
+
+    // Construct proper bind DN
+    const bindDN = getBindDN(adConfig.bindDN, adConfig.searchBase, adConfig.domain);
+    console.log(`[AD Service] Computed Bind DN: ${bindDN}`);
 
     const client = new Client({ url: adConfig.url });
 
     try {
-        await client.bind(adConfig.bindDN, adConfig.bindCredentials);
+        await client.bind(bindDN, adConfig.bindCredentials);
         console.log('[AD Service] Bind successful.');
         return client;
     } catch (err) {
         console.error('[AD Service] Bind failed:', err.message);
+        console.error('[AD Service] Tried binding with:', bindDN);
         throw err;
     }
 }
@@ -85,7 +117,11 @@ export async function findUser(query) {
  * Returns array of user objects
  */
 export async function getAllUsers(limit = 100) {
-    console.log('[AD Service] Fetching all users...');
+    console.log('[AD Service] ===== Fetching all users =====');
+    console.log(`[AD Service] Search Base: ${adConfig.searchBase}`);
+    console.log(`[AD Service] URL: ${adConfig.url}`);
+    console.log(`[AD Service] Bind DN: ${adConfig.bindDN}`);
+
     const client = await getAdClient();
 
     const opts = {
@@ -95,8 +131,17 @@ export async function getAllUsers(limit = 100) {
         attributes: ['sAMAccountName', 'displayName', 'mail', 'manager', 'department', 'title', 'memberOf', 'dn']
     };
 
+    console.log(`[AD Service] Filter: ${opts.filter}`);
+    console.log(`[AD Service] Scope: ${opts.scope}`);
+    console.log(`[AD Service] Size Limit: ${opts.sizeLimit}`);
+
     try {
         const response = await client.search(adConfig.searchBase, opts);
+
+        console.log(`[AD Service] Response type: ${typeof response}`);
+        console.log(`[AD Service] Response is array: ${Array.isArray(response)}`);
+        console.log(`[AD Service] Response keys:`, response ? Object.keys(response) : 'null');
+        console.log(`[AD Service] Raw response:`, JSON.stringify(response, null, 2));
 
         // Handle different response formats
         let entries = [];
@@ -109,9 +154,13 @@ export async function getAllUsers(limit = 100) {
         }
 
         console.log(`[AD Service] Found ${entries.length} users`);
+        if (entries.length > 0) {
+            console.log(`[AD Service] First user sample:`, JSON.stringify(entries[0], null, 2));
+        }
         return entries;
     } catch (err) {
         console.error('[AD Service] Error fetching users:', err);
+        console.error('[AD Service] Error stack:', err.stack);
         throw err;
     } finally {
         await client.unbind();
