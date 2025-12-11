@@ -29,6 +29,7 @@ class ADService {
 
         try {
             await client.bind(config.user, config.pass);
+            logger.info('LDAP Bind Successful');
             return client;
         } catch (err) {
             logger.error('LDAP Bind Failed', err);
