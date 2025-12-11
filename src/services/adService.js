@@ -72,7 +72,6 @@ export async function findUser(query) {
     const client = await getAdClient();
 
     // Construct filter: checks sAMAccountName OR mail
-    // Using wildcard to be more permissive in debug
     const filter = `(&(objectClass=user)(objectCategory=person)(|(sAMAccountName=${query})(mail=${query})))`;
 
     const opts = {
@@ -83,33 +82,42 @@ export async function findUser(query) {
 
     console.log(`[AD Service] Searching with filter: ${filter}`);
 
-    try {
-        const response = await client.search(adConfig.searchBase, opts);
+    return new Promise((resolve, reject) => {
+        const entries = [];
 
-        // Handle different response formats from ldapjs-promise
-        let entries = [];
-        if (Array.isArray(response)) {
-            entries = response;
-        } else if (response && response.entries) {
-            entries = response.entries;
-        } else if (response && response.searchEntries) {
-            entries = response.searchEntries;
-        }
+        client.search(adConfig.searchBase, opts)
+            .then(res => {
+                res.on('searchEntry', (entry) => {
+                    entries.push(entry.object);
+                });
 
-        console.log(`[AD Service] Search returned ${entries.length} results.`);
-        console.log('[AD Service] Response structure:', Object.keys(response || {}));
+                res.on('error', (err) => {
+                    console.error('[AD Service] Search error:', err);
+                    client.unbind().catch(console.error);
+                    reject(err);
+                });
 
-        if (entries.length > 0) {
-            console.log('[AD Service] First match raw data:', JSON.stringify(entries[0], null, 2));
-            return entries[0];
-        }
-        return null;
-    } catch (err) {
-        console.error('[AD Service] Search error:', err);
-        throw err;
-    } finally {
-        await client.unbind();
-    }
+                res.on('end', (result) => {
+                    console.log(`[AD Service] Search returned ${entries.length} results.`);
+
+                    if (entries.length > 0) {
+                        console.log('[AD Service] First match raw data:', JSON.stringify(entries[0], null, 2));
+                        client.unbind()
+                            .then(() => resolve(entries[0]))
+                            .catch(() => resolve(entries[0]));
+                    } else {
+                        client.unbind()
+                            .then(() => resolve(null))
+                            .catch(() => resolve(null));
+                    }
+                });
+            })
+            .catch(err => {
+                console.error('[AD Service] Search error:', err);
+                client.unbind().catch(console.error);
+                reject(err);
+            });
+    });
 }
 
 /**
@@ -135,36 +143,46 @@ export async function getAllUsers(limit = 100) {
     console.log(`[AD Service] Scope: ${opts.scope}`);
     console.log(`[AD Service] Size Limit: ${opts.sizeLimit}`);
 
-    try {
-        const response = await client.search(adConfig.searchBase, opts);
+    return new Promise((resolve, reject) => {
+        const entries = [];
 
-        console.log(`[AD Service] Response type: ${typeof response}`);
-        console.log(`[AD Service] Response is array: ${Array.isArray(response)}`);
-        console.log(`[AD Service] Response keys:`, response ? Object.keys(response) : 'null');
-        console.log(`[AD Service] Raw response:`, JSON.stringify(response, null, 2));
+        client.search(adConfig.searchBase, opts)
+            .then(res => {
+                console.log('[AD Service] Search initiated, waiting for entries...');
 
-        // Handle different response formats
-        let entries = [];
-        if (Array.isArray(response)) {
-            entries = response;
-        } else if (response && response.entries) {
-            entries = response.entries;
-        } else if (response && response.searchEntries) {
-            entries = response.searchEntries;
-        }
+                res.on('searchEntry', (entry) => {
+                    console.log('[AD Service] Received search entry');
+                    entries.push(entry.object);
+                });
 
-        console.log(`[AD Service] Found ${entries.length} users`);
-        if (entries.length > 0) {
-            console.log(`[AD Service] First user sample:`, JSON.stringify(entries[0], null, 2));
-        }
-        return entries;
-    } catch (err) {
-        console.error('[AD Service] Error fetching users:', err);
-        console.error('[AD Service] Error stack:', err.stack);
-        throw err;
-    } finally {
-        await client.unbind();
-    }
+                res.on('error', (err) => {
+                    console.error('[AD Service] Search error:', err);
+                    client.unbind().catch(console.error);
+                    reject(err);
+                });
+
+                res.on('end', (result) => {
+                    console.log(`[AD Service] Search completed. Status: ${result?.status}`);
+                    console.log(`[AD Service] Found ${entries.length} users`);
+
+                    if (entries.length > 0) {
+                        console.log(`[AD Service] First user sample:`, JSON.stringify(entries[0], null, 2));
+                    }
+
+                    client.unbind()
+                        .then(() => resolve(entries))
+                        .catch(err => {
+                            console.error('[AD Service] Unbind error:', err);
+                            resolve(entries); // Still resolve with entries even if unbind fails
+                        });
+                });
+            })
+            .catch(err => {
+                console.error('[AD Service] Search initiation failed:', err);
+                client.unbind().catch(console.error);
+                reject(err);
+            });
+    });
 }
 
 /**
