@@ -16,8 +16,25 @@ router.get('/health', (req, res) => {
     res.json({ status: 'UP', timestamp: new Date() });
 });
 
-// Debug Route for AD
-import { findUser, debugDumpAD } from '../services/adService.js';
+// Debug Routes for AD
+import { findUser, debugDumpAD, getAllUsers } from '../services/adService.js';
+
+// Get all AD users (for testing and analyzing data structure)
+router.get('/ad-users', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 100;
+        const users = await getAllUsers(limit);
+        res.json({
+            count: users.length,
+            users: users,
+            message: 'Use this to analyze AD data structure and available users'
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message, stack: error.stack });
+    }
+});
+
+// Get specific user by username
 router.get('/ad-debug/:username', async (req, res) => {
     try {
         const result = await findUser(req.params.username);

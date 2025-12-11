@@ -53,9 +53,19 @@ export async function findUser(query) {
 
     try {
         const response = await client.search(adConfig.searchBase, opts);
-        const entries = response.entries;
+
+        // Handle different response formats from ldapjs-promise
+        let entries = [];
+        if (Array.isArray(response)) {
+            entries = response;
+        } else if (response && response.entries) {
+            entries = response.entries;
+        } else if (response && response.searchEntries) {
+            entries = response.searchEntries;
+        }
 
         console.log(`[AD Service] Search returned ${entries.length} results.`);
+        console.log('[AD Service] Response structure:', Object.keys(response || {}));
 
         if (entries.length > 0) {
             console.log('[AD Service] First match raw data:', JSON.stringify(entries[0], null, 2));
@@ -64,6 +74,44 @@ export async function findUser(query) {
         return null;
     } catch (err) {
         console.error('[AD Service] Search error:', err);
+        throw err;
+    } finally {
+        await client.unbind();
+    }
+}
+
+/**
+ * Get all users from AD (for API endpoint)
+ * Returns array of user objects
+ */
+export async function getAllUsers(limit = 100) {
+    console.log('[AD Service] Fetching all users...');
+    const client = await getAdClient();
+
+    const opts = {
+        filter: '(&(objectClass=user)(objectCategory=person))',
+        scope: 'sub',
+        sizeLimit: limit,
+        attributes: ['sAMAccountName', 'displayName', 'mail', 'manager', 'department', 'title', 'memberOf', 'dn']
+    };
+
+    try {
+        const response = await client.search(adConfig.searchBase, opts);
+
+        // Handle different response formats
+        let entries = [];
+        if (Array.isArray(response)) {
+            entries = response;
+        } else if (response && response.entries) {
+            entries = response.entries;
+        } else if (response && response.searchEntries) {
+            entries = response.searchEntries;
+        }
+
+        console.log(`[AD Service] Found ${entries.length} users`);
+        return entries;
+    } catch (err) {
+        console.error('[AD Service] Error fetching users:', err);
         throw err;
     } finally {
         await client.unbind();
@@ -91,9 +139,19 @@ export async function debugDumpAD() {
 
     try {
         const response = await client.search(adConfig.searchBase, opts);
-        const entries = response.entries;
+
+        // Handle different response formats
+        let entries = [];
+        if (Array.isArray(response)) {
+            entries = response;
+        } else if (response && response.entries) {
+            entries = response.entries;
+        } else if (response && response.searchEntries) {
+            entries = response.searchEntries;
+        }
 
         console.log(`[AD Debug] Total Users Found: ${entries.length}`);
+        console.log('[AD Debug] Response structure:', Object.keys(response || {}));
 
         entries.forEach((entry, index) => {
             console.log(`\n--- User #${index + 1} ---`);
