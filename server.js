@@ -15,8 +15,8 @@ async function startServer() {
         // Sync Models (Optional: use migrations in production)
         // await sequelize.sync(); 
 
-        app.listen(PORT, () => {
-            logger.info(`Server is running on port ${PORT}`);
+        app.listen(PORT, '0.0.0.0', () => {
+            logger.info(`Server is running on http://0.0.0.0:${PORT}`);
         });
     } catch (error) {
         logger.error('Unable to connect to the database:', error);
