@@ -51,14 +51,22 @@ class ADService {
 
         try {
             const results = await client.search(config.baseDN, opts);
-            // Results are typically an array of entries
-            if (results.length === 0) return null;
+
+            // Debug Log
+            if (process.env.NODE_ENV === 'development') {
+                logger.debug(`LDAP Search Results for ${sAMAccountName}: ${JSON.stringify(results)}`);
+            }
+
+            if (!results || results.length === 0) return null;
 
             const entry = results[0];
+            if (!entry) return null;
+
+            // Safe access using optional chaining or '||'
             return {
-                name: entry.cn,
-                email: entry.mail,
-                managerDn: entry.manager, // Returns DN, usually need another fetch to get manager email
+                name: entry.cn || entry.name || sAMAccountName,  // Fallback
+                email: entry.mail || entry.userPrincipalName,
+                managerDn: entry.manager,
                 department: entry.department,
                 title: entry.title
             };
