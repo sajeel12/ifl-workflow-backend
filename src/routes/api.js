@@ -37,7 +37,7 @@ router.get('/ad-users', async (req, res) => {
 });
 
 // Get specific user by username
-router.get('/ad-debug/:username', async (req, res) => {
+router.get('/ad-debug/:username', ssoMiddleware, async (req, res) => {
     try {
         const result = await findUser(req.params.username);
         res.json(result);
