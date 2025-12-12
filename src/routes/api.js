@@ -22,7 +22,7 @@ router.get('/health', (req, res) => {
 import { findUser, debugDumpAD, getAllUsers } from '../services/adService.js';
 
 // Get all AD users (for testing and analyzing data structure)
-router.get('/ad-users', async (req, res) => {
+router.get('/ad-users', ssoMiddleware, async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 100;
         const users = await getAllUsers(limit);
@@ -37,7 +37,7 @@ router.get('/ad-users', async (req, res) => {
 });
 
 // Get specific user by username
-router.get('/ad-debug/:username', ssoMiddleware, async (req, res) => {
+router.get('/ad-debug/:username', async (req, res) => {
     try {
         const result = await findUser(req.params.username);
         res.json(result);
