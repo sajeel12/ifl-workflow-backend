@@ -7,8 +7,8 @@ import logger from '../utils/logger.js';
  */
 export const ssoMiddleware = async (req, res, next) => {
     try {
+        console.log('[SSO Debug] All Headers:', JSON.stringify(req.headers, null, 2));
         let remoteUser = req.headers['x-remote-user'];
-        console.log(remoteUser, "  <-----------------------------------------=== remote user");
 
         // DEV FALLBACK
         if (!remoteUser && process.env.NODE_ENV === 'development') {
