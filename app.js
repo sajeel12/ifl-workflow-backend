@@ -5,7 +5,7 @@ import apiRoutes from './src/routes/api.js';
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: 'http://portal.ifl.local' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
