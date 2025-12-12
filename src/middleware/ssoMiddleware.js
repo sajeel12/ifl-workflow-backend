@@ -8,6 +8,7 @@ import logger from '../utils/logger.js';
 export const ssoMiddleware = async (req, res, next) => {
     try {
         let remoteUser = req.headers['x-remote-user'];
+        console.log(remoteUser, "  <-----------------------------------------=== remote user");
 
         // DEV FALLBACK
         if (!remoteUser && process.env.NODE_ENV === 'development') {
@@ -19,7 +20,7 @@ export const ssoMiddleware = async (req, res, next) => {
             logger.warn('[SSO] No user header found. Unauthorized.');
             return res.status(401).json({ error: 'Unauthorized: No SSO Identity' });
         }
-
+        console.log(remoteUser, "  <-----------------------------------------=== remote user");
         // Format: DOMAIN\username
         const parts = remoteUser.split('\\');
         const username = parts.length > 1 ? parts[1] : parts[0];

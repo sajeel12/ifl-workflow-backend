@@ -195,7 +195,6 @@ export async function getAllUsers(limit = 100) {
                 res.on('end', (result) => {
                     console.log(`[AD Service] Search completed. Status: ${result?.status}`);
                     console.log(`[AD Service] Found ${entries.length} users`);
-                    console.log(JSON.stringify(entries))
 
                     if (entries.length > 0) {
                         console.log(`[AD Service] First user sample:`, JSON.stringify(entries[0], null, 2));
