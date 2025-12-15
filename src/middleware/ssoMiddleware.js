@@ -28,7 +28,7 @@ export const ssoMiddleware = async (req, res, next) => {
         // 1. Priority: Check Sidecar Token (From token.aspx)
         if (sidecarToken) {
             try {
-                const token = JSON.parse(sidecarToken).trim();
+                const token = JSON.parse(sidecarToken);
                 console.log(" Token parsed = '", token, "'")
 
                 // Validate Timestamp (Allow 5 minutes drift)
