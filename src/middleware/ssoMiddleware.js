@@ -29,6 +29,8 @@ export const ssoMiddleware = async (req, res, next) => {
         if (sidecarToken) {
             try {
                 const token = JSON.parse(sidecarToken);
+                console.log(" Token parsed = '", token, "'")
+
                 // Validate Timestamp (Allow 5 minutes drift)
                 const now = Math.floor(Date.now() / 1000);
                 if (Math.abs(now - token.timestamp) > 300) {
