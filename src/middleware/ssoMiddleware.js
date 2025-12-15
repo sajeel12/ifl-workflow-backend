@@ -18,7 +18,7 @@ function verifySignature(username, timestamp, signature) {
  */
 export const ssoMiddleware = async (req, res, next) => {
     try {
-        console.log('[SSO Debug] All Headers:', JSON.stringify(req.headers, null, 2));
+        // console.log('[SSO Debug] All Headers:', JSON.stringify(req.headers, null, 2));
 
         let remoteUser = req.headers['x-remote-user'];
         const sidecarToken = req.headers['x-sidecar-token'];
@@ -41,6 +41,8 @@ export const ssoMiddleware = async (req, res, next) => {
             } catch (e) {
                 logger.warn(`[SSO] Malformed Sidecar Token: ${e.message}`);
             }
+        } else {
+            return res.status(401).json({ message: "unauthorized" })
         }
 
         // DEV FALLBACK
@@ -53,7 +55,7 @@ export const ssoMiddleware = async (req, res, next) => {
             logger.warn('[SSO] No user header found. Unauthorized.');
             return res.status(401).json({ error: 'Unauthorized: No SSO Identity' });
         }
-        console.log(remoteUser, "  <-----------------------------------------=== remote user");
+        // console.log(remoteUser, "  <-----------------------------------------=== remote user");
         // Format: DOMAIN\username
         const parts = remoteUser.split('\\');
         const username = parts.length > 1 ? parts[1] : parts[0];
