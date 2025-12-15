@@ -31,19 +31,27 @@ export const ssoMiddleware = async (req, res, next) => {
                 const now = Math.floor(Date.now() / 1000);
                 if (Math.abs(now - token.timestamp) > 300) {
                     logger.warn(`[SSO] Expired token for ${token.username}`);
+                    console.log(`[SSO] Expired token for ${token.username}`)
                     // Fall through to other methods? No, explicit token failure.
                 } else if (verifySignature(token.username, token.timestamp, token.signature)) {
                     remoteUser = token.username;
                     logger.debug(`[SSO] Valid Sidecar Token for: ${remoteUser}`);
+                    console.log(`[SSO] Valid Sidecar Token for: ${remoteUser}`);
                 } else {
                     logger.warn(`[SSO] Invalid Signature for ${token.username}`);
+                    console.log(`[SSO] Invalid Signature for ${token.username}`);
                 }
             } catch (e) {
                 logger.warn(`[SSO] Malformed Sidecar Token: ${e.message}`);
+                console.log(`[SSO] Malformed Sidecar Token: ${e.message}`);
+
             }
         } else {
             return res.status(401).json({ message: "unauthorized" })
         }
+
+        return res.status(401).json({ error: 'Unauthorized: No SSO Identity' });
+
 
         // DEV FALLBACK
         if (!remoteUser && process.env.NODE_ENV === 'development') {
