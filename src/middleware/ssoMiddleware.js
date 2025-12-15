@@ -21,7 +21,8 @@ export const ssoMiddleware = async (req, res, next) => {
         // console.log('[SSO Debug] All Headers:', JSON.stringify(req.headers, null, 2));
 
         let remoteUser = req.headers['x-remote-user'];
-        const sidecarToken = req.headers['x-sidecar-token'].strip();
+        const rawSidecarToken = req.headers['x-sidecar-token'];
+        const sidecarToken = rawSidecarToken.trim();
         console.log("Sidecard Token = '", sidecarToken, "'")
         // 1. Priority: Check Sidecar Token (From token.aspx)
         if (sidecarToken) {
