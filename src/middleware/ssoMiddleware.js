@@ -9,7 +9,20 @@ function verifySignature(username, timestamp, signature) {
     const hmac = crypto.createHmac('sha256', SHARED_SECRET);
     hmac.update(data);
     const expectedSignature = hmac.digest('hex');
-    return expectedSignature === signature;
+    // // +++++++++++++ Option#2 +++++++++++++ currenntly using
+    // Convert both signatures to buffers
+    const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+    const providedBuffer = Buffer.from(signature, 'hex');
+
+    // Length check (required to avoid exceptions)
+    if (expectedBuffer.length !== providedBuffer.length) {
+        return false;
+    }
+
+    // Timing-safe comparison
+    return crypto.timingSafeEqual(expectedBuffer, providedBuffer);
+    //   // +++++++++++++ Option #1 +++++++++++++
+    // return expectedSignature === signature;
 }
 
 /**
