@@ -17,9 +17,10 @@ const runSimulation = async () => {
     try {
         console.log('--- Starting Workflow Simulation ---');
 
-        // 1. Sync Database (Non-destructive)
+        // 1. Sync Database
         console.log('Syncing database...');
-        await sequelize.sync({ alter: true }); // alter: true updates schema if needed
+        // Note: Avoiding { alter: true } as it can cause MSSQL syntax errors on existing columns
+        await sequelize.sync();
 
         // 2. Create Dummy Employee
         console.log('Creating Dummy Employee...');
