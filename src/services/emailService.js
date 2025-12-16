@@ -24,7 +24,7 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
     const adaptiveCardPayload = {
         "type": "AdaptiveCard",
         "version": "1.0",
-        "originator": "ProviderID-Guid-Here-If-Registered",
+        "originator": process.env.ACTIONABLE_MESSAGE_PROVIDER_ID || "ProviderID-Guid-Here-If-Registered",
         "body": [
             {
                 "type": "TextBlock",
