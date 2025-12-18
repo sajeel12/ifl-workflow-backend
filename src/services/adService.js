@@ -217,6 +217,85 @@ export async function getAllUsers(limit = 100) {
 }
 
 /**
+ * Get the department head email for a given department
+ * @param {string} department - Department name (e.g., 'Engineering', 'HR')
+ * @returns {Promise<string>} - Department head email address
+ */
+export async function getDepartmentHead(department) {
+    console.log(`[AD Service] Looking up department head for: ${department}`);
+
+    const client = await getAdClient();
+
+    // Search for users in the department with head/manager titles
+    // Adjust title filter based on your AD structure
+    const filter = `(&(objectClass=user)(objectCategory=person)(department=${department})(|(title=*Head*)(title=*Director*)(title=*Manager*)))`;
+
+    const opts = {
+        filter: filter,
+        scope: 'sub',
+        attributes: ['sAMAccountName', 'displayName', 'mail', 'title', 'department']
+    };
+
+    console.log(`[AD Service] Department head search filter: ${filter}`);
+
+    return new Promise((resolve, reject) => {
+        const entries = [];
+
+        client.search(adConfig.searchBase, opts)
+            .then(res => {
+                res.on('searchEntry', (entry) => {
+                    let userData = entry.pojo || entry.object;
+                    if (!userData && entry.attributes) {
+                        userData = {};
+                        entry.attributes.forEach(attr => {
+                            userData[attr.type] = attr.values.length === 1 ? attr.values[0] : attr.values;
+                        });
+                    }
+                    entries.push(userData || entry);
+                });
+
+                res.on('error', (err) => {
+                    console.error('[AD Service] Department head search error:', err);
+                    client.unbind().catch(console.error);
+                    reject(err);
+                });
+
+                res.on('end', (result) => {
+                    console.log(`[AD Service] Department head search returned ${entries.length} results`);
+
+                    if (entries.length > 0) {
+                        // Prioritize by title (Head > Director > Manager)
+                        const head = entries.find(e => e.title?.includes('Head')) ||
+                            entries.find(e => e.title?.includes('Director')) ||
+                            entries[0];
+
+                        const email = head.mail;
+                        console.log(`[AD Service] Found department head: ${head.displayName} (${email})`);
+
+                        client.unbind()
+                            .then(() => resolve(email))
+                            .catch(() => resolve(email));
+                    } else {
+                        console.warn(`[AD Service] No department head found for ${department}`);
+                        // Fallback to configured default or use a generic email
+                        const fallbackEmail = process.env.DEFAULT_DEPT_HEAD_EMAIL || 'dept-head@test.com';
+                        console.log(`[AD Service] Using fallback email: ${fallbackEmail}`);
+
+                        client.unbind()
+                            .then(() => resolve(fallbackEmail))
+                            .catch(() => resolve(fallbackEmail));
+                    }
+                });
+            })
+            .catch(err => {
+                console.error('[AD Service] Department head search error:', err);
+                client.unbind().catch(console.error);
+                reject(err);
+            });
+    });
+}
+
+/**
  * DEBUG: Dumps the first 100 users found in the base DN.
  * Use this to verify what data we are actually getting.
  */

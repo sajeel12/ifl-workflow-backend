@@ -52,7 +52,9 @@ export const createTestAccessRequest = async (req, res) => {
             emp.employeeId,
             TEST_EMAILS.MANAGER,
             TEST_EMAILS.DEPT_HEAD,
-            newReq.justification
+            newReq.justification,
+            TEST_EMAILS.EMPLOYEE,  // Requester email for notifications
+            newReq.requestType     // Request type for notifications
         );
 
         // 4. Get approval tokens for testing

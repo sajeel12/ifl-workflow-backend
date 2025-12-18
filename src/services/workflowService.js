@@ -1,12 +1,26 @@
 import AccessRequest from '../models/AccessRequest.js';
 import WorkflowApproval from '../models/WorkflowApproval.js';
 import TimelineEvent from '../models/TimelineEvent.js';
-import { sendApprovalEmail } from './emailService.js';
+import { sendApprovalEmail, sendRequesterNotification } from './emailService.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
+import Employee from '../models/Employee.js';
 // import { findUser } from './adService.js'; // if needed for manager lookup
 
-export const startAccessRequestWorkflow = async (requestId, employeeId, managerEmail, deptHeadEmail, justification) => {
+/**
+ * Helper function to get requester email from employee ID
+ */
+async function getRequesterEmail(employeeId) {
+    try {
+        const employee = await Employee.findByPk(employeeId);
+        return employee?.email || null;
+    } catch (err) {
+        logger.error(`[Workflow] Error fetching requester email: ${err.message}`);
+        return null;
+    }
+}
+
+export const startAccessRequestWorkflow = async (requestId, employeeId, managerEmail, deptHeadEmail, justification, requesterEmail, requestType) => {
     logger.info(`[Workflow] Starting for Request #${requestId}`);
 
     try {
@@ -57,6 +71,21 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             { status: 'Pending', workflowStage: 'Level1-ManagerApproval' },
             { where: { requestId } }
         );
+
+        // 5. Notify Requester - Submission Confirmation
+        if (requesterEmail) {
+            await sendRequesterNotification(
+                requesterEmail,
+                'Access Request Submitted',
+                `Your access request #${requestId} has been submitted successfully and is now pending manager approval.`,
+                {
+                    requestId,
+                    requestType: requestType || 'Access Request',
+                    status: 'Submitted',
+                    currentStage: 'Pending Manager Approval'
+                }
+            );
+        }
 
         logger.info(`[Workflow] Created two-level approval workflow for Request #${requestId}`);
 
@@ -128,6 +157,23 @@ export const handleApprovalAction = async (token, action, comment) => {
                 req.workflowStage = 'Level2-DeptHeadApproval';
                 await req.save();
 
+                // Notify Requester - Level 1 Approved
+                const requester = await getRequesterEmail(req.employeeId);
+                if (requester) {
+                    await sendRequesterNotification(
+                        requester,
+                        'Access Request - Manager Approved',
+                        `Good news! Your manager has approved your access request #${req.requestId}. It is now with the Department Head for final approval.`,
+                        {
+                            requestId: req.requestId,
+                            requestType: req.requestType,
+                            status: 'Level1Approved',
+                            currentStage: 'Pending Department Head Approval',
+                            comment: comment
+                        }
+                    );
+                }
+
                 return { status: 'Success', message: 'Level 1 approved. Request moved to Level 2 (Department Head).' };
             } else {
                 logger.error(`[Workflow] Level 2 approval record not found for Request #${req.requestId}`);
@@ -148,6 +194,23 @@ export const handleApprovalAction = async (token, action, comment) => {
                 description: `Department Head approved the request. Comment: ${comment || 'None'}`
             });
 
+            // Notify Requester - Workflow Complete
+            const requester = await getRequesterEmail(req.employeeId);
+            if (requester) {
+                await sendRequesterNotification(
+                    requester,
+                    'Access Request Approved',
+                    `Congratulations! Your access request #${req.requestId} has been fully approved by both your manager and department head.`,
+                    {
+                        requestId: req.requestId,
+                        requestType: req.requestType,
+                        status: 'Approved',
+                        currentStage: 'Completed - Approved',
+                        comment: comment
+                    }
+                );
+            }
+
             return { status: 'Success', message: 'Level 2 approved. Request completed successfully.' };
         }
 
@@ -167,6 +230,24 @@ export const handleApprovalAction = async (token, action, comment) => {
             eventType: eventType,
             description: `${rejecterRole} rejected the request. Comment: ${comment || 'None'}`
         });
+
+        // Notify Requester - Rejection
+        const requester = await getRequesterEmail(req.employeeId);
+        if (requester) {
+            await sendRequesterNotification(
+                requester,
+                'Access Request Rejected',
+                `Your access request #${req.requestId} has been rejected by the ${rejecterRole}.`,
+                {
+                    requestId: req.requestId,
+                    requestType: req.requestType,
+                    status: 'Rejected',
+                    currentStage: 'Closed - Rejected',
+                    rejecterRole: rejecterRole,
+                    comment: comment
+                }
+            );
+        }
 
         return { status: 'Success', message: `Request rejected at Level ${approval.approvalLevel}.` };
     }
