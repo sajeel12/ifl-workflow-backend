@@ -7,9 +7,9 @@ import logger from '../utils/logger.js';
 
 // Hardcoded test emails for two-level approval
 const TEST_EMAILS = {
-    EMPLOYEE: 'employee@test.com',
-    MANAGER: 'manager@test.com',
-    DEPT_HEAD: 'dept-head@test.com'
+    EMPLOYEE: 'sajeel.dilshad@perception-it.com',
+    MANAGER: 'sajeel.dilshad@perception-it.com',
+    DEPT_HEAD: 'sajeel.dilshad@perception-it.com'
 };
 
 /**
