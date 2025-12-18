@@ -44,25 +44,9 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
         ],
         "actions": [
             {
-                "type": "Action.Http",
-                "title": "Approve",
-                "method": "POST",
-                "url": approvalLink + "&action=Approve",
-                "style": "positive",
-                "body": "{}"
-            },
-            {
-                "type": "Action.Http",
-                "title": "Reject",
-                "method": "POST",
-                "url": approvalLink + "&action=Reject",
-                "style": "destructive",
-                "body": "{}"
-            },
-            {
                 "type": "Action.OpenUrl",
-                "title": "View Request (Browser)",
-                "url": approvalLink // Just opens the link
+                "title": "Review & Approve/Reject",
+                "url": approvalLink
             }
         ]
     };
@@ -74,13 +58,11 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
       <h3>${subject}</h3>
       <p>${requestDetails}</p>
       <p>
-        <!-- Fallback buttons for non-adaptive clients -->
-        <a href="${approvalLink}&action=Approve" style="padding: 10px 20px; background-color: green; color: white; text-decoration: none;">Approve</a>
-        &nbsp;&nbsp;
-        <a href="${approvalLink}&action=Reject" style="padding: 10px 20px; background-color: red; color: white; text-decoration: none;">Reject</a>
+        <!-- Fallback button for non-adaptive clients -->
+        <a href="${approvalLink}" style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Review & Approve/Reject</a>
       </p>
       <p style="font-size: small; color: gray;">
-        If buttons do not work, reply to this email.
+        Click the button above to review the request and add your comment before approving or rejecting.
       </p>
       <script type="application/adaptivecard+json">
         ${JSON.stringify(adaptiveCardPayload)}
