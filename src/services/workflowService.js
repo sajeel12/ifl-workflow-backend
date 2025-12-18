@@ -145,10 +145,19 @@ export const handleApprovalAction = async (token, action, comment) => {
                 const baseUrl = process.env.APP_URL || 'http://localhost:3000';
                 const actionLink = `${baseUrl}/api/approvals/handle?token=${level2Approval.actionToken}`;
 
+                // Build message with manager's approval comment
+                let emailMessage = `Manager has approved this request.\n\n`;
+                emailMessage += `Original Justification: "${req.justification}"\n\n`;
+                if (comment) {
+                    emailMessage += `Manager's Comment: "${comment}"`;
+                } else {
+                    emailMessage += `Manager's Comment: (No comment provided)`;
+                }
+
                 await sendApprovalEmail(
                     level2Approval.approverEmail,
                     `Action Required: Access Request #${req.requestId}`,
-                    `Manager has approved. Justification: "${req.justification}"`,
+                    emailMessage,
                     actionLink
                 );
 
