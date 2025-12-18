@@ -32,6 +32,16 @@ const WorkflowApproval = sequelize.define('WorkflowApproval', {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true
+    },
+    approvalLevel: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1 // 1 = Manager, 2 = Department Head
+    },
+    approverRole: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'Manager' // 'Manager' or 'DepartmentHead'
     }
 });
 

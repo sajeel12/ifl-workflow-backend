@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import logger from '../utils/logger.js';
 // import { findUser } from './adService.js'; // if needed for manager lookup
 
-export const startAccessRequestWorkflow = async (requestId, employeeId, managerEmail, justification) => {
+export const startAccessRequestWorkflow = async (requestId, employeeId, managerEmail, deptHeadEmail, justification) => {
     logger.info(`[Workflow] Starting for Request #${requestId}`);
 
     try {
@@ -17,19 +17,33 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             description: 'Access request submitted by user.'
         });
 
-        // 2. Create Approval Record for Manager
-        const token = crypto.randomBytes(20).toString('hex');
-        const approval = await WorkflowApproval.create({
+        // 2. Create Approval Records for Both Levels (Level 1 = Manager, Level 2 = Dept Head)
+        const level1Token = crypto.randomBytes(20).toString('hex');
+        const level2Token = crypto.randomBytes(20).toString('hex');
+
+        // Level 1: Manager Approval (Active)
+        await WorkflowApproval.create({
             requestId,
             approverEmail: managerEmail,
             status: 'Pending',
-            actionToken: token
+            actionToken: level1Token,
+            approvalLevel: 1,
+            approverRole: 'Manager'
         });
 
-        // 3. Send Email
-        // Construct Action Link (Pointing to GET/POST handler)
+        // Level 2: Department Head Approval (Waiting for Level 1)
+        await WorkflowApproval.create({
+            requestId,
+            approverEmail: deptHeadEmail,
+            status: 'Waiting', // Not Pending yet - waiting for Level 1
+            actionToken: level2Token,
+            approvalLevel: 2,
+            approverRole: 'DepartmentHead'
+        });
+
+        // 3. Send Email to Level 1 (Manager) Only
         const baseUrl = process.env.APP_URL || 'http://localhost:3000';
-        const actionLink = `${baseUrl}/api/approvals/handle?token=${token}`;
+        const actionLink = `${baseUrl}/api/approvals/handle?token=${level1Token}`;
 
         await sendApprovalEmail(
             managerEmail,
@@ -40,9 +54,11 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
 
         // 4. Update Request Status
         await AccessRequest.update(
-            { status: 'Pending', workflowStage: 'ManagerApproval' },
+            { status: 'Pending', workflowStage: 'Level1-ManagerApproval' },
             { where: { requestId } }
         );
+
+        logger.info(`[Workflow] Created two-level approval workflow for Request #${requestId}`);
 
     } catch (err) {
         logger.error(`[Workflow] Error starting: ${err.message}`);
@@ -72,27 +88,87 @@ export const handleApprovalAction = async (token, action, comment) => {
     const req = await AccessRequest.findByPk(approval.requestId);
 
     if (action === 'Approve') {
-        req.status = 'Approved';
-        req.workflowStage = 'Completed'; // Or trigger IT provisioning step
-        await req.save();
+        // Check which level approved
+        if (approval.approvalLevel === 1) {
+            // Level 1 (Manager) Approved - Move to Level 2
+            logger.info(`[Workflow] Level 1 approved for Request #${req.requestId}, moving to Level 2`);
 
-        await TimelineEvent.create({
-            employeeId: req.employeeId,
-            eventType: 'ManagerApproved',
-            description: `Manager approved the request. Comment: ${comment || 'None'}`
-        });
+            await TimelineEvent.create({
+                employeeId: req.employeeId,
+                eventType: 'Level1Approved',
+                description: `Manager approved the request. Comment: ${comment || 'None'}`
+            });
 
-        // Optional: Trigger Provisioning Service here
+            // Find Level 2 Approval Record
+            const level2Approval = await WorkflowApproval.findOne({
+                where: {
+                    requestId: req.requestId,
+                    approvalLevel: 2
+                }
+            });
+
+            if (level2Approval) {
+                // Activate Level 2
+                level2Approval.status = 'Pending';
+                await level2Approval.save();
+
+                // Send Email to Department Head
+                const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+                const actionLink = `${baseUrl}/api/approvals/handle?token=${level2Approval.actionToken}`;
+
+                await sendApprovalEmail(
+                    level2Approval.approverEmail,
+                    `Action Required: Access Request #${req.requestId}`,
+                    `Manager has approved. Justification: "${req.justification}"`,
+                    actionLink
+                );
+
+                // Update Request Status
+                req.status = 'Pending';
+                req.workflowStage = 'Level2-DeptHeadApproval';
+                await req.save();
+
+                return { status: 'Success', message: 'Level 1 approved. Request moved to Level 2 (Department Head).' };
+            } else {
+                logger.error(`[Workflow] Level 2 approval record not found for Request #${req.requestId}`);
+                throw new Error('Level 2 approval record not found');
+            }
+
+        } else if (approval.approvalLevel === 2) {
+            // Level 2 (Department Head) Approved - Complete Workflow
+            logger.info(`[Workflow] Level 2 approved for Request #${req.requestId}, completing workflow`);
+
+            req.status = 'Approved';
+            req.workflowStage = 'Completed';
+            await req.save();
+
+            await TimelineEvent.create({
+                employeeId: req.employeeId,
+                eventType: 'Level2Approved',
+                description: `Department Head approved the request. Comment: ${comment || 'None'}`
+            });
+
+            return { status: 'Success', message: 'Level 2 approved. Request completed successfully.' };
+        }
+
     } else {
+        // Rejected at any level - Close workflow
+        logger.info(`[Workflow] Request #${req.requestId} rejected at Level ${approval.approvalLevel}`);
+
         req.status = 'Rejected';
         req.workflowStage = 'Closed';
         await req.save();
 
+        const eventType = approval.approvalLevel === 1 ? 'Level1Rejected' : 'Level2Rejected';
+        const rejecterRole = approval.approverRole;
+
         await TimelineEvent.create({
             employeeId: req.employeeId,
-            eventType: 'ManagerRejected',
-            description: `Manager rejected the request. Comment: ${comment || 'None'}`
+            eventType: eventType,
+            description: `${rejecterRole} rejected the request. Comment: ${comment || 'None'}`
         });
+
+        return { status: 'Success', message: `Request rejected at Level ${approval.approvalLevel}.` };
     }
 
     return { status: 'Success', message: `Request has been ${action}d.` };

@@ -29,11 +29,13 @@ export const createAccessRequest = async (req, res) => {
         // Start Workflow
         // Using mock manager if AD manager is null/string-dn
         const managerEmail = emp.managerEmail.includes('@') ? emp.managerEmail : 'manager@test.com';
+        const deptHeadEmail = 'dept-head@test.com'; // TODO: Get from AD or company hierarchy
 
         await workflowService.startAccessRequestWorkflow(
             newReq.requestId,
             emp.employeeId,
             managerEmail,
+            deptHeadEmail,
             justification
         );
 

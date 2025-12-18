@@ -2,9 +2,21 @@ import express from 'express';
 const router = express.Router();
 import * as onboardingController from '../controllers/onboardingController.js';
 import * as approvalController from '../controllers/approvalController.js';
+import * as workflowTestController from '../controllers/workflowTestController.js';
 import { ssoMiddleware } from '../middleware/ssoMiddleware.js';
 import * as authController from '../controllers/authController.js';
 
+// ============ TEST ROUTES (No Auth Required) ============
+// Create a test access request with hardcoded emails
+router.post('/test/access-request', workflowTestController.createTestAccessRequest);
+
+// Get request status and approval details
+router.get('/test/request/:requestId/status', workflowTestController.getRequestStatus);
+
+// Direct approval/rejection for testing (bypasses email clicks)
+router.post('/test/approve/:token', workflowTestController.testApproveReject);
+
+// ============ PUBLIC APPROVAL ROUTE ============
 // Public / Hybrid Route (Token Protected, no SSO required for Outlook)
 // Supports /api/approvals/handle via POST (Actionable Message) or GET (Link)
 router.all('/approvals/handle', approvalController.handleApprovalClick);
