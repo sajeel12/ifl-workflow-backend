@@ -56,7 +56,8 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
         });
 
         // 3. Send Email to Level 1 (Manager) Only
-        const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+        // const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+        const baseUrl = process.env.APP_URL;
         const actionLink = `${baseUrl}/api/approvals/handle?token=${level1Token}`;
 
         await sendApprovalEmail(
@@ -142,7 +143,8 @@ export const handleApprovalAction = async (token, action, comment) => {
                 await level2Approval.save();
 
                 // Send Email to Department Head
-                const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+                // const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+                const baseUrl = process.env.APP_URL;
                 const actionLink = `${baseUrl}/api/approvals/handle?token=${level2Approval.actionToken}`;
 
                 // Build message with manager's approval comment
