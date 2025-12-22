@@ -35,7 +35,7 @@ export const handleApprovalClick = async (req, res) => {
                 <body>
                     <div class="header">
                         <img src="/logo.png" alt="IFL Logo" class="logo">
-                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                         
                     </div>
                     <div class="container">
                         <h2>Invalid Request</h2>
@@ -68,7 +68,7 @@ export const handleApprovalClick = async (req, res) => {
                 <body>
                     <div class="header">
                         <img src="/logo.png" alt="IFL Logo" class="logo">
-                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                         
                     </div>
                     <div class="container">
                         <h2>Invalid Token</h2>
@@ -100,7 +100,7 @@ export const handleApprovalClick = async (req, res) => {
                 <body>
                     <div class="header">
                         <img src="/logo.png" alt="IFL Logo" class="logo">
-                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                         
                     </div>
                     <div class="container">
                         <h2>Already Processed</h2>
@@ -266,7 +266,7 @@ export const handleApprovalClick = async (req, res) => {
                 <body>
                     <div class="header">
                         <img src="/logo.png" alt="IFL Logo" class="logo">
-                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                         
                     </div>
                     <div class="main-container">
                         <div class="card">
@@ -352,7 +352,7 @@ export const handleApprovalClick = async (req, res) => {
                 <body>
                     <div class="header">
                         <img src="/logo.png" alt="IFL Logo" class="logo">
-                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                         
                     </div>
                     <div class="container">
                         <div class="icon">${isApproved ? '✅' : '❌'}</div>
@@ -394,7 +394,7 @@ export const handleApprovalClick = async (req, res) => {
                 <body>
                     <div class="header">
                         <img src="/logo.png" alt="IFL Logo" class="logo">
-                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                         
                     </div>
                     <div class="container">
                         <h2>Error Processing Request</h2>
