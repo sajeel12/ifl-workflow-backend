@@ -89,7 +89,7 @@ export const handleApprovalClick = async (req, res) => {
                     <style>
                         body { font-family: 'Segoe UI', sans-serif; background-color: #faf9f8; margin: 0; }
                         .header { background-color: #0078D4; padding: 15px 20px; display: flex; align-items: center; gap: 15px; }
-                        .logo { height: 40px; background: white; padding: 5px; }
+                        .logo { height: 40px; padding: 5px; }
                         .brand { color: white; font-weight: 600; font-size: 18px; margin: 0; }
                         .container { max-width: 600px; margin: 40px auto; background: white; padding: 40px; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132); text-align: center; }
                         h2 { color: #0078D4; margin-top: 0; font-weight: 600; }
