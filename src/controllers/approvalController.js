@@ -18,11 +18,29 @@ export const handleApprovalClick = async (req, res) => {
         // Validate token exists
         if (!token) {
             return res.status(400).send(`
+                <!DOCTYPE html>
                 <html>
-                <head><title>Error</title></head>
-                <body style="font-family: Arial; padding: 40px; text-align: center;">
-                    <h2 style="color: #D13438;">Invalid Request</h2>
-                    <p>No approval token provided.</p>
+                <head>
+                    <title>Invalid Request</title>
+                    <style>
+                        body { font-family: 'Segoe UI', sans-serif; background-color: #faf9f8; margin: 0; }
+                        .header { background-color: #0078D4; padding: 15px 20px; display: flex; align-items: center; gap: 15px; }
+                        .logo { height: 40px; background: white; padding: 5px; }
+                        .brand { color: white; font-weight: 600; font-size: 18px; margin: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: white; padding: 40px; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132); text-align: center; }
+                        h2 { color: #D13438; margin-top: 0; font-weight: 600; }
+                        p { color: #323130; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <img src="/logo.png" alt="IFL Logo" class="logo">
+                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                    </div>
+                    <div class="container">
+                        <h2>Invalid Request</h2>
+                        <p>No approval token provided.</p>
+                    </div>
                 </body>
                 </html>
             `);
@@ -33,11 +51,29 @@ export const handleApprovalClick = async (req, res) => {
 
         if (!approval) {
             return res.status(404).send(`
+                <!DOCTYPE html>
                 <html>
-                <head><title>Error</title></head>
-                <body style="font-family: Arial; padding: 40px; text-align: center;">
-                    <h2 style="color: #D13438;">Invalid Token</h2>
-                    <p>This approval link is invalid or has expired.</p>
+                <head>
+                    <title>Invalid Token</title>
+                    <style>
+                        body { font-family: 'Segoe UI', sans-serif; background-color: #faf9f8; margin: 0; }
+                        .header { background-color: #0078D4; padding: 15px 20px; display: flex; align-items: center; gap: 15px; }
+                        .logo { height: 40px; background: white; padding: 5px; }
+                        .brand { color: white; font-weight: 600; font-size: 18px; margin: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: white; padding: 40px; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132); text-align: center; }
+                        h2 { color: #D13438; margin-top: 0; font-weight: 600; }
+                        p { color: #323130; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <img src="/logo.png" alt="IFL Logo" class="logo">
+                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                    </div>
+                    <div class="container">
+                        <h2>Invalid Token</h2>
+                        <p>This approval link is invalid or has expired.</p>
+                    </div>
                 </body>
                 </html>
             `);
@@ -46,13 +82,32 @@ export const handleApprovalClick = async (req, res) => {
         // Check if already processed
         if (approval.status !== 'Pending') {
             return res.status(200).send(`
+                <!DOCTYPE html>
                 <html>
-                <head><title>Already Processed</title></head>
-                <body style="font-family: Arial; padding: 40px; text-align: center;">
-                    <h2 style="color: #0078D4;">Already Processed</h2>
-                    <p>This request has already been ${approval.status.toLowerCase()}.</p>
-                    <p style="color: #666; font-size: 14px;">Decision Date: ${new Date(approval.decisionDate).toLocaleString()}</p>
-                    ${approval.comment ? `<p style="color: #666; font-size: 14px;">Comment: "${approval.comment}"</p>` : ''}
+                <head>
+                    <title>Already Processed</title>
+                    <style>
+                        body { font-family: 'Segoe UI', sans-serif; background-color: #faf9f8; margin: 0; }
+                        .header { background-color: #0078D4; padding: 15px 20px; display: flex; align-items: center; gap: 15px; }
+                        .logo { height: 40px; background: white; padding: 5px; }
+                        .brand { color: white; font-weight: 600; font-size: 18px; margin: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: white; padding: 40px; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132); text-align: center; }
+                        h2 { color: #0078D4; margin-top: 0; font-weight: 600; }
+                        p { color: #323130; margin-bottom: 20px; }
+                        .meta { color: #605e5c; font-size: 13px; margin-top: 10px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <img src="/logo.png" alt="IFL Logo" class="logo">
+                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                    </div>
+                    <div class="container">
+                        <h2>Already Processed</h2>
+                        <p>This request has already been <strong>${approval.status.toLowerCase()}</strong>.</p>
+                        <div class="meta">Decision Date: ${new Date(approval.decisionDate).toLocaleString()}</div>
+                        ${approval.comment ? `<div class="meta">Comment: "${approval.comment}"</div>` : ''}
+                    </div>
                 </body>
                 </html>
             `);
@@ -70,185 +125,190 @@ export const handleApprovalClick = async (req, res) => {
                     <title>Access Request Approval</title>
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>
-                        * {
-                            margin: 0;
-                            padding: 0;
-                            box-sizing: border-box;
-                        }
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
                         body {
-                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            min-height: 100vh;
-                            display: flex;
-                            justify-content: center;
-                            align-items: center;
-                            padding: 20px;
-                        }
-                        .container {
-                            background: white;
-                            border-radius: 12px;
-                            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                            max-width: 600px;
-                            width: 100%;
-                            overflow: hidden;
+                            font-family: 'Segoe UI', 'Segoe UI Web (West European)', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+                            background-color: #faf9f8;
+                            color: #323130;
                         }
                         .header {
-                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            background-color: #0078D4;
+                            padding: 16px 24px;
+                            display: flex;
+                            align-items: center;
+                            gap: 16px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        }
+                        .logo {
+                            height: 48px;
+                            background: white;
+                            padding: 6px;
+                            /* Square logo container per sharp corners request */
+                        }
+                        .brand {
                             color: white;
-                            padding: 30px;
-                            text-align: center;
-                        }
-                        .header h1 {
-                            font-size: 24px;
-                            margin-bottom: 5px;
-                        }
-                        .header p {
-                            opacity: 0.9;
-                            font-size: 14px;
-                        }
-                        .content {
-                            padding: 30px;
-                        }
-                        .request-info {
-                            background: #f8f9fa;
-                            border-left: 4px solid #667eea;
-                            padding: 20px;
-                            margin-bottom: 25px;
-                            border-radius: 4px;
-                        }
-                        .info-row {
-                            margin-bottom: 12px;
-                        }
-                        .info-row:last-child {
-                            margin-bottom: 0;
-                        }
-                        .label {
                             font-weight: 600;
-                            color: #495057;
-                            font-size: 13px;
+                            font-size: 20px;
+                        }
+                        .main-container {
+                            max-width: 720px;
+                            margin: 40px auto;
+                            padding: 0 20px;
+                        }
+                        .card {
+                            background: white;
+                            box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132), 0 0.3px 0.9px 0 rgba(0,0,0,0.108);
+                            padding: 32px;
+                            /* Sharp corners */
+                            border-radius: 0; 
+                        }
+                        h1 {
+                            font-size: 24px;
+                            font-weight: 600;
+                            margin-bottom: 8px;
+                            color: #201f1e;
+                        }
+                        .subtitle {
+                            color: #605e5c;
+                            font-size: 14px;
+                            margin-bottom: 32px;
+                        }
+                        .section-title {
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: #0078D4;
                             text-transform: uppercase;
                             letter-spacing: 0.5px;
-                            margin-bottom: 4px;
-                            display: block;
+                            margin-bottom: 16px;
+                            border-bottom: 2px solid #0078D4;
+                            display: inline-block;
+                            padding-bottom: 4px;
                         }
-                        .value {
-                            color: #212529;
+                        .info-grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                            gap: 24px;
+                            margin-bottom: 32px;
+                            background: #f3f2f1;
+                            padding: 20px;
+                        }
+                        .field-label {
+                            font-size: 12px;
+                            font-weight: 600;
+                            color: #605e5c;
+                            margin-bottom: 4px;
+                        }
+                        .field-value {
                             font-size: 15px;
+                            font-weight: 400;
                         }
                         .form-group {
-                            margin-bottom: 20px;
+                            margin-bottom: 24px;
                         }
                         label {
                             display: block;
                             margin-bottom: 8px;
                             font-weight: 600;
-                            color: #495057;
+                            font-size: 14px;
                         }
                         textarea {
                             width: 100%;
                             padding: 12px;
-                            border: 2px solid #dee2e6;
-                            border-radius: 6px;
+                            border: 1px solid #8a8886;
                             font-family: inherit;
                             font-size: 14px;
                             resize: vertical;
                             min-height: 100px;
-                            transition: border-color 0.2s;
+                            border-radius: 0; /* Sharp corners */
                         }
                         textarea:focus {
-                            outline: none;
-                            border-color: #667eea;
+                            outline: 2px solid #0078D4;
+                            border-color: transparent;
+                        }
+                        .help-text {
+                            font-size: 12px;
+                            color: #605e5c;
+                            margin-top: 4px;
                         }
                         .button-group {
                             display: flex;
                             gap: 12px;
-                            margin-top: 25px;
+                            margin-top: 32px;
                         }
                         button {
                             flex: 1;
-                            padding: 14px 24px;
+                            padding: 12px 24px;
                             border: none;
-                            border-radius: 6px;
-                            font-size: 16px;
+                            font-size: 15px;
                             font-weight: 600;
                             cursor: pointer;
-                            transition: all 0.3s;
-                            text-transform: uppercase;
-                            letter-spacing: 0.5px;
+                            transition: background-color 0.2s;
+                            border-radius: 0; /* Sharp corners */
                         }
                         .btn-approve {
-                            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                            background-color: #107C10; /* Microsoft Success Green */
                             color: white;
                         }
                         .btn-approve:hover {
-                            transform: translateY(-2px);
-                            box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
+                            background-color: #0c5d0c;
                         }
                         .btn-reject {
-                            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+                            background-color: #D13438; /* Microsoft Error Red */
                             color: white;
                         }
                         .btn-reject:hover {
-                            transform: translateY(-2px);
-                            box-shadow: 0 5px 15px rgba(235, 51, 73, 0.4);
-                        }
-                        .help-text {
-                            font-size: 13px;
-                            color: #6c757d;
-                            margin-top: 6px;
+                            background-color: #a4262c;
                         }
                         @media (max-width: 600px) {
-                            .button-group {
-                                flex-direction: column;
-                            }
-                            button {
-                                width: 100%;
-                            }
+                            .button-group { flex-direction: column; }
                         }
                     </style>
                 </head>
                 <body>
-                    <div class="container">
-                        <div class="header">
-                            <h1>🔐 Access Request Approval</h1>
-                            <p>Request #${request.requestId} - ${approval.approverRole}</p>
-                        </div>
-                        
-                        <div class="content">
-                            <div class="request-info">
-                                <div class="info-row">
-                                    <span class="label">Request Type</span>
-                                    <span class="value">${request.requestType}</span>
+                    <div class="header">
+                        <img src="/logo.png" alt="IFL Logo" class="logo">
+                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                    </div>
+                    <div class="main-container">
+                        <div class="card">
+                            <h1>Access Request Approval</h1>
+                            <p class="subtitle">Request #${request.requestId} • ${approval.approverRole}</p>
+                            
+                            <div class="section-title">Request Details</div>
+                            <div class="info-grid">
+                                <div>
+                                    <div class="field-label">REQUEST TYPE</div>
+                                    <div class="field-value">${request.requestType}</div>
                                 </div>
-                                <div class="info-row">
-                                    <span class="label">Justification</span>
-                                    <span class="value">${request.justification}</span>
+                                <div>
+                                    <div class="field-label">CURRENT STAGE</div>
+                                    <div class="field-value">${request.workflowStage}</div>
                                 </div>
-                                <div class="info-row">
-                                    <span class="label">Current Stage</span>
-                                    <span class="value">${request.workflowStage}</span>
+                                <div style="grid-column: 1/-1">
+                                    <div class="field-label">JUSTIFICATION</div>
+                                    <div class="field-value">${request.justification}</div>
                                 </div>
                             </div>
 
                             <form method="POST" action="/api/approvals/handle?token=${token}">
                                 <div class="form-group">
-                                    <label for="comment">Your Comment (Optional)</label>
+                                    <label for="comment">Approver Comment (Optional)</label>
                                     <textarea 
                                         id="comment" 
                                         name="comment" 
-                                        placeholder="Add your comment here... (e.g., 'Approved - legitimate business need' or 'Rejected - insufficient justification')"
+                                        placeholder="Add context for your decision..."
                                     ></textarea>
                                     <div class="help-text">
-                                        💡 Add context for your decision. This will be visible to the requester and in the audit trail.
+                                        This comment will be recorded in the audit trail.
                                     </div>
                                 </div>
 
                                 <div class="button-group">
                                     <button type="submit" name="action" value="Approve" class="btn-approve">
-                                        ✓ Approve
+                                        Approve Request
                                     </button>
                                     <button type="submit" name="action" value="Reject" class="btn-reject">
-                                        ✗ Reject
+                                        Reject Request
                                     </button>
                                 </div>
                             </form>
@@ -279,69 +339,34 @@ export const handleApprovalClick = async (req, res) => {
                 <head>
                     <title>Success</title>
                     <style>
-                        body {
-                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                            background: linear-gradient(135deg, ${isApproved ? '#11998e 0%, #38ef7d' : '#eb3349 0%, #f45c43'} 100%);
-                            min-height: 100vh;
-                            display: flex;
-                            justify-content: center;
-                            align-items: center;
-                            padding: 20px;
-                        }
-                        .success-container {
-                            background: white;
-                            border-radius: 12px;
-                            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                            max-width: 500px;
-                            width: 100%;
-                            padding: 40px;
-                            text-align: center;
-                        }
-                        .icon {
-                            font-size: 64px;
-                            margin-bottom: 20px;
-                        }
-                        h1 {
-                            color: ${isApproved ? '#11998e' : '#eb3349'};
-                            margin-bottom: 15px;
-                        }
-                        p {
-                            color: #666;
-                            line-height: 1.6;
-                            margin-bottom: 10px;
-                        }
-                        .comment-box {
-                            background: #f8f9fa;
-                            padding: 15px;
-                            border-radius: 6px;
-                            margin-top: 20px;
-                            border-left: 4px solid ${isApproved ? '#11998e' : '#eb3349'};
-                        }
-                        .comment-label {
-                            font-weight: 600;
-                            color: #495057;
-                            font-size: 13px;
-                            margin-bottom: 8px;
-                        }
-                        .comment-text {
-                            color: #212529;
-                            font-style: italic;
-                        }
+                        body { font-family: 'Segoe UI', sans-serif; background-color: #faf9f8; margin: 0; }
+                        .header { background-color: #0078D4; padding: 15px 20px; display: flex; align-items: center; gap: 15px; }
+                        .logo { height: 40px; background: white; padding: 5px; }
+                        .brand { color: white; font-weight: 600; font-size: 18px; margin: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: white; padding: 40px; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132); text-align: center; }
+                        .icon { font-size: 48px; margin-bottom: 20px; color: ${isApproved ? '#107C10' : '#D13438'}; }
+                        h1 { color: #201f1e; margin-bottom: 10px; font-weight: 600; }
+                        p { color: #323130; margin-bottom: 20px; text-align: left; }
+                        .comment-box { background: #f3f2f1; padding: 15px; margin-top: 20px; border-left: 4px solid ${isApproved ? '#107C10' : '#D13438'}; text-align: left; }
                     </style>
                 </head>
                 <body>
-                    <div class="success-container">
+                    <div class="header">
+                        <img src="/logo.png" alt="IFL Logo" class="logo">
+                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                    </div>
+                    <div class="container">
                         <div class="icon">${isApproved ? '✅' : '❌'}</div>
-                        <h1>Request ${action}d Successfully!</h1>
+                        <h1>Action Processed</h1>
                         <p><strong>Request #${request.requestId}</strong> has been ${action.toLowerCase()}d.</p>
                         ${isApproved && nextLevel ? `<p>The request will now be sent to the ${nextLevel} for final approval.</p>` : ''}
                         ${!isApproved ? `<p>The requester has been notified of the rejection.</p>` : ''}
-                        ${isApproved && !nextLevel ? `<p>The workflow is now complete. The requester has been notified.</p>` : ''}
+                        ${isApproved && !nextLevel ? `<p>The workflow is now complete.</p>` : ''}
                         
                         ${comment ? `
                             <div class="comment-box">
-                                <div class="comment-label">YOUR COMMENT:</div>
-                                <div class="comment-text">"${comment}"</div>
+                                <strong>Your Comment:</strong>
+                                <br>${comment}
                             </div>
                         ` : ''}
                     </div>
@@ -353,13 +378,31 @@ export const handleApprovalClick = async (req, res) => {
     } catch (err) {
         logger.error(`[Approval] Error: ${err.message}`);
         return res.status(500).send(`
-            <html>
-            <head><title>Error</title></head>
-            <body style="font-family: Arial; padding: 40px; text-align: center;">
-                <h2 style="color: #D13438;">Error Processing Request</h2>
-                <p>${err.message}</p>
-            </body>
-            </html>
-        `);
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Error</title>
+                    <style>
+                        body { font-family: 'Segoe UI', sans-serif; background-color: #faf9f8; margin: 0; }
+                        .header { background-color: #0078D4; padding: 15px 20px; display: flex; align-items: center; gap: 15px; }
+                        .logo { height: 40px; background: white; padding: 5px; }
+                        .brand { color: white; font-weight: 600; font-size: 18px; margin: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: white; padding: 40px; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132); text-align: center; }
+                        h2 { color: #D13438; margin-top: 0; font-weight: 600; }
+                        p { color: #323130; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <img src="/logo.png" alt="IFL Logo" class="logo">
+                        <h1 class="brand">Ibrahim Fibres Limited</h1>
+                    </div>
+                    <div class="container">
+                        <h2>Error Processing Request</h2>
+                        <p>${err.message}</p>
+                    </div>
+                </body>
+                </html>
+            `);
     }
 };
