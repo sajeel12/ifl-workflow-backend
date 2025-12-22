@@ -16,6 +16,5 @@ module.exports = {
         }
     },
     production: {
-        // ... similar config
     }
 };

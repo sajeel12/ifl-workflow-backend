@@ -4,10 +4,7 @@ import logger from './src/utils/logger.js';
 
 const PORT = process.env.PORT || 3000;
 
-/**
- * Drop all foreign key constraints in the database (MSSQL specific)
- * This is needed when using force:true to avoid constraint errors
- */
+
 async function dropAllForeignKeys() {
     try {
         const query = `
@@ -27,17 +24,15 @@ async function dropAllForeignKeys() {
 
 async function startServer() {
     try {
-        // DB Connection
+
         await sequelize.authenticate();
         logger.info('Database connected.');
 
-        // Sync Models (Dev only - use Migrations in Prod!)
-        // Using force:true in development to avoid ALTER TABLE conflicts
-        // WARNING: This drops all tables and recreates them (data loss)
+
         const isDev = process.env.NODE_ENV !== 'production';
 
         if (isDev) {
-            // Drop all foreign key constraints first to avoid errors
+
             await dropAllForeignKeys();
         }
 

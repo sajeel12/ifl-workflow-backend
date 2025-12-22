@@ -6,34 +6,31 @@ import * as workflowTestController from '../controllers/workflowTestController.j
 import { ssoMiddleware } from '../middleware/ssoMiddleware.js';
 import * as authController from '../controllers/authController.js';
 
-// ============ TEST ROUTES (No Auth Required) ============
-// Create a test access request with hardcoded emails
+
 router.post('/test/access-request', workflowTestController.createTestAccessRequest);
 
-// Get request status and approval details
+
 router.get('/test/request/:requestId/status', workflowTestController.getRequestStatus);
 
-// Direct approval/rejection for testing (bypasses email clicks)
+
 router.post('/test/approve/:token', workflowTestController.testApproveReject);
 
-// ============ PUBLIC APPROVAL ROUTE ============
-// Public / Hybrid Route (Token Protected, no SSO required for Outlook)
-// Supports /api/approvals/handle via POST (Actionable Message) or GET (Link)
+
 router.all('/approvals/handle', approvalController.handleApprovalClick);
 
-// Protected Routes (Require SSO)
+
 router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
 router.post('/onboarding/start', ssoMiddleware, onboardingController.createAccessRequest);
 
-// Health Check
+
 router.get('/health', (req, res) => {
     res.json({ status: 'UP', timestamp: new Date() });
 });
 
-// Debug Routes for AD
+
 import { findUser, debugDumpAD, getAllUsers } from '../services/adService.js';
 
-// Get all AD users (for testing and analyzing data structure)
+
 router.get('/ad-users', ssoMiddleware, async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 100;
@@ -48,7 +45,7 @@ router.get('/ad-users', ssoMiddleware, async (req, res) => {
     }
 });
 
-// Get specific user by username
+
 router.get('/ad-debug/:username', async (req, res) => {
     try {
         const result = await findUser(req.params.username);

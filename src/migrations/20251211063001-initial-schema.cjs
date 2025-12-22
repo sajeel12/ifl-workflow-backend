@@ -1,16 +1,10 @@
 'use strict';
 
-/** @type {import('sequelize-cli').Migration} */
+
 module.exports = {
   async up(queryInterface, Sequelize) {
-    /**
-     * Add altering commands here.
-     *
-     * Example:
-     * await queryInterface.createTable('users', { id: Sequelize.INTEGER });
-     */
+    
 
-    // 1. Employees
     await queryInterface.createTable('Employees', {
       employeeId: {
         type: Sequelize.STRING,
@@ -49,7 +43,6 @@ module.exports = {
       }
     });
 
-    // 2. AccessRequests
     await queryInterface.createTable('AccessRequests', {
       requestId: {
         type: Sequelize.UUID,
@@ -92,7 +85,6 @@ module.exports = {
       }
     });
 
-    // 3. WorkflowApprovals
     await queryInterface.createTable('WorkflowApprovals', {
       approvalId: {
         type: Sequelize.UUID,
@@ -140,7 +132,6 @@ module.exports = {
       }
     });
 
-    // 4. TimelineEvents
     await queryInterface.createTable('TimelineEvents', {
       eventId: {
         type: Sequelize.UUID,
@@ -173,12 +164,7 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    /**
-     * Add reverting commands here.
-     *
-     * Example:
-     * await queryInterface.dropTable('users');
-     */
+    
     await queryInterface.dropTable('TimelineEvents');
     await queryInterface.dropTable('WorkflowApprovals');
     await queryInterface.dropTable('AccessRequests');

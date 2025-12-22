@@ -1,9 +1,6 @@
 import logger from '../utils/logger.js';
 
-/**
- * Get current authenticated user details
- * @route GET /api/auth/me
- */
+
 export const getCurrentUser = (req, res) => {
     try {
         if (!req.user) {

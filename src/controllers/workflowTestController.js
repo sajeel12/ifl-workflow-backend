@@ -5,24 +5,19 @@ import TimelineEvent from '../models/TimelineEvent.js';
 import * as workflowService from '../services/workflowService.js';
 import logger from '../utils/logger.js';
 
-// Hardcoded test emails for two-level approval
 const TEST_EMAILS = {
     EMPLOYEE: 'sajeel.dilshad@perception-it.com',
     MANAGER: 'sajeel.dilshad@perception-it.com',
     DEPT_HEAD: 'sajeel.dilshad@perception-it.com'
 };
 
-/**
- * Create a test Access Request with hardcoded emails
- * No authentication required - for testing purposes only
- */
+
 export const createTestAccessRequest = async (req, res) => {
     try {
         const { requestType, justification } = req.body;
 
         logger.info('[Test] Creating test access request');
 
-        // 1. Ensure test employee exists
         const [emp, created] = await Employee.findOrCreate({
             where: { email: TEST_EMAILS.EMPLOYEE },
             defaults: {
@@ -37,7 +32,6 @@ export const createTestAccessRequest = async (req, res) => {
             logger.info('[Test] Created test employee');
         }
 
-        // 2. Create Access Request
         const newReq = await AccessRequest.create({
             employeeId: emp.employeeId,
             requestType: requestType || 'SharePoint Access',
@@ -46,7 +40,6 @@ export const createTestAccessRequest = async (req, res) => {
 
         logger.info(`[Test] Created Access Request #${newReq.requestId}`);
 
-        // 3. Start Two-Level Workflow
         await workflowService.startAccessRequestWorkflow(
             newReq.requestId,
             emp.employeeId,
@@ -57,7 +50,6 @@ export const createTestAccessRequest = async (req, res) => {
             newReq.requestType     // Request type for notifications
         );
 
-        // 4. Get approval tokens for testing
         const approvals = await WorkflowApproval.findAll({
             where: { requestId: newReq.requestId },
             order: [['approvalLevel', 'ASC']]
@@ -99,9 +91,7 @@ export const createTestAccessRequest = async (req, res) => {
     }
 };
 
-/**
- * Get the status of a specific request including all approvals
- */
+
 export const getRequestStatus = async (req, res) => {
     try {
         const { requestId } = req.params;
@@ -153,9 +143,7 @@ export const getRequestStatus = async (req, res) => {
     }
 };
 
-/**
- * Direct approval/rejection for testing (bypasses email)
- */
+
 export const testApproveReject = async (req, res) => {
     try {
         const { token } = req.params;

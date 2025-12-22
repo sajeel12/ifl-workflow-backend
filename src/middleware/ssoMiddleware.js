@@ -9,26 +9,17 @@ function verifySignature(username, timestamp, signature) {
     const hmac = crypto.createHmac('sha256', SHARED_SECRET);
     hmac.update(data);
     const expectedSignature = hmac.digest('hex');
-    // // +++++++++++++ Option#2 +++++++++++++ currenntly using
-    // Convert both signatures to buffers
     const expectedBuffer = Buffer.from(expectedSignature, 'hex');
     const providedBuffer = Buffer.from(signature, 'hex');
 
-    // Length check (required to avoid exceptions)
     if (expectedBuffer.length !== providedBuffer.length) {
         return false;
     }
 
-    // Timing-safe comparison
     return crypto.timingSafeEqual(expectedBuffer, providedBuffer);
-    //   // +++++++++++++ Option #1 +++++++++++++
-    // return expectedSignature === signature;
 }
 
-/**
- * Middleware to handle Integrated Windows Authentication (SSO) via Sidecar
- * Strictly authenticates checks 'x-sidecar-token' from token.aspx
- */
+
 export const ssoMiddleware = async (req, res, next) => {
     try {
         const rawSidecarToken = req.headers['x-sidecar-token'] || '';
@@ -43,7 +34,6 @@ export const ssoMiddleware = async (req, res, next) => {
         try {
             const token = JSON.parse(sidecarToken);
 
-            // Validate Timestamp (Allow 5 minutes drift)
             const now = Math.floor(Date.now() / 1000);
             if (Math.abs(now - token.timestamp) > 300) {
                 logger.warn(`[SSO] Expired token for ${token.username}`);
@@ -65,11 +55,9 @@ export const ssoMiddleware = async (req, res, next) => {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        // Format: DOMAIN\username or just username
         const parts = authenticatedUser.split('\\');
         const username = parts.length > 1 ? parts[1] : parts[0];
 
-        // Fetch full profile from AD
         try {
             const userProfile = await findUser(username);
 
@@ -78,7 +66,6 @@ export const ssoMiddleware = async (req, res, next) => {
                 return res.status(403).json({ error: 'User Access Denied' });
             }
 
-            // Attach to Request
             req.user = {
                 username: userProfile.sAMAccountName,
                 email: userProfile.mail,
@@ -89,8 +76,6 @@ export const ssoMiddleware = async (req, res, next) => {
 
             next();
         } catch (adError) {
-            // If FindUser crashes (AD Connection error etc), we probably should return 500, or 401 if we want to be safe.
-            // But logging it is important.
             logger.error(`[SSO] AD Lookup Failed for ${username}: ${adError.message}`);
             return res.status(500).json({ error: 'Authentication Verification Failed' });
         }

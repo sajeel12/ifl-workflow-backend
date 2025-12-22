@@ -10,19 +10,14 @@ import logger from '../src/utils/logger.js';
 
 dotenv.config();
 
-// Mute logger for cleaner output, or keep it
-// logger.transports.forEach((t) => (t.silent = true));
 
 const runSimulation = async () => {
     try {
         console.log('--- Starting Workflow Simulation ---');
 
-        // 1. Sync Database
         console.log('Syncing database...');
-        // Note: Avoiding { alter: true } as it can cause MSSQL syntax errors on existing columns
         await sequelize.sync();
 
-        // 2. Create Dummy Employee
         console.log('Creating Dummy Employee...');
         const emp = await Employee.create({
             name: 'Simulation User',
@@ -32,7 +27,6 @@ const runSimulation = async () => {
         });
         console.log(`Employee Created: ID ${emp.employeeId}`);
 
-        // 3. Create Dummy Request associated with Employee
         console.log('Creating Access Request...');
         const request = await AccessRequest.create({
             employeeId: emp.employeeId,
@@ -42,7 +36,6 @@ const runSimulation = async () => {
         });
         console.log(`Access Request Created: ID ${request.requestId}`);
 
-        // 4. Start Workflow
         const managerEmail = process.argv[2] || process.env.SMTP_FROM || 'test@example.com';
         console.log(`Starting Workflow for Manager: ${managerEmail}`);
 
@@ -54,7 +47,6 @@ const runSimulation = async () => {
         );
         console.log('Workflow started. Email should have been sent.');
 
-        // 5. Retrieve Token from DB
         const approval = await WorkflowApproval.findOne({
             where: { requestId: request.requestId, status: 'Pending' }
         });
@@ -64,7 +56,6 @@ const runSimulation = async () => {
         }
         console.log(`Approval Record Found: Token = ${approval.actionToken}`);
 
-        // 6. Simulate Manager Action (Approve)
         console.log('Simulating "Approve" Click...');
         const result = await workflowService.handleApprovalAction(
             approval.actionToken,
@@ -73,7 +64,6 @@ const runSimulation = async () => {
         );
         console.log('Action Result:', result);
 
-        // 7. Verify Final State
         const updatedRequest = await AccessRequest.findByPk(request.requestId);
         console.log(`Final Request Status: ${updatedRequest.status}`);
         console.log(`Final Workflow Stage: ${updatedRequest.workflowStage}`);

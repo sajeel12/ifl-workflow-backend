@@ -3,11 +3,7 @@ import WorkflowApproval from '../models/WorkflowApproval.js';
 import AccessRequest from '../models/AccessRequest.js';
 import logger from '../utils/logger.js';
 
-/**
- * Handles approval click from email or browser
- * GET: Shows form for comment
- * POST: Processes the approval
- */
+
 export const handleApprovalClick = async (req, res) => {
     const { token } = req.query;
     const { action, comment } = req.body;
@@ -15,7 +11,7 @@ export const handleApprovalClick = async (req, res) => {
     logger.info(`[Approval] Request received - Method: ${req.method}, Token: ${token}, Action: ${action}`);
 
     try {
-        // Validate token exists
+
         if (!token) {
             return res.status(400).send(`
                 <!DOCTYPE html>
@@ -46,7 +42,7 @@ export const handleApprovalClick = async (req, res) => {
             `);
         }
 
-        // Fetch approval details
+
         const approval = await WorkflowApproval.findOne({ where: { actionToken: token } });
 
         if (!approval) {
@@ -79,7 +75,7 @@ export const handleApprovalClick = async (req, res) => {
             `);
         }
 
-        // Check if already processed
+
         if (approval.status !== 'Pending') {
             return res.status(200).send(`
                 <!DOCTYPE html>
@@ -113,10 +109,10 @@ export const handleApprovalClick = async (req, res) => {
             `);
         }
 
-        // Get request details for display
+
         const request = await AccessRequest.findByPk(approval.requestId);
 
-        // GET request - Show approval form
+
         if (req.method === 'GET') {
             return res.send(`
                 <!DOCTYPE html>
@@ -142,7 +138,7 @@ export const handleApprovalClick = async (req, res) => {
                         .logo {
                             height: 48px;
                             padding: 6px;
-                            /* Square logo container per sharp corners request */
+
                         }
                         .brand {
                             color: white;
@@ -158,7 +154,7 @@ export const handleApprovalClick = async (req, res) => {
                             background: white;
                             box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132), 0 0.3px 0.9px 0 rgba(0,0,0,0.108);
                             padding: 32px;
-                            /* Sharp corners */
+
                             border-radius: 0; 
                         }
                         h1 {
@@ -218,7 +214,7 @@ export const handleApprovalClick = async (req, res) => {
                             font-size: 14px;
                             resize: vertical;
                             min-height: 100px;
-                            border-radius: 0; /* Sharp corners */
+                            border-radius: 0; 
                         }
                         textarea:focus {
                             outline: 2px solid #0078D4;
@@ -242,17 +238,17 @@ export const handleApprovalClick = async (req, res) => {
                             font-weight: 600;
                             cursor: pointer;
                             transition: background-color 0.2s;
-                            border-radius: 0; /* Sharp corners */
+                            border-radius: 0; 
                         }
                         .btn-approve {
-                            background-color: #107C10; /* Microsoft Success Green */
+                            background-color: #107C10; 
                             color: white;
                         }
                         .btn-approve:hover {
                             background-color: #0c5d0c;
                         }
                         .btn-reject {
-                            background-color: #D13438; /* Microsoft Error Red */
+                            background-color: #D13438; 
                             color: white;
                         }
                         .btn-reject:hover {
@@ -318,7 +314,7 @@ export const handleApprovalClick = async (req, res) => {
             `);
         }
 
-        // POST request - Process the action
+
         if (req.method === 'POST') {
             if (!action || !['Approve', 'Reject'].includes(action)) {
                 return res.status(400).send('Invalid action');
@@ -328,7 +324,7 @@ export const handleApprovalClick = async (req, res) => {
 
             const result = await workflowService.handleApprovalAction(token, action, comment || '');
 
-            // Show success page
+
             const isApproved = action === 'Approve';
             const nextLevel = approval.approvalLevel === 1 ? 'Department Head' : '';
 

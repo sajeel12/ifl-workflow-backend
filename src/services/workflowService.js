@@ -5,11 +5,7 @@ import { sendApprovalEmail, sendRequesterNotification } from './emailService.js'
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import Employee from '../models/Employee.js';
-// import { findUser } from './adService.js'; // if needed for manager lookup
 
-/**
- * Helper function to get requester email from employee ID
- */
 async function getRequesterEmail(employeeId) {
     try {
         const employee = await Employee.findByPk(employeeId);
@@ -24,18 +20,15 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
     logger.info(`[Workflow] Starting for Request #${requestId}`);
 
     try {
-        // 1. Log Event
         await TimelineEvent.create({
             employeeId,
             eventType: 'RequestSubmitted',
             description: 'Access request submitted by user.'
         });
 
-        // 2. Create Approval Records for Both Levels (Level 1 = Manager, Level 2 = Dept Head)
         const level1Token = crypto.randomBytes(20).toString('hex');
         const level2Token = crypto.randomBytes(20).toString('hex');
 
-        // Level 1: Manager Approval (Active)
         await WorkflowApproval.create({
             requestId,
             approverEmail: managerEmail,
@@ -45,7 +38,6 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             approverRole: 'Manager'
         });
 
-        // Level 2: Department Head Approval (Waiting for Level 1)
         await WorkflowApproval.create({
             requestId,
             approverEmail: deptHeadEmail,
@@ -55,8 +47,6 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             approverRole: 'DepartmentHead'
         });
 
-        // 3. Send Email to Level 1 (Manager) Only
-        // const baseUrl = process.env.APP_URL || 'http://localhost:3000';
         const baseUrl = process.env.APP_URL;
         const actionLink = `${baseUrl}/api/approvals/handle?token=${level1Token}`;
 
@@ -67,13 +57,11 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             actionLink
         );
 
-        // 4. Update Request Status
         await AccessRequest.update(
             { status: 'Pending', workflowStage: 'Level1-ManagerApproval' },
             { where: { requestId } }
         );
 
-        // 5. Notify Requester - Submission Confirmation
         if (requesterEmail) {
             await sendRequesterNotification(
                 requesterEmail,
@@ -108,19 +96,15 @@ export const handleApprovalAction = async (token, action, comment) => {
         return { status: 'AlreadyProcessed', message: 'This request has already been processed.' };
     }
 
-    // Update Approval
     approval.status = action; // Approve / Reject
     approval.decisionDate = new Date();
     approval.comment = comment;
     await approval.save();
 
-    // Determine Next Step
     const req = await AccessRequest.findByPk(approval.requestId);
 
     if (action === 'Approve') {
-        // Check which level approved
         if (approval.approvalLevel === 1) {
-            // Level 1 (Manager) Approved - Move to Level 2
             logger.info(`[Workflow] Level 1 approved for Request #${req.requestId}, moving to Level 2`);
 
             await TimelineEvent.create({
@@ -129,7 +113,6 @@ export const handleApprovalAction = async (token, action, comment) => {
                 description: `Manager approved the request. Comment: ${comment || 'None'}`
             });
 
-            // Find Level 2 Approval Record
             const level2Approval = await WorkflowApproval.findOne({
                 where: {
                     requestId: req.requestId,
@@ -138,16 +121,12 @@ export const handleApprovalAction = async (token, action, comment) => {
             });
 
             if (level2Approval) {
-                // Activate Level 2
                 level2Approval.status = 'Pending';
                 await level2Approval.save();
 
-                // Send Email to Department Head
-                // const baseUrl = process.env.APP_URL || 'http://localhost:3000';
                 const baseUrl = process.env.APP_URL;
                 const actionLink = `${baseUrl}/api/approvals/handle?token=${level2Approval.actionToken}`;
 
-                // Build message with manager's approval comment
                 let emailMessage = `Manager has approved this request.\n\n`;
                 emailMessage += `Original Justification: "${req.justification}"\n\n`;
                 if (comment) {
@@ -163,12 +142,10 @@ export const handleApprovalAction = async (token, action, comment) => {
                     actionLink
                 );
 
-                // Update Request Status
                 req.status = 'Pending';
                 req.workflowStage = 'Level2-DeptHeadApproval';
                 await req.save();
 
-                // Notify Requester - Level 1 Approved
                 const requester = await getRequesterEmail(req.employeeId);
                 if (requester) {
                     await sendRequesterNotification(
@@ -192,7 +169,6 @@ export const handleApprovalAction = async (token, action, comment) => {
             }
 
         } else if (approval.approvalLevel === 2) {
-            // Level 2 (Department Head) Approved - Complete Workflow
             logger.info(`[Workflow] Level 2 approved for Request #${req.requestId}, completing workflow`);
 
             req.status = 'Approved';
@@ -205,7 +181,6 @@ export const handleApprovalAction = async (token, action, comment) => {
                 description: `Department Head approved the request. Comment: ${comment || 'None'}`
             });
 
-            // Notify Requester - Workflow Complete
             const requester = await getRequesterEmail(req.employeeId);
             if (requester) {
                 await sendRequesterNotification(
@@ -226,7 +201,6 @@ export const handleApprovalAction = async (token, action, comment) => {
         }
 
     } else {
-        // Rejected at any level - Close workflow
         logger.info(`[Workflow] Request #${req.requestId} rejected at Level ${approval.approvalLevel}`);
 
         req.status = 'Rejected';
@@ -242,7 +216,6 @@ export const handleApprovalAction = async (token, action, comment) => {
             description: `${rejecterRole} rejected the request. Comment: ${comment || 'None'}`
         });
 
-        // Notify Requester - Rejection
         const requester = await getRequesterEmail(req.employeeId);
         if (requester) {
             await sendRequesterNotification(

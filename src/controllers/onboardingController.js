@@ -7,10 +7,7 @@ import logger from '../utils/logger.js';
 export const createAccessRequest = async (req, res) => {
     try {
         const { requestType, justification } = req.body;
-        // req.user comes from ssoMiddleware
-        // For now we assume we have user data. If Employee table is empty, we might need to upsert Employee first.
 
-        // Upsert Employee (Ensure they exist in DB)
         const [emp, created] = await Employee.findOrCreate({
             where: { email: req.user.email },
             defaults: {
@@ -27,22 +24,18 @@ export const createAccessRequest = async (req, res) => {
             justification
         });
 
-        // Get Department Head from AD based on employee's department
         let deptHeadEmail;
         try {
             deptHeadEmail = await getDepartmentHead(emp.department);
             logger.info(`[Onboarding] Department Head for ${emp.department}: ${deptHeadEmail}`);
         } catch (err) {
             logger.error(`[Onboarding] Failed to get department head: ${err.message}`);
-            // Fallback to configured default
             deptHeadEmail = process.env.DEFAULT_DEPT_HEAD_EMAIL || 'dept-head@test.com';
             logger.warn(`[Onboarding] Using fallback department head: ${deptHeadEmail}`);
         }
 
-        // Get manager email (fallback if not valid)
         const managerEmail = emp.managerEmail?.includes('@') ? emp.managerEmail : 'manager@test.com';
 
-        // Start Workflow with both manager and department head
         await workflowService.startAccessRequestWorkflow(
             newReq.requestId,
             emp.employeeId,

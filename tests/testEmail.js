@@ -1,6 +1,5 @@
 
 import dotenv from 'dotenv';
-// Load config BEFORE importing other files
 dotenv.config();
 
 const toEmail = process.argv[2];
@@ -10,7 +9,6 @@ if (!toEmail) {
     process.exit(1);
 }
 
-// Dynamic import to ensure process.env is set before the file loads
 const { sendApprovalEmail } = await import('../src/services/emailService.js');
 
 console.log('Using SMTP Host:', process.env.SMTP_HOST);

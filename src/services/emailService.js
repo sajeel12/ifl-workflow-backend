@@ -1,7 +1,6 @@
 import nodemailer from 'nodemailer';
 import logger from '../utils/logger.js';
 
-// Transporter Init
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '25', 10),
@@ -16,15 +15,10 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-/**
- * Send an approval email with Actionable Message Adaptive Card + Fallback Link
- */
+
 export const sendApprovalEmail = async (toEmail, subject, requestDetails, approvalLink) => {
     logger.info(`[Email] Sending approval email to ${toEmail}`);
 
-    // Adaptive Card JSON
-    // Note: For "Universal Action model", sending a simple Action.Http is deprecated in some versions,
-    // but On-Prem support varies. We will try a standard Adaptive Card with Action.Http (or OpenUrl as fallback).
     const adaptiveCardPayload = {
         "type": "AdaptiveCard",
         "version": "1.0",
@@ -51,7 +45,6 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
         ]
     };
 
-    // HTML Body (Fallback)
     const htmlBody = `
     <html>
     <body>
@@ -86,15 +79,12 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
     }
 };
 
-/**
- * Send a notification email to the requester about workflow status
- */
+
 export const sendRequesterNotification = async (toEmail, subject, message, requestDetails) => {
     logger.info(`[Email] Sending requester notification to ${toEmail}`);
 
     const { requestId, requestType, status, currentStage, rejecterRole, comment } = requestDetails;
 
-    // Build status-specific content
     let statusMessage = '';
     let statusColor = '#0078D4'; // Default blue
     let nextSteps = '';
@@ -225,7 +215,6 @@ export const sendRequesterNotification = async (toEmail, subject, message, reque
         return info;
     } catch (err) {
         logger.error(`[Email] Failed to send requester notification: ${err.message}`);
-        // Don't throw - notification failure shouldn't break the workflow
         logger.warn(`[Email] Continuing workflow despite notification failure`);
     }
 };
