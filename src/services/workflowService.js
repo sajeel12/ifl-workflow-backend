@@ -58,7 +58,8 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             `Action Required: Access Request #${requestId}`,
             `User requested access. Justification: "${justification}"`,
             actionLink,
-            requesterName
+            requesterName,
+            requesterEmail || (requester ? requester.email : 'Unknown Email')
         );
 
         await AccessRequest.update(
@@ -147,7 +148,8 @@ export const handleApprovalAction = async (token, action, comment) => {
                     `Action Required: Access Request #${req.requestId}`,
                     emailMessage,
                     actionLink,
-                    requesterName
+                    requesterName,
+                    requester ? requester.email : 'Unknown Email'
                 );
 
                 req.status = 'Pending';

@@ -277,7 +277,7 @@ export const handleApprovalClick = async (req, res) => {
                             <div class="info-grid">
                                 <div>
                                     <div class="field-label">REQUESTER</div>
-                                    <div class="field-value">${requesterName}</div>
+                                    <div class="field-value">${requesterName} <span style="font-size: 13px; color: #605e5c;">(${requester ? requester.email : ''})</span></div>
                                 </div>
                                 <div>
                                     <div class="field-label">REQUEST TYPE</div>

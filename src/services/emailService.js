@@ -16,7 +16,7 @@ const transporter = nodemailer.createTransport({
 });
 
 
-export const sendApprovalEmail = async (toEmail, subject, requestDetails, approvalLink, requesterName) => {
+export const sendApprovalEmail = async (toEmail, subject, requestDetails, approvalLink, requesterName, requesterEmail) => {
     logger.info(`[Email] Sending approval email to ${toEmail}`);
 
     const adaptiveCardPayload = {
@@ -42,7 +42,7 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
                 "facts": [
                     {
                         "title": "Requester:",
-                        "value": requesterName || "Unknown"
+                        "value": `${requesterName || "Unknown"} <${requesterEmail || "No Email"}>`
                     }
                 ]
             },
@@ -74,6 +74,7 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
             .info-box { background-color: #f8f9fa; border-left: 4px solid #0078D4; padding: 15px; margin-bottom: 20px; }
             .label { font-weight: 600; color: #605e5c; font-size: 13px; text-transform: uppercase; }
             .value { font-size: 16px; font-weight: 500; color: #201f1e; margin-bottom: 10px; display: block; }
+            .email-text { font-size: 14px; color: #605e5c; font-weight: 400; }
             .button { display: inline-block; padding: 12px 24px; background-color: #0078D4; color: white; text-decoration: none; border-radius: 4px; font-weight: 600; margin-top: 10px; }
             .button:hover { background-color: #005a9e; }
             .footer { background-color: #f3f2f1; padding: 15px; text-align: center; color: #605e5c; font-size: 12px; }
@@ -89,7 +90,11 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
                 
                 <div class="info-box">
                     <span class="label">REQUESTER</span>
-                    <span class="value">${requesterName || 'Unknown'}</span>
+                    <span class="value">
+                        ${requesterName || 'Unknown'} 
+                        <br/>
+                        <span class="email-text">(${requesterEmail || 'No Email'})</span>
+                    </span>
                     
                     <span class="label">DETAILS</span>
                     <p style="margin-top: 5px; line-height: 1.5;">${requestDetails}</p>
