@@ -26,6 +26,9 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             description: 'Access request submitted by user.'
         });
 
+        const requester = await Employee.findByPk(employeeId);
+        const requesterName = requester ? requester.name : 'Unknown User';
+
         const level1Token = crypto.randomBytes(20).toString('hex');
         const level2Token = crypto.randomBytes(20).toString('hex');
 
@@ -41,7 +44,7 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
         await WorkflowApproval.create({
             requestId,
             approverEmail: deptHeadEmail,
-            status: 'Waiting', // Not Pending yet - waiting for Level 1
+            status: 'Waiting',
             actionToken: level2Token,
             approvalLevel: 2,
             approverRole: 'DepartmentHead'
@@ -54,7 +57,8 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             managerEmail,
             `Action Required: Access Request #${requestId}`,
             `User requested access. Justification: "${justification}"`,
-            actionLink
+            actionLink,
+            requesterName
         );
 
         await AccessRequest.update(
@@ -96,7 +100,7 @@ export const handleApprovalAction = async (token, action, comment) => {
         return { status: 'AlreadyProcessed', message: 'This request has already been processed.' };
     }
 
-    approval.status = action; // Approve / Reject
+    approval.status = action;
     approval.decisionDate = new Date();
     approval.comment = comment;
     await approval.save();
@@ -124,6 +128,9 @@ export const handleApprovalAction = async (token, action, comment) => {
                 level2Approval.status = 'Pending';
                 await level2Approval.save();
 
+                const requester = await Employee.findByPk(req.employeeId);
+                const requesterName = requester ? requester.name : 'Unknown User';
+
                 const baseUrl = process.env.APP_URL;
                 const actionLink = `${baseUrl}/api/approvals/handle?token=${level2Approval.actionToken}`;
 
@@ -139,17 +146,18 @@ export const handleApprovalAction = async (token, action, comment) => {
                     level2Approval.approverEmail,
                     `Action Required: Access Request #${req.requestId}`,
                     emailMessage,
-                    actionLink
+                    actionLink,
+                    requesterName
                 );
 
                 req.status = 'Pending';
                 req.workflowStage = 'Level2-DeptHeadApproval';
                 await req.save();
 
-                const requester = await getRequesterEmail(req.employeeId);
-                if (requester) {
+                const requesterEmail = await getRequesterEmail(req.employeeId);
+                if (requesterEmail) {
                     await sendRequesterNotification(
-                        requester,
+                        requesterEmail,
                         'Access Request - Manager Approved',
                         `Good news! Your manager has approved your access request #${req.requestId}. It is now with the Department Head for final approval.`,
                         {
@@ -181,10 +189,10 @@ export const handleApprovalAction = async (token, action, comment) => {
                 description: `Department Head approved the request. Comment: ${comment || 'None'}`
             });
 
-            const requester = await getRequesterEmail(req.employeeId);
-            if (requester) {
+            const requesterEmail = await getRequesterEmail(req.employeeId);
+            if (requesterEmail) {
                 await sendRequesterNotification(
-                    requester,
+                    requesterEmail,
                     'Access Request Approved',
                     `Congratulations! Your access request #${req.requestId} has been fully approved by both your manager and department head.`,
                     {
@@ -216,10 +224,10 @@ export const handleApprovalAction = async (token, action, comment) => {
             description: `${rejecterRole} rejected the request. Comment: ${comment || 'None'}`
         });
 
-        const requester = await getRequesterEmail(req.employeeId);
-        if (requester) {
+        const requesterEmail = await getRequesterEmail(req.employeeId);
+        if (requesterEmail) {
             await sendRequesterNotification(
-                requester,
+                requesterEmail,
                 'Access Request Rejected',
                 `Your access request #${req.requestId} has been rejected by the ${rejecterRole}.`,
                 {
@@ -237,4 +245,4 @@ export const handleApprovalAction = async (token, action, comment) => {
     }
 
     return { status: 'Success', message: `Request has been ${action}d.` };
-}
+};

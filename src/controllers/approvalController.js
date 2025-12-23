@@ -1,6 +1,7 @@
 import * as workflowService from '../services/workflowService.js';
 import WorkflowApproval from '../models/WorkflowApproval.js';
 import AccessRequest from '../models/AccessRequest.js';
+import Employee from '../models/Employee.js';
 import logger from '../utils/logger.js';
 
 
@@ -111,6 +112,9 @@ export const handleApprovalClick = async (req, res) => {
 
 
         const request = await AccessRequest.findByPk(approval.requestId);
+
+        const requester = await Employee.findByPk(request.employeeId);
+        const requesterName = requester ? requester.name : 'Unknown User';
 
 
         if (req.method === 'GET') {
@@ -271,6 +275,10 @@ export const handleApprovalClick = async (req, res) => {
                             
                             <div class="section-title">Request Details</div>
                             <div class="info-grid">
+                                <div>
+                                    <div class="field-label">REQUESTER</div>
+                                    <div class="field-value">${requesterName}</div>
+                                </div>
                                 <div>
                                     <div class="field-label">REQUEST TYPE</div>
                                     <div class="field-value">${request.requestType}</div>
