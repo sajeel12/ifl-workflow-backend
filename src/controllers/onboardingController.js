@@ -90,43 +90,70 @@ const renderForm = async (req, res, token) => {
         <title>New User Onboarding Form</title>
         <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css">
         <style>
-            body { font-family: 'Segoe UI', sans-serif; background-color: #faf9f8; margin: 0; padding: 20px; }
-            .container { max-width: 900px; margin: 0 auto; background: white; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132); }
-            .header { background-color: #0078D4; padding: 20px; color: white; display: flex; align-items: center; justify-content: space-between; }
-            .header h1 { margin: 0; font-size: 20px; font-weight: 600; text-transform: uppercase; }
-            .section { padding: 5px 20px; border-bottom: 2px solid #f3f2f1; background-color: #f8f8f8; color: #605e5c; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0; display: flex; align-items: center; height: 40px; }
-            .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; padding: 20px; }
+            body { font-family: 'Segoe UI', 'Segoe UI Web (West European)', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; background-color: #faf9f8; margin: 0; padding: 0; }
+            .container { max-width: 900px; margin: 20px auto; background: white; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132), 0 0.3px 0.9px 0 rgba(0,0,0,0.108); }
+            .header { background-color: #0078D4; padding: 16px 24px; display: flex; align-items: center; gap: 16px; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .header-content { flex-grow: 1; display: flex; justify-content: space-between; align-items: center; }
+            .logo { height: 48px; padding: 6px; }
+            .brand { font-weight: 600; font-size: 20px; }
+            .form-title { font-size: 18px; font-weight: 400; opacity: 0.9; }
+            
+            .section { 
+                padding: 10px 24px; 
+                background-color: #f8f9fa; 
+                border-bottom: 2px solid #0078D4; /* IFL Blue accent */
+                border-top: 1px solid #e1dfdd;
+                color: #0078D4; 
+                font-weight: 600; 
+                font-size: 14px; 
+                text-transform: uppercase; 
+                letter-spacing: 0.5px; 
+                margin-top: 20px; 
+                display: flex; 
+                align-items: center; 
+            }
+            .section:first-of-type { border-top: none; margin-top: 0; }
+            
+            .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; padding: 24px; }
             .full-width { grid-column: 1 / -1; }
             .form-group { margin-bottom: 5px; }
-            label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 13px; color: #323130; }
+            label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px; color: #323130; }
+            
             input[type="text"], input[type="date"], input[type="email"], select, textarea {
-                width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid #8a8886; font-family: inherit; font-size: 14px; border-radius: 0;
+                width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #8a8886; font-family: inherit; font-size: 14px; border-radius: 0; transition: all 0.2s;
             }
             input:focus, select:focus, textarea:focus { outline: 2px solid #0078D4; border-color: transparent; }
-            input:disabled, select:disabled, textarea:disabled { background-color: #f3f2f1; color: #605e5c; border-color: #e1dfdd; }
+            input:disabled, select:disabled, textarea:disabled { background-color: #f3f2f1; color: #605e5c; border-color: #e1dfdd; cursor: not-allowed; }
             
-            .checkbox-group { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-            .checkbox-item { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-            .checkbox-item input { width: auto; margin: 0; }
+            .checkbox-group { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+            .checkbox-item { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #201f1e; }
+            .checkbox-item input { width: 18px; height: 18px; margin: 0; cursor: pointer; }
+            .checkbox-item input:disabled { cursor: not-allowed; }
 
-            .btn-bar { padding: 20px; background-color: #f3f2f1; text-align: right; border-top: 1px solid #e1dfdd; }
-            button { padding: 10px 30px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: 0; min-width: 100px; color: white; }
-            .btn-primary { background-color: #0078D4; }
-            .btn-success { background-color: #107C10; }
-            .btn-danger { background-color: #D13438; }
-            button:disabled { background-color: #c8c6c4; cursor: not-allowed; }
+            .btn-bar { padding: 24px; background-color: #f3f2f1; text-align: right; border-top: 1px solid #e1dfdd; }
+            button { padding: 12px 32px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; border-radius: 0; min-width: 120px; color: white; transition: background-color 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .btn-primary { background-color: #0078D4; } .btn-primary:hover { background-color: #005a9e; }
+            .btn-success { background-color: #107C10; } .btn-success:hover { background-color: #0c5d0c; }
+            .btn-danger { background-color: #D13438; } .btn-danger:hover { background-color: #a4262c; }
+            button:disabled { background-color: #c8c6c4; cursor: not-allowed; box-shadow: none; }
 
-            .readonly-text { font-size: 12px; color: #a19f9d; margin-top: 4px; }
-            /* Hide print locations if unchecked (simplified for now, ideally JS toggle) */
+            .request-id-badge { font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 4px; font-weight: 600; }
         </style>
     </head>
     <body class="ms-Fabric">
         <form method="POST" action="?token=${token || ''}">
+            <div class="header">
+                 <img src="/logo.png" alt="IFL Logo" class="logo">
+                 <div class="header-content">
+                    <div>
+                        <div class="brand">Ibrahim Fibres Limited</div>
+                        <div class="form-title">Intranet & Internet Proxy Form</div>
+                    </div>
+                    ${token ? `<div class="request-id-badge">Request #${request.id || 'NEW'}</div>` : ''}
+                 </div>
+            </div>
+            
             <div class="container">
-                <div class="header">
-                    <h1>Intranet & Internet Proxy Form</h1>
-                    ${token ? `<span style="font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 8px;">Request #${request.id || 'NEW'}</span>` : ''}
-                </div>
 
                 <!-- Section 1: Requestor Information (HR Only) -->
                 <div class="section">Requestor Information</div>
