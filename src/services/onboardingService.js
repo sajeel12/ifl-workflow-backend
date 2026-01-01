@@ -4,7 +4,7 @@ import * as emailService from './emailService.js';
 import logger from '../utils/logger.js';
 
 // Dummy emails for workflow stages
-const IT_EMAIL = 'usama.shahid@perception-it.com';
+const IT_EMAIL = 'sajeel.dilshad@perception-it.com';
 const DSI_EMAIL = 'sajeel.dilshad@perception-it.com';
 
 export const createRequest = async (data) => {
