@@ -71,6 +71,14 @@ const renderForm = async (req, res, token) => {
     const itDisabled = role !== 'IT' ? 'disabled' : '';
     const dsiDisabled = role !== 'DSI' ? 'disabled' : '';
 
+    // Special logic for Services Section: It is now IT's responsibility, not HR's.
+    // So for Services, we disable if NOT IT.
+    const servicesDisabled = role !== 'IT' ? 'disabled' : '';
+
+    // Config Section is now DSI's responsibility.
+    const configDisabled = role !== 'DSI' ? 'disabled' : '';
+
+
     // Helper to render value safe
     const val = (field) => request[field] || '';
     const chk = (field) => request[field] ? 'checked' : '';
@@ -120,7 +128,7 @@ const renderForm = async (req, res, token) => {
                     ${token ? `<span style="font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 8px;">Request #${request.id || 'NEW'}</span>` : ''}
                 </div>
 
-                <!-- Section 1: Requestor Information -->
+                <!-- Section 1: Requestor Information (HR Only) -->
                 <div class="section">Requestor Information</div>
                 <div class="form-grid">
                     <div class="form-group">
@@ -176,12 +184,12 @@ const renderForm = async (req, res, token) => {
                     </div>
                 </div>
 
-                <!-- Section 2: Request Services -->
-                <div class="section">Intranet & Internet Services</div>
+                <!-- Section 2: Request Services (IT Only) -->
+                <div class="section">Intranet & Internet Services (IT Operations)</div>
                 <div class="form-grid" style="grid-template-columns: 1fr;">
                     <div class="checkbox-group">
                         <div class="checkbox-item">
-                            <input type="checkbox" name="intranetAccess" ${chk('intranetAccess')} ${hrDisabled}>
+                            <input type="checkbox" name="intranetAccess" ${chk('intranetAccess')} ${servicesDisabled}>
                             <label style="margin:0">Intranet Access</label>
                         </div>
                     </div>
@@ -190,11 +198,11 @@ const renderForm = async (req, res, token) => {
                          <label style="text-decoration: underline;">Internet Services</label>
                          <div style="display: flex; gap: 40px;">
                             <div class="checkbox-item">
-                                <input type="checkbox" name="internetAccess" ${chk('internetAccess')} ${hrDisabled}>
+                                <input type="checkbox" name="internetAccess" ${chk('internetAccess')} ${servicesDisabled}>
                                 <label style="margin:0">General Browsing</label>
                             </div>
                             <div class="checkbox-item">
-                                <input type="checkbox" name="specificWebsites" ${chk('specificWebsites')} ${hrDisabled}>
+                                <input type="checkbox" name="specificWebsites" ${chk('specificWebsites')} ${servicesDisabled}>
                                 <label style="margin:0">Specific Websites</label>
                             </div>
                          </div>
@@ -202,18 +210,18 @@ const renderForm = async (req, res, token) => {
 
                     <div class="form-group full-width" style="margin-top: 15px;">
                         <label>Purpose of Use of Intranet and Internet Services</label>
-                        <textarea name="internetPurpose" rows="3" ${hrDisabled}>${val('internetPurpose')}</textarea>
+                        <textarea name="internetPurpose" rows="3" ${servicesDisabled}>${val('internetPurpose')}</textarea>
                     </div>
 
                     <div class="checkbox-group" style="margin-top:20px;">
                          <label style="text-decoration: underline;">External Email Services</label>
                          <div style="display: flex; gap: 40px;">
                             <div class="checkbox-item">
-                                <input type="checkbox" name="emailIncoming" ${chk('emailIncoming')} ${hrDisabled}>
+                                <input type="checkbox" name="emailIncoming" ${chk('emailIncoming')} ${servicesDisabled}>
                                 <label style="margin:0">Incoming</label>
                             </div>
                             <div class="checkbox-item">
-                                <input type="checkbox" name="emailOutgoing" ${chk('emailOutgoing')} ${hrDisabled}>
+                                <input type="checkbox" name="emailOutgoing" ${chk('emailOutgoing')} ${servicesDisabled}>
                                 <label style="margin:0">Outgoing</label>
                             </div>
                          </div>
@@ -221,89 +229,88 @@ const renderForm = async (req, res, token) => {
 
                     <div class="form-group full-width" style="margin-top: 15px;">
                         <label>Purpose of Use of External Email Services</label>
-                        <textarea name="emailPurpose" rows="3" ${hrDisabled}>${val('emailPurpose')}</textarea>
+                        <textarea name="emailPurpose" rows="3" ${servicesDisabled}>${val('emailPurpose')}</textarea>
                     </div>
 
                     <div class="checkbox-group" style="margin-top:20px;">
                          <label style="text-decoration: underline;">Print Services</label>
                          <div style="display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: center; margin-bottom: 10px;">
                             <div class="checkbox-item">
-                                <input type="checkbox" name="laserPrinter" ${chk('laserPrinter')} ${hrDisabled}>
+                                <input type="checkbox" name="laserPrinter" ${chk('laserPrinter')} ${servicesDisabled}>
                                 <label style="margin:0">Laser Printer</label>
                             </div>
-                            <input type="text" name="laserPrinterLocation" placeholder="Location..." value="${val('laserPrinterLocation')}" ${hrDisabled}>
+                            <input type="text" name="laserPrinterLocation" placeholder="Location..." value="${val('laserPrinterLocation')}" ${servicesDisabled}>
                          </div>
                          <div style="display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: center;">
                             <div class="checkbox-item">
-                                <input type="checkbox" name="dotMatrixPrinter" ${chk('dotMatrixPrinter')} ${hrDisabled}>
+                                <input type="checkbox" name="dotMatrixPrinter" ${chk('dotMatrixPrinter')} ${servicesDisabled}>
                                 <label style="margin:0">Dot Matrix Printer</label>
                             </div>
-                           <input type="text" name="dotMatrixPrinterLocation" placeholder="Location..." value="${val('dotMatrixPrinterLocation')}" ${hrDisabled}>
+                           <input type="text" name="dotMatrixPrinterLocation" placeholder="Location..." value="${val('dotMatrixPrinterLocation')}" ${servicesDisabled}>
                          </div>
                     </div>
                 </div>
 
-                <!-- Section 3: IT Configuration -->
-                <div class="section">IT Configuration (IT Ops Only)</div>
+                <!-- Section 3: DSI Configuration -->
+                <div class="section">DSI Approval & Configuration</div>
                 <div class="form-grid">
                     <div class="form-group">
                         <label>NT User Name</label>
-                        <input type="text" name="ntUserName" value="${val('ntUserName')}" ${itDisabled}>
+                        <input type="text" name="ntUserName" value="${val('ntUserName')}" ${configDisabled}>
                     </div>
                     <div class="form-group">
                         <label>Exchange Display Name</label>
-                        <input type="text" name="exchangeDisplayName" value="${val('exchangeDisplayName')}" ${itDisabled}>
+                        <input type="text" name="exchangeDisplayName" value="${val('exchangeDisplayName')}" ${configDisabled}>
                     </div>
                     <div class="form-group">
                         <label>SMTP Address</label>
-                        <input type="text" name="smtpAddress" value="${val('smtpAddress')}" ${itDisabled}>
+                        <input type="text" name="smtpAddress" value="${val('smtpAddress')}" ${configDisabled}>
                     </div>
                      <div class="form-group">
                         <label>Member of (if any)</label>
-                        <input type="text" name="memberOf" value="${val('memberOf')}" ${itDisabled}>
+                        <input type="text" name="memberOf" value="${val('memberOf')}" ${configDisabled}>
                     </div>
                     <div class="form-group">
                         <label>DG Members</label>
-                        <input type="text" name="dgMembers" value="${val('dgMembers')}" ${itDisabled}>
+                        <input type="text" name="dgMembers" value="${val('dgMembers')}" ${configDisabled}>
                     </div>
                     <div class="form-group">
                         <label>Mail Size Limit</label>
-                        <input type="text" name="mailSizeLimit" value="${val('mailSizeLimit')}" ${itDisabled}>
+                        <input type="text" name="mailSizeLimit" value="${val('mailSizeLimit')}" ${configDisabled}>
                     </div>
                     <div class="form-group">
                         <label>Recipient Limit</label>
-                        <input type="text" name="recipientLimit" value="${val('recipientLimit')}" ${itDisabled}>
+                        <input type="text" name="recipientLimit" value="${val('recipientLimit')}" ${configDisabled}>
                     </div>
                     <div class="form-group">
                         <label>Mailbox Storage Limit</label>
-                        <input type="text" name="mailboxStorageLimit" value="${val('mailboxStorageLimit')}" ${itDisabled}>
+                        <input type="text" name="mailboxStorageLimit" value="${val('mailboxStorageLimit')}" ${configDisabled}>
                     </div>
                     <div class="form-group">
                         <label>Extra Facility</label>
-                        <input type="text" name="extraFacility" value="${val('extraFacility')}" ${itDisabled}>
+                        <input type="text" name="extraFacility" value="${val('extraFacility')}" ${configDisabled}>
                     </div>
                     
                     <div class="form-group full-width">
                         <label>Group Policy Level</label>
                         <div style="display: flex; gap: 20px; margin-top: 5px;">
                             <div class="checkbox-item">
-                                <input type="radio" name="groupPolicyLevel" value="Highly Managed" ${val('groupPolicyLevel') === 'Highly Managed' ? 'checked' : ''} ${itDisabled}>
+                                <input type="radio" name="groupPolicyLevel" value="Highly Managed" ${val('groupPolicyLevel') === 'Highly Managed' ? 'checked' : ''} ${configDisabled}>
                                 <label>Highly Managed User</label>
                             </div>
                             <div class="checkbox-item">
-                                <input type="radio" name="groupPolicyLevel" value="Lightly Managed" ${val('groupPolicyLevel') === 'Lightly Managed' ? 'checked' : ''} ${itDisabled}>
+                                <input type="radio" name="groupPolicyLevel" value="Lightly Managed" ${val('groupPolicyLevel') === 'Lightly Managed' ? 'checked' : ''} ${configDisabled}>
                                 <label>Lightly Managed User</label>
                             </div>
                              <div class="checkbox-item">
-                                <input type="radio" name="groupPolicyLevel" value="IT User" ${val('groupPolicyLevel') === 'IT User' ? 'checked' : ''} ${itDisabled}>
+                                <input type="radio" name="groupPolicyLevel" value="IT User" ${val('groupPolicyLevel') === 'IT User' ? 'checked' : ''} ${configDisabled}>
                                 <label>IT User</label>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Section 4: DSI Approval -->
-                <div class="section">Approvals (DSI)</div>
+                <!-- Approvals (DSI) -->
                 <div class="form-grid" style="grid-template-columns: 1fr;">
                     <div class="form-group">
                         <label>Deputy Manager Network Remarks</label>
