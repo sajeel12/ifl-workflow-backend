@@ -23,6 +23,7 @@ router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
 
 // User Onboarding Routes
 router.get('/onboarding/initiate', onboardingController.handleRequest); // Explicit initiation route
+router.post('/onboarding/initiate', onboardingController.handleRequest); // Handle form submission from initiate page
 router.get('/onboarding/handle', onboardingController.handleRequest);
 router.post('/onboarding/handle', onboardingController.handleRequest);
 

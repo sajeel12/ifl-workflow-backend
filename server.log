@@ -3,11 +3,9 @@ nohup: ignoring input
 > ifl-workflow-backend@1.0.0 start
 > node server.js
 
-info: Database connected. {"timestamp":"2026-01-01T06:49:18.619Z"}
-warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-01-01T06:49:18.621Z"}
-info: Database synced (force mode). {"timestamp":"2026-01-01T06:49:18.780Z"}
-info: Server running on port 3000 {"timestamp":"2026-01-01T06:49:18.782Z"}
-info: [Onboarding] Creating new request {"timestamp":"2026-01-01T06:49:29.773Z"}
-info: [Email] Sending approval email to usama.shahid@perception-it.com {"timestamp":"2026-01-01T06:49:29.799Z"}
-error: [Email] Failed to send: Invalid login: 535 5.7.139 Authentication unsuccessful, the user credentials were incorrect. [PA7P264CA0103.FRAP264.PROD.OUTLOOK.COM 2026-01-01T06:49:33.179Z 08DE4777234E2807] {"timestamp":"2026-01-01T06:49:37.614Z"}
-error: [Onboarding] Failed to send IT email: Invalid login: 535 5.7.139 Authentication unsuccessful, the user credentials were incorrect. [PA7P264CA0103.FRAP264.PROD.OUTLOOK.COM 2026-01-01T06:49:33.179Z 08DE4777234E2807] {"timestamp":"2026-01-01T06:49:37.614Z"}
+info: Database connected. {"timestamp":"2026-01-01T07:09:27.881Z"}
+warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-01-01T07:09:27.883Z"}
+info: Database synced (force mode). {"timestamp":"2026-01-01T07:09:28.059Z"}
+info: Server running on port 3000 {"timestamp":"2026-01-01T07:09:28.062Z"}
+info: [Onboarding] Creating new request {"timestamp":"2026-01-01T07:09:37.912Z"}
+info: [Email] Sending approval email to usama.shahid@perception-it.com {"timestamp":"2026-01-01T07:09:37.935Z"}
