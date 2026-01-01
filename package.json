@@ -26,6 +26,8 @@
         "ldapjs-promise": "^3.0.0",
         "nodemailer": "^6.9.13",
         "sequelize": "^6.37.3",
+        "sqlite": "^5.1.1",
+        "sqlite3": "^5.1.7",
         "tedious": "^18.2.0",
         "winston": "^3.13.0"
     }

@@ -20,7 +20,10 @@ router.all('/approvals/handle', approvalController.handleApprovalClick);
 
 
 router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
-router.post('/onboarding/start', ssoMiddleware, onboardingController.createAccessRequest);
+
+// User Onboarding Routes
+router.get('/onboarding/handle', onboardingController.handleRequest);
+router.post('/onboarding/handle', onboardingController.handleRequest);
 
 
 router.get('/health', (req, res) => {

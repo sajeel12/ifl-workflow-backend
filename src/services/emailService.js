@@ -247,3 +247,26 @@ export const sendRequesterNotification = async (toEmail, subject, message, reque
         logger.warn(`[Email] Continuing workflow despite notification failure`);
     }
 };
+
+export const sendOnboardingITNotification = async (toEmail, request, actionLink) => {
+    const subject = `IT Action Required: Onboarding Request #${request.id} for ${request.fullName}`;
+    const message = `A new onboarding request has been submitted for ${request.fullName} (${request.designation}, ${request.department}). Please configure the required services.`;
+
+    // Detailed list of requested services
+    const services = [];
+    if (request.intranetAccess) services.push('Intranet');
+    if (request.internetAccess) services.push('Internet');
+    if (request.emailIncoming || request.emailOutgoing) services.push('Email');
+    if (request.laserPrinter) services.push(`Laser Printer (${request.laserPrinterLocation})`);
+
+    const requestDetails = `Services Required: ${services.join(', ') || 'None'}`;
+
+    return sendApprovalEmail(toEmail, subject, message + '\n\n' + requestDetails, actionLink, request.fullName, '');
+};
+
+export const sendOnboardingDSINotification = async (toEmail, request, actionLink) => {
+    const subject = `DSI Approval Required: Onboarding Request #${request.id} for ${request.fullName}`;
+    const message = `IT has completed the configuration for ${request.fullName}. Please review and provide final approval.`;
+
+    return sendApprovalEmail(toEmail, subject, message, actionLink, request.fullName, '');
+};
