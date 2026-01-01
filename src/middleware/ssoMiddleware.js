@@ -66,12 +66,24 @@ export const ssoMiddleware = async (req, res, next) => {
                 return res.status(403).json({ error: 'User Access Denied' });
             }
 
+
+            let designation = "";
+
+            //  this is dummy designation for now
+            if (userProfile.email = "sajeel.dilshad@perception-it.com") {
+                designation = "HR";
+            }
+
+            // // Here we will check for designation in future
+            //  designation = await getDesignation(userProfile.sAMAccountName);
+
             req.user = {
                 username: userProfile.sAMAccountName,
                 email: userProfile.mail,
                 displayName: userProfile.displayName,
                 manager: userProfile.manager,
-                raw: userProfile
+                raw: userProfile,
+                designation: designation
             };
 
             next();
