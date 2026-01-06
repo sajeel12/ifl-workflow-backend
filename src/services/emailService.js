@@ -265,8 +265,44 @@ export const sendOnboardingITNotification = async (toEmail, request, actionLink)
 };
 
 export const sendOnboardingDSINotification = async (toEmail, request, actionLink) => {
-    const subject = `DSI Approval Required: Onboarding Request #${request.id} for ${request.fullName}`;
+    const subject = `DCI Approval Required: Onboarding Request #${request.id} for ${request.fullName}`;
     const message = `IT has completed the configuration for ${request.fullName}. Please review and provide final approval.`;
 
     return sendApprovalEmail(toEmail, subject, message, actionLink, request.fullName, '');
+};
+
+export const sendOnboardingNotification = async (toEmail, request, actionLink, type) => {
+    let subject = '';
+    let message = '';
+
+    const userInfo = `${request.fullName} (${request.designation})`;
+
+    switch (type) {
+        case 'IT_OPS':
+            subject = `IT Ops Action: Configure Services for ${userInfo}`;
+            message = `A new onboarding request needs service configuration.`;
+            break;
+        case 'HOD_REVIEW':
+            subject = `HOD Review: Onboarding Request for ${userInfo}`;
+            message = `IT Operations has configured services. Please review and approve.`;
+            break;
+        case 'DSI_INPUT': // Renamed concept to DCI
+            subject = `DCI Team Action: Configure ID for ${userInfo}`;
+            message = `HOD has approved the request. Please configure DCI services (NT User, Email, etc.).`;
+            break;
+        case 'DSI_MANAGER_APPROVAL': // Renamed concept to DCI
+            subject = `DCI Manager Approval: Onboarding Request for ${userInfo}`;
+            message = `DCI Team has submitted the configuration. Please provide final approval.`;
+            break;
+        case 'IT_HOD_APPROVAL':
+            subject = `IT HOD Approval: Email Services for ${userInfo}`;
+            message = `Special Email Services were requested. Please approve.`;
+            break;
+        default:
+            subject = `Onboarding Action Required for ${userInfo}`;
+            message = `Your input is required for this request.`;
+    }
+
+    // Reuse generic approval email sender
+    return sendApprovalEmail(toEmail, subject, message, actionLink, request.fullName, 'HR Dept');
 };

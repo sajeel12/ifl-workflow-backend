@@ -2,32 +2,39 @@ import crypto from 'crypto';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import * as emailService from './emailService.js';
 import logger from '../utils/logger.js';
+import * as pdfService from './pdfService.js';
+import path from 'path';
 
 // Dummy emails for workflow stages
-const IT_EMAIL = 'sajeel.dilshad@perception-it.com';
-const DSI_EMAIL = 'sajeel.dilshad@perception-it.com';
+// Dummy emails for workflow stages
+const IT_EMAIL = 'it.ops@example.com';
+const DSI_EMAIL = 'dsi.team@example.com';
+const HOD_EMAIL_DUMMY = 'employee.hod@example.com';
+const DSI_MANAGER_EMAIL = 'dsi.manager@example.com';
+const IT_HOD_EMAIL = 'it.hod@example.com';
+
+// Generic notification sender helper
+const sendStageEmail = async (email, request, token, type) => {
+    try {
+        const actionLink = `${process.env.APP_URL}/api/onboarding/handle?token=${token}`;
+        await emailService.sendOnboardingNotification(email, request, actionLink, type);
+        logger.info(`[Onboarding] Sent ${type} email to ${email}`);
+    } catch (err) {
+        logger.error(`[Onboarding] Failed to send ${type} email: ${err.message}`);
+    }
+};
 
 export const createRequest = async (data) => {
     logger.info('[Onboarding] Creating new request');
     try {
         const token = crypto.randomBytes(20).toString('hex');
-
         const request = await OnboardingRequest.create({
             ...data,
             status: 'PendingIT',
             currentStageToken: token,
             hrSubmittedAt: new Date()
         });
-
-        // Send email to IT
-        try {
-            const actionLink = `${process.env.APP_URL}/api/onboarding/handle?token=${token}`;
-            await emailService.sendOnboardingITNotification(IT_EMAIL, request, actionLink);
-            logger.info(`[Onboarding] Request created, sent to IT`);
-        } catch (emailErr) {
-            logger.error(`[Onboarding] Failed to send IT email: ${emailErr.message}`);
-        }
-
+        await sendStageEmail(IT_EMAIL, request, token, 'IT_OPS');
         return request;
     } catch (err) {
         logger.error(`[Onboarding] Error creating request: ${err.message}`);
@@ -36,84 +43,163 @@ export const createRequest = async (data) => {
 };
 
 export const updateITDetails = async (token, data) => {
-    logger.info(`[Onboarding] Updating IT details for token ${token}`);
+    logger.info(`[Onboarding] Updating IT details`);
     try {
         const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
-        if (!request) throw new Error('Invalid Token');
-
-        if (request.status !== 'PendingIT') {
-            throw new Error('Request is not in IT stage');
-        }
+        if (!request || request.status !== 'PendingIT') throw new Error('Invalid Token or Stage');
 
         const newToken = crypto.randomBytes(20).toString('hex');
-
         await request.update({
             ...data,
-            status: 'PendingDSI',
+            status: 'PendingHOD',
             currentStageToken: newToken,
             itSubmittedAt: new Date()
         });
-
-        // Send email to DSI
-        try {
-            const actionLink = `${process.env.APP_URL}/api/onboarding/handle?token=${newToken}`;
-            await emailService.sendOnboardingDSINotification(DSI_EMAIL, request, actionLink);
-            logger.info(`[Onboarding] Request IT details updated, sent to DSI`);
-        } catch (emailErr) {
-            logger.error(`[Onboarding] Failed to send DSI email: ${emailErr.message}`);
-        }
-
+        // In real app, look up HOD email based on employeeId/Dep
+        await sendStageEmail(HOD_EMAIL_DUMMY, request, newToken, 'HOD_REVIEW');
         return request;
     } catch (err) {
-        logger.error(`[Onboarding] Error updating IT details: ${err.message}`);
+        logger.error(`[Onboarding] IT Update Error: ${err.message}`);
         throw err;
     }
 };
 
-export const finalizeRequest = async (token, decision, remarks) => {
-    logger.info(`[Onboarding] Finalizing request for token ${token}`);
+// HOD just approves (no changes typically, or comments)
+export const handleHODApproval = async (token, action) => {
+    logger.info(`[Onboarding] HOD Approval`);
     try {
         const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
-        if (!request) throw new Error('Invalid Token');
+        if (!request || request.status !== 'PendingHOD') throw new Error('Invalid Token');
 
-        if (request.status !== 'PendingDSI') {
-            throw new Error('Request is not in DSI stage');
+        if (action === 'Reject') {
+            await request.update({ status: 'Rejected', approvalStatus: 'Rejected', currentStageToken: null });
+            return request;
         }
 
-        const finalStatus = decision === 'Approve' ? 'Approved' : (decision === 'Reject' ? 'Rejected' : 'Cancelled');
-
+        const newToken = crypto.randomBytes(20).toString('hex');
         await request.update({
-            dsiRemarks: remarks,
-            approvalStatus: finalStatus,
-            status: finalStatus,
-            currentStageToken: null, // Clear token to prevent further edits
-            dsiDecidedAt: new Date()
+            status: 'PendingDSI',
+            currentStageToken: newToken,
+            hodApprovedAt: new Date()
         });
-
-        // Notify HR/Requester (Using a generic notification for now, assumed HR initiated)
-        // Since we don't have a direct requester email field from HR (only employeeId etc), 
-        // we might notify a central HR email or if we had the initiator's email.
-        // For now, let's log it and maybe send to IT as well for closing.
-
-        // await emailService.sendOnboardingCompletionNotification(HR_EMAIL, request);
-
-        logger.info(`[Onboarding] Request #${request.id} finalized: ${finalStatus}`);
+        await sendStageEmail(DSI_EMAIL, request, newToken, 'DSI_INPUT');
         return request;
     } catch (err) {
-        logger.error(`[Onboarding] Error finalizing request: ${err.message}`);
+        logger.error(`[Onboarding] HOD Error: ${err.message}`);
+        throw err;
+    }
+};
+
+export const updateDSIDetails = async (token, data) => {
+    logger.info(`[Onboarding] Updating DSI details`);
+    try {
+        const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
+        if (!request || request.status !== 'PendingDSI') throw new Error('Invalid Token');
+
+        const newToken = crypto.randomBytes(20).toString('hex');
+        await request.update({
+            ...data,
+            status: 'PendingDSIManager',
+            currentStageToken: newToken,
+            dsiSubmittedAt: new Date()
+        });
+        await sendStageEmail(DSI_MANAGER_EMAIL, request, newToken, 'DSI_MANAGER_APPROVAL');
+        return request;
+    } catch (err) {
+        logger.error(`[Onboarding] DSI Update Error: ${err.message}`);
+        throw err;
+    }
+};
+
+
+const generateAndStorePDF = async (request) => {
+    try {
+        const filename = `Onboarding_${request.employeeId}_${request.id}.pdf`;
+        const outputPath = path.resolve('generated_pdfs', filename);
+        await pdfService.generateOnboardingPDF(request, outputPath);
+        logger.info(`[Onboarding] PDF Generated: ${outputPath}`);
+        return outputPath;
+    } catch (err) {
+        logger.error(`[Onboarding] PDF Gen Error: ${err.message}`);
+    }
+};
+
+export const handleDSIManagerApproval = async (token, action, remarks) => {
+    logger.info(`[Onboarding] DSI Manager Approval`);
+    try {
+        const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
+        if (!request || request.status !== 'PendingDSIManager') throw new Error('Invalid Token');
+
+        if (action === 'Reject') {
+            await request.update({ status: 'Rejected', approvalStatus: 'Rejected', dsiRemarks: remarks, currentStageToken: null });
+            return request;
+        }
+
+        // Check if Email Services requested
+        const needsEmailApproval = request.emailIncoming || request.emailOutgoing;
+
+        if (needsEmailApproval) {
+            const newToken = crypto.randomBytes(20).toString('hex');
+            await request.update({
+                status: 'PendingITHOD',
+                dsiRemarks: remarks,
+                currentStageToken: newToken,
+                dsiManagerDecidedAt: new Date()
+            });
+            await sendStageEmail(IT_HOD_EMAIL, request, newToken, 'IT_HOD_APPROVAL');
+        } else {
+            await request.update({
+                status: 'Approved',
+                approvalStatus: 'Approved',
+                dsiRemarks: remarks,
+                currentStageToken: null,
+                dsiManagerDecidedAt: new Date()
+            });
+            await generateAndStorePDF(request);
+        }
+        return request;
+    } catch (err) {
+        logger.error(`[Onboarding] DSI Manager Error: ${err.message}`);
+        throw err;
+    }
+};
+
+export const handleITHODApproval = async (token, action) => {
+    logger.info(`[Onboarding] IT HOD Approval`);
+    try {
+        const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
+        if (!request || request.status !== 'PendingITHOD') throw new Error('Invalid Token');
+
+        const finalStatus = action === 'Approve' ? 'Approved' : 'Rejected';
+        await request.update({
+            status: finalStatus,
+            approvalStatus: finalStatus,
+            currentStageToken: null,
+            itHodDecidedAt: new Date()
+        });
+
+        if (finalStatus === 'Approved') {
+            await generateAndStorePDF(request);
+        }
+
+        return request;
+    } catch (err) {
+        logger.error(`[Onboarding] IT HOD Error: ${err.message}`);
         throw err;
     }
 };
 
 export const getFormContext = async (token) => {
     if (!token) return null;
-
     const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
     if (!request) return null;
 
     let role = 'ReadOnly';
     if (request.status === 'PendingIT') role = 'IT';
+    if (request.status === 'PendingHOD') role = 'HOD';
     if (request.status === 'PendingDSI') role = 'DSI';
+    if (request.status === 'PendingDSIManager') role = 'DSIManager';
+    if (request.status === 'PendingITHOD') role = 'ITHOD';
 
     return { request, role };
 };

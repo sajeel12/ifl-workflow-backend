@@ -46,26 +46,95 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     dotMatrixPrinter: { type: DataTypes.BOOLEAN, defaultValue: false },
     dotMatrixPrinterLocation: { type: DataTypes.STRING },
 
-    // Section 3: IT Configuration (IT Ops)
-    ntUserName: { type: DataTypes.STRING },
-    exchangeDisplayName: { type: DataTypes.STRING },
-    smtpAddress: { type: DataTypes.STRING },
-    memberOf: { type: DataTypes.STRING },
-    dgMembers: { type: DataTypes.STRING },
-    recipientLimit: { type: DataTypes.STRING },
-    mailboxStorageLimit: { type: DataTypes.STRING },
-    mailSizeLimit: { type: DataTypes.STRING },
-    extraFacility: { type: DataTypes.TEXT },
-    groupPolicyLevel: {
-        type: DataTypes.STRING
-        // Expected values: 'Highly Managed', 'Lightly Managed', 'IT User'
+    // --- Section 3: File Share Services (IT Operations) ---
+    deptSharePath: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    homeFolderPath: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    iflPortalLink: {
+        type: DataTypes.STRING,
+        allowNull: true
     },
 
-    // Section 4: DSI Approval (DSI)
-    dsiRemarks: { type: DataTypes.TEXT },
+    // --- Section 4: DSI Approval & Configuration (DSI) ---
+    ntUserName: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    exchangeDisplayName: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    smtpAddress: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    memberOf: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    dgMembers: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    mailSizeLimit: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    recipientLimit: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    mailboxStorageLimit: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    extraFacility: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    groupPolicyLevel: {
+        type: DataTypes.STRING, // 'Highly Managed', 'Lightly Managed', 'IT User'
+        allowNull: true
+    },
+
+    // --- Approvals & Timestamps ---
+    dsiRemarks: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
     approvalStatus: {
-        type: DataTypes.STRING // 'Approved', 'Rejected', 'Cancelled'
-    }
+        type: DataTypes.STRING, // 'Approved', 'Rejected', 'Cancelled'
+        allowNull: true
+    },
+    hrSubmittedAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    itSubmittedAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    hodApprovedAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    dsiSubmittedAt: {
+        type: DataTypes.DATE, // When DSI Team submits to Manager
+        allowNull: true
+    },
+    dsiManagerDecidedAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    itHodDecidedAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
 });
 
 export default OnboardingRequest;

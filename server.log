@@ -3,7 +3,11 @@ nohup: ignoring input
 > ifl-workflow-backend@1.0.0 start
 > node server.js
 
-info: Database connected. {"timestamp":"2026-01-01T07:18:08.943Z"}
-warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-01-01T07:18:08.944Z"}
-info: Database synced (force mode). {"timestamp":"2026-01-01T07:18:09.102Z"}
-info: Server running on port 3000 {"timestamp":"2026-01-01T07:18:09.105Z"}
+info: Database connected. {"timestamp":"2026-01-06T06:48:18.933Z"}
+warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-01-06T06:48:18.944Z"}
+info: Database synced (force mode). {"timestamp":"2026-01-06T06:48:19.174Z"}
+info: Server running on port 3000 {"timestamp":"2026-01-06T06:48:19.185Z"}
+info: [Onboarding] Creating new request {"timestamp":"2026-01-06T06:48:35.948Z"}
+info: [Email] Sending approval email to it.ops@example.com {"timestamp":"2026-01-06T06:48:35.986Z"}
+error: [Email] Failed to send: Invalid login: 535 5.7.139 Authentication unsuccessful, the user credentials were incorrect. [PR1P264CA0103.FRAP264.PROD.OUTLOOK.COM 2026-01-06T06:48:45.107Z 08DE4C87E52AF7CE] {"timestamp":"2026-01-06T06:48:45.006Z"}
+error: [Onboarding] Failed to send IT_OPS email: Invalid login: 535 5.7.139 Authentication unsuccessful, the user credentials were incorrect. [PR1P264CA0103.FRAP264.PROD.OUTLOOK.COM 2026-01-06T06:48:45.107Z 08DE4C87E52AF7CE] {"timestamp":"2026-01-06T06:48:45.007Z"}

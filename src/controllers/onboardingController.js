@@ -18,7 +18,6 @@ export const handleRequest = async (req, res) => {
 
 const handleSubmission = async (req, res, token) => {
     const data = req.body;
-
     // Normalize checkbox values
     const checkboxFields = [
         'intranetAccess', 'internetAccess', 'specificWebsites', 'emailIncoming',
@@ -32,21 +31,38 @@ const handleSubmission = async (req, res, token) => {
         if (!token) {
             // HR Submission
             await onboardingService.createRequest(data);
-            return res.send(renderSuccess('Request Submitted', 'The request has been sent to IT Operations for configuration.'));
+            return res.send(renderSuccess('Request Submitted', 'The request has been sent to IT Operations for service configuration.'));
         } else {
-            // Token-based submission (IT or DSI)
             const context = await onboardingService.getFormContext(token);
             if (!context) return res.send(renderError('Invalid or Expired Token'));
 
-            if (context.role === 'IT') {
+            const { role } = context;
+
+            if (role === 'IT') {
                 await onboardingService.updateITDetails(token, data);
-                return res.send(renderSuccess('Configuration Saved', 'The request has been forwarded to DSI for final approval.'));
-            } else if (context.role === 'DSI') {
+                return res.send(renderSuccess('Services Configured', 'The request has been forwarded to the HOD for review.'));
+            }
+            else if (role === 'HOD') {
+                const { action } = data;
+                await onboardingService.handleHODApproval(token, action);
+                return res.send(renderSuccess(`Request ${action}ed`, `The request has been forwarded to the DCI Team. (Action: ${action})`));
+            }
+            else if (role === 'DSI') {
+                await onboardingService.updateDSIDetails(token, data);
+                return res.send(renderSuccess('Configuration Saved', 'The request has been forwarded to the DCI Manager for final approval.'));
+            }
+            else if (role === 'DSIManager') {
                 const { action, dsiRemarks } = data;
-                await onboardingService.finalizeRequest(token, action, dsiRemarks);
-                return res.send(renderSuccess(`Request ${action}d`, `The request has been finalized successfully.`));
-            } else {
-                return res.send(renderError('Action not permitted in this stage.'));
+                await onboardingService.handleDSIManagerApproval(token, action, dsiRemarks);
+                return res.send(renderSuccess(`Decision Recorded`, `The request has been processed. (Action: ${action})`));
+            }
+            else if (role === 'ITHOD') {
+                const { action } = data;
+                await onboardingService.handleITHODApproval(token, action);
+                return res.send(renderSuccess(`Decision Recorded`, `The request has been finalized. (Action: ${action})`));
+            }
+            else {
+                return res.send(renderError('Action not permitted.'));
             }
         }
     } catch (err) {
@@ -56,30 +72,30 @@ const handleSubmission = async (req, res, token) => {
 
 const renderForm = async (req, res, token) => {
     let request = {};
-    let role = 'HR'; // Default to HR if no token
-    let isReadOnly = false;
+    let role = 'HR';
 
     if (token) {
         const context = await onboardingService.getFormContext(token);
         if (!context) return res.send(renderError('Invalid or Expired Token'));
         request = context.request;
         role = context.role;
-        if (role === 'ReadOnly') isReadOnly = true;
     }
 
+    // Role-based logic
+    // Requestor Info: HR (Editable)
     const hrDisabled = role !== 'HR' ? 'disabled' : '';
-    const itDisabled = role !== 'IT' ? 'disabled' : '';
-    const dsiDisabled = role !== 'DSI' ? 'disabled' : '';
 
-    // Special logic for Services Section: It is now IT's responsibility, not HR's.
-    // So for Services, we disable if NOT IT.
-    const servicesDisabled = role !== 'IT' ? 'disabled' : '';
+    // Services Section: IT (Editable) form. DSI (Editable too per req).
+    // Logic: IT can edit. DSI can EDIT IT fields too.
+    const isServiceEditable = (role === 'IT' || role === 'DSI');
+    const servicesDisabled = !isServiceEditable ? 'disabled' : '';
 
-    // Config Section is now DSI's responsibility.
+    // Config Section: DSI (Editable)
     const configDisabled = role !== 'DSI' ? 'disabled' : '';
 
+    // Remarks Section: DSI Manager (Editable remarks)
+    const dsiRemarksDisabled = role !== 'DSIManager' ? 'disabled' : '';
 
-    // Helper to render value safe
     const val = (field) => request[field] || '';
     const chk = (field) => request[field] ? 'checked' : '';
 
@@ -87,10 +103,11 @@ const renderForm = async (req, res, token) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>New User Onboarding Form</title>
+        <title>Onboarding - ${role}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css">
         <style>
+             /* Reusing previous styles exactly */
             body { font-family: 'Segoe UI', 'Segoe UI Web (West European)', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; background-color: #faf9f8; margin: 0; padding: 0; }
             .container { max-width: 900px; margin: 20px auto; background: white; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132), 0 0.3px 0.9px 0 rgba(0,0,0,0.108); }
             .header { background-color: #0078D4; padding: 16px 24px; display: flex; align-items: center; gap: 16px; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -102,7 +119,7 @@ const renderForm = async (req, res, token) => {
             .section { 
                 padding: 10px 24px; 
                 background-color: #f8f9fa; 
-                border-bottom: 2px solid #0078D4; /* IFL Blue accent */
+                border-bottom: 2px solid #0078D4; 
                 border-top: 1px solid #e1dfdd;
                 color: #0078D4; 
                 font-weight: 600; 
@@ -139,6 +156,7 @@ const renderForm = async (req, res, token) => {
             button:disabled { background-color: #c8c6c4; cursor: not-allowed; box-shadow: none; }
 
             .request-id-badge { font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+            .status-ba { background: #333; color: white; padding: 10px; text-align: center; }
         </style>
     </head>
     <body class="ms-Fabric">
@@ -150,12 +168,14 @@ const renderForm = async (req, res, token) => {
                         <div class="brand">Ibrahim Fibres Limited</div>
                         <div class="form-title">Intranet & Internet Proxy Form</div>
                     </div>
-                    ${token ? `<div class="request-id-badge">Request #${request.id || 'NEW'}</div>` : ''}
+                    <div style="text-align:right">
+                         ${token ? `<div className="request-id-badge">REQ #${request.id || 'NEW'}</div>` : ''}
+                         <div style="font-size: 12px; opacity: 0.8; margin-top:5px;">Viewing as: <strong>${role}</strong></div>
+                    </div>
                  </div>
             </div>
             
             <div class="container">
-
                 <!-- Section 1: Requestor Information (HR Only) -->
                 <div class="section">Requestor Information</div>
                 <div class="form-grid">
@@ -212,34 +232,17 @@ const renderForm = async (req, res, token) => {
                     </div>
                 </div>
 
-                <!-- Section 2: Request Services (IT Only) -->
+                <!-- Section 2: Request Services (IT Only + DSI Editable) -->
                 <div class="section">Intranet & Internet Services (IT Operations)</div>
                 <div class="form-grid" style="grid-template-columns: 1fr;">
                     <div class="checkbox-group">
                         <div class="checkbox-item">
-                            <input type="checkbox" name="intranetAccess" ${chk('intranetAccess')} ${servicesDisabled}>
+                            <input type="checkbox" name="intranetAccess" ${request.intranetAccess !== false ? 'checked' : ''} ${servicesDisabled}>
                             <label style="margin:0">Intranet Access</label>
                         </div>
                     </div>
 
-                    <div class="checkbox-group" style="margin-top:20px;">
-                         <label style="text-decoration: underline;">Internet Services</label>
-                         <div style="display: flex; gap: 40px;">
-                            <div class="checkbox-item">
-                                <input type="checkbox" name="internetAccess" ${chk('internetAccess')} ${servicesDisabled}>
-                                <label style="margin:0">General Browsing</label>
-                            </div>
-                            <div class="checkbox-item">
-                                <input type="checkbox" name="specificWebsites" ${chk('specificWebsites')} ${servicesDisabled}>
-                                <label style="margin:0">Specific Websites</label>
-                            </div>
-                         </div>
-                    </div>
-
-                    <div class="form-group full-width" style="margin-top: 15px;">
-                        <label>Purpose of Use of Intranet and Internet Services</label>
-                        <textarea name="internetPurpose" rows="3" ${servicesDisabled}>${val('internetPurpose')}</textarea>
-                    </div>
+                    <!-- Internet Services Section REMOVED -->
 
                     <div class="checkbox-group" style="margin-top:20px;">
                          <label style="text-decoration: underline;">External Email Services</label>
@@ -277,88 +280,83 @@ const renderForm = async (req, res, token) => {
                            <input type="text" name="dotMatrixPrinterLocation" placeholder="Location..." value="${val('dotMatrixPrinterLocation')}" ${servicesDisabled}>
                          </div>
                     </div>
-                </div>
 
-                <!-- Section 3: DSI Configuration -->
-                <div class="section">DSI Approval & Configuration</div>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>NT User Name</label>
-                        <input type="text" name="ntUserName" value="${val('ntUserName')}" ${configDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Exchange Display Name</label>
-                        <input type="text" name="exchangeDisplayName" value="${val('exchangeDisplayName')}" ${configDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>SMTP Address</label>
-                        <input type="text" name="smtpAddress" value="${val('smtpAddress')}" ${configDisabled}>
-                    </div>
-                     <div class="form-group">
-                        <label>Member of (if any)</label>
-                        <input type="text" name="memberOf" value="${val('memberOf')}" ${configDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>DG Members</label>
-                        <input type="text" name="dgMembers" value="${val('dgMembers')}" ${configDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Mail Size Limit</label>
-                        <input type="text" name="mailSizeLimit" value="${val('mailSizeLimit')}" ${configDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Recipient Limit</label>
-                        <input type="text" name="recipientLimit" value="${val('recipientLimit')}" ${configDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Mailbox Storage Limit</label>
-                        <input type="text" name="mailboxStorageLimit" value="${val('mailboxStorageLimit')}" ${configDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Extra Facility</label>
-                        <input type="text" name="extraFacility" value="${val('extraFacility')}" ${configDisabled}>
-                    </div>
-                    
-                    <div class="form-group full-width">
-                        <label>Group Policy Level</label>
-                        <div style="display: flex; gap: 20px; margin-top: 5px;">
-                            <div class="checkbox-item">
-                                <input type="radio" name="groupPolicyLevel" value="Highly Managed" ${val('groupPolicyLevel') === 'Highly Managed' ? 'checked' : ''} ${configDisabled}>
-                                <label>Highly Managed User</label>
+                     <!-- File Share Services [Moved to END] -->
+                    <div style="background: #eff6fc; padding: 15px; margin-top: 25px; border-left: 4px solid #0078D4;">
+                        <label style="font-weight: 700; color: #0078D4; margin-bottom: 15px;">FILE SHARE SERVICES</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <label>Dept. Share (S:)</label>
+                                <input type="text" name="deptSharePath" value="${val('deptSharePath')}" placeholder="e.g. \\PPFS8ER2\DeptShare..." ${servicesDisabled}>
                             </div>
-                            <div class="checkbox-item">
-                                <input type="radio" name="groupPolicyLevel" value="Lightly Managed" ${val('groupPolicyLevel') === 'Lightly Managed' ? 'checked' : ''} ${configDisabled}>
-                                <label>Lightly Managed User</label>
+                             <div class="form-group">
+                                <label>Home Folder (Z:)</label>
+                                <input type="text" name="homeFolderPath" value="${val('homeFolderPath')}" placeholder="e.g. \\PPFS8ER2\UserData..." ${servicesDisabled}>
                             </div>
-                             <div class="checkbox-item">
-                                <input type="radio" name="groupPolicyLevel" value="IT User" ${val('groupPolicyLevel') === 'IT User' ? 'checked' : ''} ${configDisabled}>
-                                <label>IT User</label>
-                            </div>
+                        </div>
+                        <div class="form-group">
+                             <label>IFL-Portal Site Link</label>
+                             <input type="text" name="iflPortalLink" value="${val('iflPortalLink')}" placeholder="http://iflportal..." ${servicesDisabled}>
                         </div>
                     </div>
                 </div>
 
-                <!-- Approvals (DSI) -->
-                <div class="form-grid" style="grid-template-columns: 1fr;">
-                    <div class="form-group">
-                        <label>Deputy Manager Network Remarks</label>
-                        <textarea name="dsiRemarks" rows="3" ${dsiDisabled}>${val('dsiRemarks')}</textarea>
+                <!-- Section 3: DCI Configuration (DCI Only) -->
+                <div class="section">DCI Approval & Configuration</div>
+                <div class="form-grid">
+                    <div class="form-group"><label>NT User Name</label><input type="text" name="ntUserName" value="${val('ntUserName')}" ${configDisabled}></div>
+                    <div class="form-group"><label>Exchange Display Name</label><input type="text" name="exchangeDisplayName" value="${val('exchangeDisplayName')}" ${configDisabled}></div>
+                    <div class="form-group"><label>SMTP Address</label><input type="text" name="smtpAddress" value="${val('smtpAddress')}" ${configDisabled}></div>
+                    
+                    <div class="form-group"><label>Member Of</label><input type="text" name="memberOf" value="${val('memberOf')}" ${configDisabled}></div>
+                    <div class="form-group"><label>DG Members</label><input type="text" name="dgMembers" value="${val('dgMembers')}" ${configDisabled}></div>
+                    
+                    <div class="form-group"><label>Mail Size Limit</label><input type="text" name="mailSizeLimit" value="${val('mailSizeLimit')}" ${configDisabled}></div>
+                    <div class="form-group"><label>Recipient Limit</label><input type="text" name="recipientLimit" value="${val('recipientLimit')}" ${configDisabled}></div>
+                    <div class="form-group"><label>Mailbox Storage Limit</label><input type="text" name="mailboxStorageLimit" value="${val('mailboxStorageLimit')}" ${configDisabled}></div>
+                    
+                    <div class="form-group full-width">
+                        <label>Extra Facility</label>
+                        <textarea name="extraFacility" rows="2" ${configDisabled}>${val('extraFacility')}</textarea>
+                    </div>
+
+                    <div class="form-group"><label>Group Policy Level</label>
+                         <select name="groupPolicyLevel" ${configDisabled} style="padding: 10px;">
+                            <option value="">Select Level...</option>
+                            <option value="Highly Managed" ${val('groupPolicyLevel') === 'Highly Managed' ? 'selected' : ''}>Highly Managed</option>
+                            <option value="Lightly Managed" ${val('groupPolicyLevel') === 'Lightly Managed' ? 'selected' : ''}>Lightly Managed</option>
+                            <option value="IT User" ${val('groupPolicyLevel') === 'IT User' ? 'selected' : ''}>IT User</option>
+                        </select>
                     </div>
                 </div>
 
-                <!-- Footer Actions -->
+                <!-- Approvals Section (DSI Manager / IT HOD) -->
+                 ${(role === 'DSIManager' || role === 'ITHOD' || role !== 'HR') ? `
+                    <div class="section">Approval Decision</div>
+                    <div class="form-grid" style="grid-template-columns: 1fr;">
+                        <div class="form-group">
+                            <label>Remarks / Comments</label>
+                            <textarea name="dsiRemarks" rows="3" ${dsiRemarksDisabled}>${val('dsiRemarks')}</textarea>
+                        </div>
+                    </div>
+                ` : ''}
+
+
                 <div class="btn-bar">
-                    ${role === 'HR' && !isReadOnly ? `<button type="submit" class="btn-primary">Submit Request</button>` : ''}
+                    ${role === 'HR' ? `<button type="submit" class="btn-primary">Submit Request</button>` : ''}
+                    ${role === 'IT' ? `<button type="submit" class="btn-primary">Save & Forward to HOD</button>` : ''}
                     
-                    ${role === 'IT' ? `<button type="submit" class="btn-primary">Save & Forward to DSI</button>` : ''}
-                    
-                    ${role === 'DSI' ? `
+                    ${role === 'HOD' ? `
                         <button type="submit" name="action" value="Approve" class="btn-success">Approve</button>
                         <button type="submit" name="action" value="Reject" class="btn-danger" style="margin-left: 10px;">Reject</button>
-                        <button type="submit" name="action" value="Cancel" style="margin-left: 10px; background-color: #ffb900; color: black;">Cancel</button>
                     ` : ''}
 
-                    ${isReadOnly ? `<span class="readonly-text" style="font-size: 14px; font-weight: 600;">Status: ${request.status} (View Only)</span>` : ''}
+                    ${role === 'DSI' ? `<button type="submit" class="btn-primary">Save & Forward to DCI Manager</button>` : ''}
+
+                    ${(role === 'DSIManager' || role === 'ITHOD') ? `
+                        <button type="submit" name="action" value="Approve" class="btn-success">Approve Request</button>
+                        <button type="submit" name="action" value="Reject" class="btn-danger" style="margin-left: 10px;">Reject Request</button>
+                    ` : ''}
                 </div>
             </div>
         </form>
