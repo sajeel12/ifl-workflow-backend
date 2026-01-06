@@ -7,11 +7,11 @@ import path from 'path';
 
 // Dummy emails for workflow stages
 // Dummy emails for workflow stages
-const IT_EMAIL = 'it.ops@example.com';
-const DSI_EMAIL = 'dsi.team@example.com';
-const HOD_EMAIL_DUMMY = 'employee.hod@example.com';
-const DSI_MANAGER_EMAIL = 'dsi.manager@example.com';
-const IT_HOD_EMAIL = 'it.hod@example.com';
+const IT_EMAIL = 'sajeel.dilshad@perception-it.com';
+const DSI_EMAIL = 'sajeel.dilshad@perception-it.com';
+const HOD_EMAIL_DUMMY = 'sajeel.dilshad@perception-it.com';
+const DSI_MANAGER_EMAIL = 'sajeel.dilshad@perception-it.com';
+const IT_HOD_EMAIL = 'sajeel.dilshad@perception-it.com';
 
 // Generic notification sender helper
 const sendStageEmail = async (email, request, token, type) => {
