@@ -36,7 +36,7 @@ const handleSubmission = async (req, res, token) => {
             const context = await onboardingService.getFormContext(token);
             if (!context) return res.send(renderError('Invalid or Expired Token'));
 
-            const { role } = context;
+            const { role, request } = context;
 
             if (role === 'IT') {
                 await onboardingService.updateITDetails(token, data);
@@ -61,10 +61,38 @@ const handleSubmission = async (req, res, token) => {
                 await onboardingService.handleITHODApproval(token, action);
                 return res.send(renderSuccess(`Decision Recorded`, `The request has been finalized. (Action: ${action})`));
             }
+            else if (role === 'OPS') {
+                const { opsName } = data;
+                // Parse checklist from body keys starting with "check_"
+                const checklistData = [];
+                Object.keys(data).forEach(key => {
+                    if (key.startsWith('check_')) {
+                        checklistData.push({ item: key.replace('check_', ''), checked: data[key] === 'on' });
+                    }
+                });
+                await onboardingService.handleOPSAction(token, checklistData, opsName);
+                return res.send(renderSuccess('Setup Completed', 'The workstation setup has been verified and recorded.'));
+            }
             else {
                 return res.send(renderError('Action not permitted.'));
             }
         }
+    } catch (err) {
+        return res.send(renderError(err.message));
+    }
+};
+
+export const handleProofUpload = async (req, res) => {
+    try {
+        const { token, implementerName } = req.body;
+        if (!req.files || req.files.length === 0) {
+            return res.send(renderError('No files uploaded.'));
+        }
+
+        const filePaths = req.files.map(f => f.path);
+        await onboardingService.handleDCIImplementation(token, filePaths, implementerName);
+
+        return res.send(renderSuccess('Proofs Uploaded', 'Implementation proofs have been submitted. Request forwarded to OPS.'));
     } catch (err) {
         return res.send(renderError(err.message));
     }
@@ -81,23 +109,52 @@ const renderForm = async (req, res, token) => {
         role = context.role;
     }
 
-    // Role-based logic
-    // Requestor Info: HR (Editable)
+    // Role-based Config
     const hrDisabled = role !== 'HR' ? 'disabled' : '';
-
-    // Services Section: IT (Editable) form. DSI (Editable too per req).
-    // Logic: IT can edit. DSI can EDIT IT fields too.
     const isServiceEditable = (role === 'IT' || role === 'DSI');
     const servicesDisabled = !isServiceEditable ? 'disabled' : '';
-
-    // Config Section: DSI (Editable)
     const configDisabled = role !== 'DSI' ? 'disabled' : '';
-
-    // Remarks Section: DSI Manager (Editable remarks)
     const dsiRemarksDisabled = role !== 'DSIManager' ? 'disabled' : '';
 
     const val = (field) => request[field] || '';
     const chk = (field) => request[field] ? 'checked' : '';
+
+    // Form Attributes
+    let formAction = `?token=${token || ''}`;
+    let formEnctype = '';
+    if (role === 'DCIImplementer') {
+        formAction = '/api/onboarding/upload-proof';
+        formEnctype = 'enctype="multipart/form-data"';
+    }
+
+    // OPS Checklist Generation
+    let opsChecklistHTML = '';
+    if (role === 'OPS') {
+        const items = [];
+        if (request.intranetAccess) items.push('Configure Intranet Access');
+        if (request.emailIncoming || request.emailOutgoing) items.push('Configure Outlook Email');
+        if (request.deptSharePath) items.push(`Map Department Share (S:): ${request.deptSharePath}`);
+        if (request.homeFolderPath) items.push(`Map Home Folder (Z:): ${request.homeFolderPath}`);
+        if (request.laserPrinter) items.push(`Setup Laser Printer (${request.laserPrinterLocation || 'Default'})`);
+        if (request.dotMatrixPrinter) items.push(`Setup Dot Matrix Printer (${request.dotMatrixPrinterLocation || 'Default'})`);
+        if (request.iflPortalLink) items.push('Add IFL Portal Shortcut');
+        items.push('Verify Domain Login');
+
+        opsChecklistHTML = `
+            <div class="section" style="background: #fff4ce; color: #333; border-bottom: 2px solid #fbc02d;">OPS Verification Checklist</div>
+            <div class="form-grid" style="grid-template-columns: 1fr;">
+                <div class="form-group"><label>Verifier Name</label><input type="text" name="opsName" required></div>
+                <div class="checkbox-group">
+                    ${items.map(item => `
+                        <div class="checkbox-item" style="padding: 10px; border-bottom: 1px solid #eee;">
+                            <input type="checkbox" name="check_${item}" required>
+                            <label style="margin:0; font-weight: normal;">${item}</label>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
 
     const html = `
     <!DOCTYPE html>
@@ -156,11 +213,12 @@ const renderForm = async (req, res, token) => {
             button:disabled { background-color: #c8c6c4; cursor: not-allowed; box-shadow: none; }
 
             .request-id-badge { font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-            .status-ba { background: #333; color: white; padding: 10px; text-align: center; }
+            .file-upload-box { border: 2px dashed #0078D4; padding: 20px; text-align: center; background: #eff6fc; }
         </style>
     </head>
     <body class="ms-Fabric">
-        <form method="POST" action="?token=${token || ''}">
+        <form method="POST" action="${formAction}" ${formEnctype}>
+             ${role === 'DCIImplementer' ? `<input type="hidden" name="token" value="${token}">` : ''}
             <div class="header">
                  <img src="/logo.png" alt="IFL Logo" class="logo">
                  <div class="header-content">
@@ -277,7 +335,7 @@ const renderForm = async (req, res, token) => {
                                 <input type="checkbox" name="dotMatrixPrinter" ${chk('dotMatrixPrinter')} ${servicesDisabled}>
                                 <label style="margin:0">Dot Matrix Printer</label>
                             </div>
-                           <input type="text" name="dotMatrixPrinterLocation" placeholder="Location..." value="${val('dotMatrixPrinterLocation')}" ${servicesDisabled}>
+                            <input type="text" name="dotMatrixPrinterLocation" placeholder="Location..." value="${val('dotMatrixPrinterLocation')}" ${servicesDisabled}>
                          </div>
                     </div>
 
@@ -341,6 +399,25 @@ const renderForm = async (req, res, token) => {
                     </div>
                 ` : ''}
 
+                <!-- OPS Checklist Section -->
+                ${opsChecklistHTML}
+
+                <!-- DCI Implementation Upload Section -->
+                ${role === 'DCIImplementer' ? `
+                    <div class="section" style="background: #e1f5fe; border-bottom: 2px solid #0078D4;">Implementation Proof</div>
+                    <div class="form-grid" style="grid-template-columns: 1fr;">
+                         <div class="form-group">
+                            <label>Implementer Name</label>
+                            <input type="text" name="implementerName" required>
+                        </div>
+                        <div class="form-group file-upload-box">
+                            <label style="margin-bottom:15px; display:block; font-size:16px;">Upload AD & Exchange Screenshots</label>
+                            <input type="file" name="dciProof" multiple accept="image/*" required>
+                            <p style="margin-top:5px; font-size:12px; color:#666;">Supported formats: PNG, JPG (Max 5MB)</p>
+                        </div>
+                    </div>
+                ` : ''}
+
 
                 <div class="btn-bar">
                     ${role === 'HR' ? `<button type="submit" class="btn-primary">Submit Request</button>` : ''}
@@ -357,6 +434,9 @@ const renderForm = async (req, res, token) => {
                         <button type="submit" name="action" value="Approve" class="btn-success">Approve Request</button>
                         <button type="submit" name="action" value="Reject" class="btn-danger" style="margin-left: 10px;">Reject Request</button>
                     ` : ''}
+
+                    ${role === 'DCIImplementer' ? `<button type="submit" class="btn-primary">Upload Proofs & Complete</button>` : ''}
+                    ${role === 'OPS' ? `<button type="submit" class="btn-success">Verify & Close Request</button>` : ''}
                 </div>
             </div>
         </form>

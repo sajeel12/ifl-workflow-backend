@@ -1,4 +1,5 @@
 import express from 'express';
+import { upload } from '../utils/upload.js';
 const router = express.Router();
 import * as onboardingController from '../controllers/onboardingController.js';
 import * as approvalController from '../controllers/approvalController.js';
@@ -26,6 +27,9 @@ router.get('/onboarding/initiate', onboardingController.handleRequest); // Expli
 router.post('/onboarding/initiate', onboardingController.handleRequest); // Handle form submission from initiate page
 router.get('/onboarding/handle', onboardingController.handleRequest);
 router.post('/onboarding/handle', onboardingController.handleRequest);
+
+// Phase 4: Upload Proof
+router.post('/onboarding/upload-proof', upload.array('dciProof', 5), onboardingController.handleProofUpload);
 
 
 router.get('/health', (req, res) => {

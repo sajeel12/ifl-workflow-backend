@@ -24,6 +24,7 @@
         "express": "^4.19.2",
         "jsonwebtoken": "^9.0.2",
         "ldapjs-promise": "^3.0.0",
+        "multer": "^2.0.2",
         "nodemailer": "^6.9.13",
         "pdfkit": "^0.17.2",
         "sequelize": "^6.37.3",

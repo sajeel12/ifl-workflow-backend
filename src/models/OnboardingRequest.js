@@ -135,6 +135,32 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         type: DataTypes.DATE,
         allowNull: true
     },
+
+    // --- Phase 4: Implementation & OPS ---
+    dciImplementer: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    dciProofAttachments: {
+        type: DataTypes.JSON, // Stores array of file paths e.g. ["uploads/proofs/file1.png"]
+        allowNull: true
+    },
+    dciImplementedAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    opsCompletedBy: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    opsChecklist: {
+        type: DataTypes.JSON, // Stores checklist state e.g. [{label: "Map S:", checked: true}]
+        allowNull: true
+    },
+    opsCompletedAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    }
 });
 
 export default OnboardingRequest;
