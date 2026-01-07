@@ -142,8 +142,15 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         allowNull: true
     },
     dciProofAttachments: {
-        type: DataTypes.JSON, // Stores array of file paths e.g. ["uploads/proofs/file1.png"]
-        allowNull: true
+        type: DataTypes.TEXT, // Changed from JSON for MSSQL compatibility
+        allowNull: true,
+        get() {
+            const rawValue = this.getDataValue('dciProofAttachments');
+            return rawValue ? JSON.parse(rawValue) : [];
+        },
+        set(value) {
+            this.setDataValue('dciProofAttachments', JSON.stringify(value));
+        }
     },
     dciImplementedAt: {
         type: DataTypes.DATE,
@@ -154,8 +161,15 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         allowNull: true
     },
     opsChecklist: {
-        type: DataTypes.JSON, // Stores checklist state e.g. [{label: "Map S:", checked: true}]
-        allowNull: true
+        type: DataTypes.TEXT, // Changed from JSON for MSSQL compatibility
+        allowNull: true,
+        get() {
+            const rawValue = this.getDataValue('opsChecklist');
+            return rawValue ? JSON.parse(rawValue) : [];
+        },
+        set(value) {
+            this.setDataValue('opsChecklist', JSON.stringify(value));
+        }
     },
     opsCompletedAt: {
         type: DataTypes.DATE,

@@ -3,16 +3,7 @@ nohup: ignoring input
 > ifl-workflow-backend@1.0.0 start
 > node server.js
 
-info: Database connected. {"timestamp":"2026-01-06T10:49:11.826Z"}
-warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-01-06T10:49:11.838Z"}
-info: Database synced (force mode). {"timestamp":"2026-01-06T10:49:12.077Z"}
-info: Server running on port 3000 {"timestamp":"2026-01-06T10:49:12.090Z"}
-info: [Onboarding] DSI Manager Approval {"timestamp":"2026-01-06T10:50:56.603Z"}
-info: [Onboarding] PDF Generated: /home/sajeel/Documents/experiments/IbrahimFibers/ifl-workflow-backend/generated_pdfs/Onboarding_PHASE4_TEST_1767696616558_1.pdf {"timestamp":"2026-01-06T10:50:56.795Z"}
-info: [Email] Sending approval email to sajeel.dilshad@perception-it.com {"timestamp":"2026-01-06T10:50:56.797Z"}
-error: [Email] Failed to send: Invalid login: 535 5.7.139 Authentication unsuccessful, the user credentials were incorrect. [SG2PR01CA0195.apcprd01.prod.exchangelabs.com 2026-01-06T10:50:36.020Z 08DE4CB7E7D56FBE] {"timestamp":"2026-01-06T10:51:08.317Z"}
-error: [Onboarding] Failed to send DCI_IMPLEMENTATION email: Invalid login: 535 5.7.139 Authentication unsuccessful, the user credentials were incorrect. [SG2PR01CA0195.apcprd01.prod.exchangelabs.com 2026-01-06T10:50:36.020Z 08DE4CB7E7D56FBE] {"timestamp":"2026-01-06T10:51:08.318Z"}
-info: [Onboarding] DCI Implementation {"timestamp":"2026-01-06T11:23:23.114Z"}
-info: [Email] Sending approval email to sajeel.dilshad@perception-it.com {"timestamp":"2026-01-06T11:23:23.146Z"}
-error: [Email] Failed to send: Invalid login: 535 5.7.139 Authentication unsuccessful, the user credentials were incorrect. [SG2P153CA0043.APCP153.PROD.OUTLOOK.COM 2026-01-06T11:23:06.062Z 08DE4A89EAADC353] {"timestamp":"2026-01-06T11:23:33.658Z"}
-error: [Onboarding] Failed to send OPS_ACTION email: Invalid login: 535 5.7.139 Authentication unsuccessful, the user credentials were incorrect. [SG2P153CA0043.APCP153.PROD.OUTLOOK.COM 2026-01-06T11:23:06.062Z 08DE4A89EAADC353] {"timestamp":"2026-01-06T11:23:33.659Z"}
+info: Database connected. {"timestamp":"2026-01-07T09:40:21.124Z"}
+warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-01-07T09:40:21.134Z"}
+info: Database synced (force mode). {"timestamp":"2026-01-07T09:40:21.387Z"}
+info: Server running on port 3000 {"timestamp":"2026-01-07T09:40:21.394Z"}
