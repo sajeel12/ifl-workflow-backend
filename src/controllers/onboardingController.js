@@ -107,18 +107,40 @@ const renderForm = async (req, res, token) => {
         if (!context) return res.send(renderError('Invalid or Expired Token'));
         request = context.request;
         role = context.role;
-    } else if (req.query.mock === 'ops') {
-        role = 'OPS';
+    } else if (req.query.mock) {
+        role = req.query.mock.toUpperCase(); // IT, HOD, DSI, OPS, HR
         request = {
-            id: 'MOCK-999',
+            id: 'MOCK-' + role,
+            fullName: 'Test User',
+            employeeId: '1001',
+            department: 'IT Dept',
+            designation: 'Software Engineer',
+            projectUnit: 'Head Office',
+            joiningDate: '2023-01-01',
+            officeExtension: '1234',
+            requestMode: 'New',
+
+            // IT Params (Pre-filled for later stages)
             intranetAccess: true,
             emailIncoming: true,
             emailOutgoing: true,
             deptSharePath: '\\\\Server\\Share',
-            laserPrinter: true,
-            laserPrinterLocation: 'HR Office',
-            status: 'PendingOPSAction'
+            homeFolderPath: '\\\\Server\\Home',
+
+            // Status params
+            status: role === 'OPS' ? 'PendingOPSAction' : 'Pending' + role,
+            approvalStatus: role === 'DCI' || role === 'OPS' ? 'Approved' : 'Pending'
         };
+
+        // Adjust status/role for flow logic
+        if (role === 'IT') request.status = 'PendingIT';
+        if (role === 'HOD') request.status = 'PendingHOD';
+        if (role === 'DSI') request.status = 'PendingDSI';
+        if (role === 'DCIIMPLEMENTER') {
+            role = 'DCIImplementer';
+            request.status = 'PendingDCIImplementation';
+            request.approvalStatus = 'Approved';
+        }
     }
 
     // Role-based Config
