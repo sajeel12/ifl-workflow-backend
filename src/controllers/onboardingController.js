@@ -345,7 +345,9 @@ const renderForm = async (req, res, token) => {
                             <div class="form-group"><label>IFL Portal Link</label><input type="text" name="iflPortalLink" value="${val('iflPortalLink')}" ${servicesDisabled}></div>
                         </div>
                     </div>
+                    ` : ''}
 
+                    ${(!['HR', 'IT', 'HOD'].includes(role) || request.ntUserName) ? `
                     <!-- Section 3: DCI Configuration -->
                     <div class="dci-box">
                         <div class="section-title">
