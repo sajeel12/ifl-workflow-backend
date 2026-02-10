@@ -203,20 +203,21 @@ export const updateITDetails = async (token, data) => {
 };
 
 // HOD just approves (no changes typically, or comments)
-export const handleHODApproval = async (token, action) => {
+export const handleHODApproval = async (token, action, remarks) => {
     logger.info(`[Onboarding] HOD Approval`);
     try {
         const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
         if (!request || request.status !== 'PendingHOD') throw new Error('Invalid Token');
 
         if (action === 'Reject') {
-            await request.update({ status: 'Rejected', approvalStatus: 'Rejected', currentStageToken: null });
+            await request.update({ status: 'Rejected', approvalStatus: 'Rejected', hodRemarks: remarks, currentStageToken: null });
             return request;
         }
 
         const newToken = crypto.randomBytes(20).toString('hex');
         await request.update({
             status: 'PendingDCI',
+            hodRemarks: remarks,
             currentStageToken: newToken,
             hodApprovedAt: new Date()
         });

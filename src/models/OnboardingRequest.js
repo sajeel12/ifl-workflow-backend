@@ -103,6 +103,10 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     },
 
     // --- Approvals & Timestamps ---
+    hodRemarks: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
     dciRemarks: {
         type: DataTypes.TEXT,
         allowNull: true

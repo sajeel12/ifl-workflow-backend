@@ -43,8 +43,8 @@ const handleSubmission = async (req, res, token) => {
                 return res.send(renderSuccess('Services Configured', 'The request has been forwarded to the HOD for review.'));
             }
             else if (role === 'HOD') {
-                const { action } = data;
-                await onboardingService.handleHODApproval(token, action);
+                const { action, hodRemarks } = data;
+                await onboardingService.handleHODApproval(token, action, hodRemarks);
                 return res.send(renderSuccess(`Request ${action}ed`, `The request has been forwarded to the DCI Team. (Action: ${action})`));
             }
             else if (role === 'DCI') {
@@ -130,7 +130,8 @@ const renderForm = async (req, res, token) => {
 
             // Status params
             status: role === 'OPS' ? 'PendingOPSAction' : 'Pending' + role,
-            approvalStatus: role === 'DCI' || role === 'OPS' ? 'Approved' : 'Pending'
+            approvalStatus: role === 'DCI' || role === 'OPS' ? 'Approved' : 'Pending',
+            hodRemarks: (role === 'DCI' || role === 'DCIManager' || role === 'OPS') ? 'Approved by HOD with comments.' : ''
         };
 
         // Adjust status/role for flow logic
@@ -150,6 +151,7 @@ const renderForm = async (req, res, token) => {
     const servicesDisabled = !isServiceEditable ? 'disabled' : '';
     const configDisabled = role !== 'DCI' ? 'disabled' : '';
     const dciRemarksDisabled = role !== 'DCIManager' ? 'disabled' : '';
+    const hodRemarksDisabled = role !== 'HOD' ? 'disabled' : '';
 
     const val = (field) => request[field] || '';
     const chk = (field) => request[field] ? 'checked' : '';
@@ -348,6 +350,13 @@ const renderForm = async (req, res, token) => {
                     </div>
                     ` : ''}
 
+                    ${(role === 'HOD' || request.hodRemarks) ? `
+                    <div class="section-title"><span>HOD Remarks</span></div>
+                    <div class="form-group full-width">
+                        <textarea name="hodRemarks" rows="3" placeholder="Enter HOD comments here..." ${hodRemarksDisabled}>${val('hodRemarks')}</textarea>
+                    </div>
+                    ` : ''}
+
                     ${(!['HR', 'IT', 'HOD'].includes(role) || request.ntUserName) ? `
                     <!-- Section 3: DCI Configuration -->
                     <div class="dci-box">
@@ -385,12 +394,6 @@ const renderForm = async (req, res, token) => {
                     </div>
 
                     <!-- Approvals -->
-                     ${(role === 'DCIManager' || role === 'ITHOD' || role !== 'HR') ? `
-                        <div class="section-title"><span>Approval Remarks</span></div>
-                        <div class="form-group">
-                            <textarea name="dciRemarks" rows="3" placeholder="Enter logic or comments here..." ${dciRemarksDisabled}>${val('dciRemarks')}</textarea>
-                        </div>
-                    ` : ''}
                     ` : ''}
 
                     <!-- OPS Checklist Dynamic -->

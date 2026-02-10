@@ -83,6 +83,12 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         if (request.dciManagerDecidedAt) drawField('DCI Manager Action At', request.dciManagerDecidedAt.toLocaleString());
         if (request.itHodDecidedAt) drawField('IT HOD Action At', request.itHodDecidedAt.toLocaleString());
 
+        if (request.hodRemarks) {
+            doc.moveDown();
+            doc.text('HOD Remarks:', { underline: true });
+            doc.text(request.hodRemarks);
+        }
+
         if (request.dciRemarks) {
             doc.moveDown();
             doc.text('Remarks:', { underline: true });
