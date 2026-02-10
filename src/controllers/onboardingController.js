@@ -107,6 +107,18 @@ const renderForm = async (req, res, token) => {
         if (!context) return res.send(renderError('Invalid or Expired Token'));
         request = context.request;
         role = context.role;
+    } else if (req.query.mock === 'ops') {
+        role = 'OPS';
+        request = {
+            id: 'MOCK-999',
+            intranetAccess: true,
+            emailIncoming: true,
+            emailOutgoing: true,
+            deptSharePath: '\\\\Server\\Share',
+            laserPrinter: true,
+            laserPrinterLocation: 'HR Office',
+            status: 'PendingOPSAction'
+        };
     }
 
     // Role-based Config
@@ -127,6 +139,24 @@ const renderForm = async (req, res, token) => {
         formEnctype = 'enctype="multipart/form-data"';
     }
 
+    // Stepper Logic
+    const getStepClass = (stepRole) => {
+        const order = ['HR', 'IT', 'HOD', 'DSI', 'DSIManager', 'ITHOD', 'Approved', 'DCIImplementer', 'OPS', 'Completed'];
+        const currentIdx = order.indexOf(role);
+        const stepIdx = order.indexOf(stepRole);
+        if (currentIdx === stepIdx) return 'active';
+        if (currentIdx > stepIdx) return 'completed';
+        return '';
+    };
+    // Simplified Mapping for Visual Stepper
+    const steps = [
+        { label: 'Initial Request', status: getStepClass('HR') },
+        { label: 'IT Services', status: getStepClass('IT') },
+        { label: 'Approvals', status: (['HOD', 'DSI', 'DSIManager', 'ITHOD'].includes(role) || request.approvalStatus === 'Approved') ? 'active' : (['DCIImplementer', 'OPS', 'Completed'].includes(request.status) ? 'completed' : '') },
+        { label: 'Fulfillment', status: (['DCIImplementer', 'OPS', 'Completed'].includes(role) || request.status === 'Completed') ? 'active' : '' }
+    ];
+
+
     // OPS Checklist Generation
     let opsChecklistHTML = '';
     if (role === 'OPS') {
@@ -141,15 +171,20 @@ const renderForm = async (req, res, token) => {
         items.push('Verify Domain Login');
 
         opsChecklistHTML = `
-            <div class="section" style="background: #fff4ce; color: #333; border-bottom: 2px solid #fbc02d;">OPS Verification Checklist</div>
-            <div class="form-grid" style="grid-template-columns: 1fr;">
-                <div class="form-group"><label>Verifier Name</label><input type="text" name="opsName" required></div>
-                <div class="checkbox-group">
+            <div class="ops-box">
+                <div class="section-title">
+                    <span>OPS Verification Checklist</span>
+                    <span class="section-tag">Required</span>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group"><label>Verifier Name</label><input type="text" name="opsName" required></div>
+                </div>
+                <div class="checkbox-card-group" style="grid-template-columns: 1fr;">
                     ${items.map(item => `
-                        <div class="checkbox-item" style="padding: 10px; border-bottom: 1px solid #eee;">
+                        <label class="checkbox-card">
                             <input type="checkbox" name="check_${item}" required>
-                            <label style="margin:0; font-weight: normal;">${item}</label>
-                        </div>
+                            <span>${item}</span>
+                        </label>
                     `).join('')}
                 </div>
             </div>
@@ -158,288 +193,265 @@ const renderForm = async (req, res, token) => {
 
     const html = `
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Onboarding - ${role}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css">
-        <style>
-             /* Reusing previous styles exactly */
-            body { font-family: 'Segoe UI', 'Segoe UI Web (West European)', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; background-color: #faf9f8; margin: 0; padding: 0; }
-            .container { max-width: 900px; margin: 20px auto; background: white; box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132), 0 0.3px 0.9px 0 rgba(0,0,0,0.108); }
-            .header { background-color: #0078D4; padding: 16px 24px; display: flex; align-items: center; gap: 16px; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            .header-content { flex-grow: 1; display: flex; justify-content: space-between; align-items: center; }
-            .logo { height: 48px; padding: 6px; }
-            .brand { font-weight: 600; font-size: 20px; }
-            .form-title { font-size: 18px; font-weight: 400; opacity: 0.9; }
-            
-            .section { 
-                padding: 10px 24px; 
-                background-color: #f8f9fa; 
-                border-bottom: 2px solid #0078D4; 
-                border-top: 1px solid #e1dfdd;
-                color: #0078D4; 
-                font-weight: 600; 
-                font-size: 14px; 
-                text-transform: uppercase; 
-                letter-spacing: 0.5px; 
-                margin-top: 20px; 
-                display: flex; 
-                align-items: center; 
-            }
-            .section:first-of-type { border-top: none; margin-top: 0; }
-            
-            .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; padding: 24px; }
-            .full-width { grid-column: 1 / -1; }
-            .form-group { margin-bottom: 5px; }
-            label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px; color: #323130; }
-            
-            input[type="text"], input[type="date"], input[type="email"], select, textarea {
-                width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #8a8886; font-family: inherit; font-size: 14px; border-radius: 0; transition: all 0.2s;
-            }
-            input:focus, select:focus, textarea:focus { outline: 2px solid #0078D4; border-color: transparent; }
-            input:disabled, select:disabled, textarea:disabled { background-color: #f3f2f1; color: #605e5c; border-color: #e1dfdd; cursor: not-allowed; }
-            
-            .checkbox-group { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
-            .checkbox-item { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #201f1e; }
-            .checkbox-item input { width: 18px; height: 18px; margin: 0; cursor: pointer; }
-            .checkbox-item input:disabled { cursor: not-allowed; }
-
-            .btn-bar { padding: 24px; background-color: #f3f2f1; text-align: right; border-top: 1px solid #e1dfdd; }
-            button { padding: 12px 32px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; border-radius: 0; min-width: 120px; color: white; transition: background-color 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            .btn-primary { background-color: #0078D4; } .btn-primary:hover { background-color: #005a9e; }
-            .btn-success { background-color: #107C10; } .btn-success:hover { background-color: #0c5d0c; }
-            .btn-danger { background-color: #D13438; } .btn-danger:hover { background-color: #a4262c; }
-            button:disabled { background-color: #c8c6c4; cursor: not-allowed; box-shadow: none; }
-
-            .request-id-badge { font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-            .file-upload-box { border: 2px dashed #0078D4; padding: 20px; text-align: center; background: #eff6fc; }
-        </style>
+        <link rel="stylesheet" href="/css/modern.css">
     </head>
-    <body class="ms-Fabric">
-        <form method="POST" action="${formAction}" ${formEnctype}>
-             ${role === 'DCIImplementer' ? `<input type="hidden" name="token" value="${token}">` : ''}
-            <div class="header">
-                 <img src="/logo.png" alt="IFL Logo" class="logo">
-                 <div class="header-content">
-                    <div>
-                        <div class="brand">Ibrahim Fibres Limited</div>
-                        <div class="form-title">Intranet & Internet Proxy Form</div>
+    <body>
+        <div class="app-container">
+            <header class="app-header">
+                <div class="brand-section">
+                    <img src="/logo.png" alt="IFL Logo" class="logo">
+                    <div class="app-title">
+                        <h1>Ibrahim Fibres Limited</h1>
+                        <p>IT Onboarding Workflow</p>
                     </div>
-                    <div style="text-align:right">
-                         ${token ? `<div className="request-id-badge">REQ #${request.id || 'NEW'}</div>` : ''}
-                         <div style="font-size: 12px; opacity: 0.8; margin-top:5px;">Viewing as: <strong>${role}</strong></div>
-                    </div>
-                 </div>
+                </div>
+                <div class="status-section">
+                    ${token ? `<div class="status-badge">REQ #${request.id || 'NEW'} | ${role}</div>` : ''}
+                </div>
+            </header>
+
+            <div class="steps-container">
+                <div class="steps">
+                    ${steps.map((s, i) => `
+                        <div class="step-item ${s.status}">
+                            <div class="step-circle">${i + 1}</div>
+                            <div class="step-label">${s.label}</div>
+                        </div>
+                    `).join('')}
+                </div>
             </div>
-            
-            <div class="container">
-                <!-- Section 1: Requestor Information (HR Only) -->
-                <div class="section">Requestor Information</div>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Employee Number</label>
-                        <input type="text" name="employeeId" value="${val('employeeId')}" ${hrDisabled} required>
-                    </div>
-                    <div class="form-group">
-                        <label>Request Initiated On</label>
-                        <input type="text" value="${new Date().toLocaleString()}" disabled>
-                    </div>
-                    <div class="form-group">
-                        <label>Request Mode</label>
-                        <select name="requestMode" ${hrDisabled}>
-                            <option value="New" ${val('requestMode') === 'New' ? 'selected' : ''}>New</option>
-                            <option value="Change" ${val('requestMode') === 'Change' ? 'selected' : ''}>Change</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Full Name</label>
-                        <input type="text" name="fullName" value="${val('fullName')}" ${hrDisabled} required>
-                    </div>
-                    <div class="form-group">
-                        <label>Joining Date</label>
-                        <input type="date" name="joiningDate" value="${val('joiningDate') ? new Date(val('joiningDate')).toISOString().split('T')[0] : ''}" ${hrDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Head Of Department</label>
-                        <input type="text" name="hod" value="${val('hod')}" ${hrDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Department</label>
-                        <input type="text" name="department" value="${val('department')}" ${hrDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Designation</label>
-                        <input type="text" name="designation" value="${val('designation')}" ${hrDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Project / Unit</label>
-                        <input type="text" name="projectUnit" value="${val('projectUnit')}" ${hrDisabled}>
-                    </div>
-                    <div class="form-group">
-                        <label>Office Extension</label>
-                        <input type="text" name="officeExtension" value="${val('officeExtension')}" ${hrDisabled}>
-                    </div>
-                     <div class="form-group">
-                        <label>Home Phone No.</label>
-                        <input type="text" name="homePhone" value="${val('homePhone')}" ${hrDisabled}>
-                    </div>
-                     <div class="form-group">
-                        <label>Mobile No.</label>
-                        <input type="text" name="mobilePhone" value="${val('mobilePhone')}" ${hrDisabled}>
-                    </div>
-                </div>
 
-                <!-- Section 2: Request Services (IT Only + DSI Editable) -->
-                <div class="section">Intranet & Internet Services (IT Operations)</div>
-                <div class="form-grid" style="grid-template-columns: 1fr;">
-                    <div class="checkbox-group">
-                        <div class="checkbox-item">
-                            <input type="checkbox" name="intranetAccess" ${request.intranetAccess !== false ? 'checked' : ''} ${servicesDisabled}>
-                            <label style="margin:0">Intranet Access</label>
-                        </div>
-                    </div>
-
-                    <!-- Internet Services Section REMOVED -->
-
-                    <div class="checkbox-group" style="margin-top:20px;">
-                         <label style="text-decoration: underline;">External Email Services</label>
-                         <div style="display: flex; gap: 40px;">
-                            <div class="checkbox-item">
-                                <input type="checkbox" name="emailIncoming" ${chk('emailIncoming')} ${servicesDisabled}>
-                                <label style="margin:0">Incoming</label>
-                            </div>
-                            <div class="checkbox-item">
-                                <input type="checkbox" name="emailOutgoing" ${chk('emailOutgoing')} ${servicesDisabled}>
-                                <label style="margin:0">Outgoing</label>
-                            </div>
-                         </div>
-                    </div>
-
-                    <div class="form-group full-width" style="margin-top: 15px;">
-                        <label>Purpose of Use of External Email Services</label>
-                        <textarea name="emailPurpose" rows="3" ${servicesDisabled}>${val('emailPurpose')}</textarea>
-                    </div>
-
-                    <div class="checkbox-group" style="margin-top:20px;">
-                         <label style="text-decoration: underline;">Print Services</label>
-                         <div style="display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: center; margin-bottom: 10px;">
-                            <div class="checkbox-item">
-                                <input type="checkbox" name="laserPrinter" ${chk('laserPrinter')} ${servicesDisabled}>
-                                <label style="margin:0">Laser Printer</label>
-                            </div>
-                            <input type="text" name="laserPrinterLocation" placeholder="Location..." value="${val('laserPrinterLocation')}" ${servicesDisabled}>
-                         </div>
-                         <div style="display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: center;">
-                            <div class="checkbox-item">
-                                <input type="checkbox" name="dotMatrixPrinter" ${chk('dotMatrixPrinter')} ${servicesDisabled}>
-                                <label style="margin:0">Dot Matrix Printer</label>
-                            </div>
-                            <input type="text" name="dotMatrixPrinterLocation" placeholder="Location..." value="${val('dotMatrixPrinterLocation')}" ${servicesDisabled}>
-                         </div>
-                    </div>
-
-                     <!-- File Share Services [Moved to END] -->
-                    <div style="background: #eff6fc; padding: 15px; margin-top: 25px; border-left: 4px solid #0078D4;">
-                        <label style="font-weight: 700; color: #0078D4; margin-bottom: 15px;">FILE SHARE SERVICES</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">
-                            <div class="form-group">
-                                <label>Dept. Share (S:)</label>
-                                <input type="text" name="deptSharePath" value="${val('deptSharePath')}" placeholder="e.g. \\PPFS8ER2\DeptShare..." ${servicesDisabled}>
-                            </div>
-                             <div class="form-group">
-                                <label>Home Folder (Z:)</label>
-                                <input type="text" name="homeFolderPath" value="${val('homeFolderPath')}" placeholder="e.g. \\PPFS8ER2\UserData..." ${servicesDisabled}>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                             <label>IFL-Portal Site Link</label>
-                             <input type="text" name="iflPortalLink" value="${val('iflPortalLink')}" placeholder="http://iflportal..." ${servicesDisabled}>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Section 3: DCI Configuration (DCI Only) -->
-                <div class="section">DCI Approval & Configuration</div>
-                <div class="form-grid">
-                    <div class="form-group"><label>NT User Name</label><input type="text" name="ntUserName" value="${val('ntUserName')}" ${configDisabled}></div>
-                    <div class="form-group"><label>Exchange Display Name</label><input type="text" name="exchangeDisplayName" value="${val('exchangeDisplayName')}" ${configDisabled}></div>
-                    <div class="form-group"><label>SMTP Address</label><input type="text" name="smtpAddress" value="${val('smtpAddress')}" ${configDisabled}></div>
+            <form method="POST" action="${formAction}" ${formEnctype}>
+                ${role === 'DCIImplementer' ? `<input type="hidden" name="token" value="${token}">` : ''}
+                
+                <div class="form-content">
                     
-                    <div class="form-group"><label>Member Of</label><input type="text" name="memberOf" value="${val('memberOf')}" ${configDisabled}></div>
-                    <div class="form-group"><label>DG Members</label><input type="text" name="dgMembers" value="${val('dgMembers')}" ${configDisabled}></div>
-                    
-                    <div class="form-group"><label>Mail Size Limit</label><input type="text" name="mailSizeLimit" value="${val('mailSizeLimit')}" ${configDisabled}></div>
-                    <div class="form-group"><label>Recipient Limit</label><input type="text" name="recipientLimit" value="${val('recipientLimit')}" ${configDisabled}></div>
-                    <div class="form-group"><label>Mailbox Storage Limit</label><input type="text" name="mailboxStorageLimit" value="${val('mailboxStorageLimit')}" ${configDisabled}></div>
-                    
-                    <div class="form-group full-width">
-                        <label>Extra Facility</label>
-                        <textarea name="extraFacility" rows="2" ${configDisabled}>${val('extraFacility')}</textarea>
+                    <!-- Section 1: Requestor Information -->
+                    <div class="section-title">
+                        <span>Employee Details</span>
+                        <span class="section-tag">HR</span>
                     </div>
-
-                    <div class="form-group"><label>Group Policy Level</label>
-                         <select name="groupPolicyLevel" ${configDisabled} style="padding: 10px;">
-                            <option value="">Select Level...</option>
-                            <option value="Highly Managed" ${val('groupPolicyLevel') === 'Highly Managed' ? 'selected' : ''}>Highly Managed</option>
-                            <option value="Lightly Managed" ${val('groupPolicyLevel') === 'Lightly Managed' ? 'selected' : ''}>Lightly Managed</option>
-                            <option value="IT User" ${val('groupPolicyLevel') === 'IT User' ? 'selected' : ''}>IT User</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Approvals Section (DSI Manager / IT HOD) -->
-                 ${(role === 'DSIManager' || role === 'ITHOD' || role !== 'HR') ? `
-                    <div class="section">Approval Decision</div>
-                    <div class="form-grid" style="grid-template-columns: 1fr;">
-                        <div class="form-group">
-                            <label>Remarks / Comments</label>
-                            <textarea name="dsiRemarks" rows="3" ${dsiRemarksDisabled}>${val('dsiRemarks')}</textarea>
+                         <div class="form-group full-width" style="background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 24px;">
+                            <label style="font-weight: 700; color: #0f172a; font-size: 1rem;">Employee ID <!-- (SAP ID) --></label>
+                            <div style="display: flex; gap: 12px; align-items: center;">
+                                <input type="text" id="employeeIdInput" name="employeeId" value="${val('employeeId')}" ${hrDisabled} required style="flex: 1; font-size: 1.1rem; padding: 12px; max-width: 300px;">
+                                ${role === 'HR' ? '<button type="button" id="btnGetEmployee" class="btn btn-primary" style="height: 48px; display: flex; align-items: center; gap: 8px;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg> Get Employee Data</button>' : ''}
+                            </div>
+                            ${/* role === 'HR' ? '<p style="margin: 8px 0 0; font-size: 0.85rem; color: #64748b;">Enter the 4-digit Employee ID to auto-fill details from HRMS.</p>' : '' */ ''}
                         </div>
-                    </div>
-                ` : ''}
-
-                <!-- OPS Checklist Section -->
-                ${opsChecklistHTML}
-
-                <!-- DCI Implementation Upload Section -->
-                ${role === 'DCIImplementer' ? `
-                    <div class="section" style="background: #e1f5fe; border-bottom: 2px solid #0078D4;">Implementation Proof</div>
-                    <div class="form-grid" style="grid-template-columns: 1fr;">
+                    <div class="grid-2">
                          <div class="form-group">
-                            <label>Implementer Name</label>
-                            <input type="text" name="implementerName" required>
+                            <label>Full Name</label>
+                            <input type="text" name="fullName" value="${val('fullName')}" ${hrDisabled} required>
                         </div>
-                        <div class="form-group file-upload-box">
-                            <label style="margin-bottom:15px; display:block; font-size:16px;">Upload AD & Exchange Screenshots</label>
-                            <input type="file" name="dciProof" multiple accept="image/*" required>
-                            <p style="margin-top:5px; font-size:12px; color:#666;">Supported formats: PNG, JPG (Max 5MB)</p>
+                         <div class="form-group">
+                            <label>Request Mode</label>
+                            <select name="requestMode" ${hrDisabled}>
+                                <option value="New" ${val('requestMode') === 'New' ? 'selected' : ''}>New Hiring</option>
+                                <option value="Change" ${val('requestMode') === 'Change' ? 'selected' : ''}>Change / Modification</option>
+                            </select>
                         </div>
                     </div>
-                ` : ''}
+                    <div class="grid-3">
+                        <div class="form-group"><label>Department</label><input type="text" name="department" value="${val('department')}" ${hrDisabled}></div>
+                        <div class="form-group"><label>Designation</label><input type="text" name="designation" value="${val('designation')}" ${hrDisabled}></div>
+                        <div class="form-group"><label>Project / Unit</label><input type="text" name="projectUnit" value="${val('projectUnit')}" ${hrDisabled}></div>
+                    </div>
+                    <div class="grid-3">
+                        <div class="form-group"><label>HOD Name</label><input type="text" name="hod" value="${val('hod')}" ${hrDisabled}></div>
+                        <div class="form-group"><label>Joining Date</label><input type="date" name="joiningDate" value="${val('joiningDate') ? new Date(val('joiningDate')).toISOString().split('T')[0] : ''}" ${hrDisabled}></div>
+                        <div class="form-group"><label>Office Extension</label><input type="text" name="officeExtension" value="${val('officeExtension')}" ${hrDisabled}></div>
+                    </div>
 
+                    ${(role !== 'HR' || request.id) ? `
+                    <!-- Section 2: IT Services -->
+                    <div class="it-services-box">
+                        <div class="section-title">
+                            <span>IT Services Configuration</span>
+                            <span class="section-tag">IT Operations</span>
+                        </div>
+                        
+                        <div class="checkbox-card-group">
+                            <label class="checkbox-card">
+                                <input type="checkbox" name="intranetAccess" ${request.intranetAccess !== false ? 'checked' : ''} ${servicesDisabled}>
+                                <span>Intranet Access</span>
+                            </label>
+                        </div>
 
-                <div class="btn-bar">
-                    ${role === 'HR' ? `<button type="submit" class="btn-primary">Submit Request</button>` : ''}
-                    ${role === 'IT' ? `<button type="submit" class="btn-primary">Save & Forward to HOD</button>` : ''}
-                    
-                    ${role === 'HOD' ? `
-                        <button type="submit" name="action" value="Approve" class="btn-success">Approve</button>
-                        <button type="submit" name="action" value="Reject" class="btn-danger" style="margin-left: 10px;">Reject</button>
+                        <div style="margin-top: 20px;">
+                            <label style="margin-bottom: 8px; display:block; font-weight:600;">Email Services</label>
+                             <div class="checkbox-card-group">
+                                <label class="checkbox-card">
+                                    <input type="checkbox" name="emailIncoming" ${chk('emailIncoming')} ${servicesDisabled}>
+                                    <span>Incoming Email</span>
+                                </label>
+                                <label class="checkbox-card">
+                                    <input type="checkbox" name="emailOutgoing" ${chk('emailOutgoing')} ${servicesDisabled}>
+                                    <span>Outgoing Email</span>
+                                </label>
+                            </div>
+                        </div>
+                         <div class="form-group full-width" style="margin-top: 10px;">
+                            <input type="text" name="emailPurpose" placeholder="Purpose of External Email..." value="${val('emailPurpose')}" ${servicesDisabled}>
+                        </div>
+
+                         <div style="margin-top: 20px;">
+                            <label style="margin-bottom: 8px; display:block; font-weight:600;">Printing Services</label>
+                            <div class="grid-2">
+                                <div style="display:flex; gap:10px; align-items:center;">
+                                     <input type="checkbox" name="laserPrinter" ${chk('laserPrinter')} ${servicesDisabled} style="width:20px; height:20px;">
+                                     <input type="text" name="laserPrinterLocation" placeholder="Laser Printer Location" value="${val('laserPrinterLocation')}" ${servicesDisabled}>
+                                </div>
+                                <div style="display:flex; gap:10px; align-items:center;">
+                                     <input type="checkbox" name="dotMatrixPrinter" ${chk('dotMatrixPrinter')} ${servicesDisabled} style="width:20px; height:20px;">
+                                     <input type="text" name="dotMatrixPrinterLocation" placeholder="Dot Matrix Location" value="${val('dotMatrixPrinterLocation')}" ${servicesDisabled}>
+                                </div>
+                            </div>
+                        </div>
+
+                         <div style="margin-top: 20px; padding-top:20px; border-top:1px dashed #cbd5e1;">
+                            <label style="margin-bottom: 8px; display:block; font-weight:600;">File Share Services</label>
+                            <div class="grid-2">
+                                <div class="form-group"><label>Dept Share (S:)</label><input type="text" name="deptSharePath" value="${val('deptSharePath')}" ${servicesDisabled}></div>
+                                <div class="form-group"><label>Home Folder (Z:)</label><input type="text" name="homeFolderPath" value="${val('homeFolderPath')}" ${servicesDisabled}></div>
+                            </div>
+                            <div class="form-group"><label>IFL Portal Link</label><input type="text" name="iflPortalLink" value="${val('iflPortalLink')}" ${servicesDisabled}></div>
+                        </div>
+                    </div>
+
+                    <!-- Section 3: DCI Configuration -->
+                    <div class="dci-box">
+                        <div class="section-title">
+                            <span>DCI Configuration</span>
+                            <span class="section-tag">DCI Team</span>
+                        </div>
+                        <div class="grid-3">
+                            <div class="form-group"><label>NT User Name</label><input type="text" name="ntUserName" value="${val('ntUserName')}" ${configDisabled}></div>
+                            <div class="form-group"><label>Exchange Name</label><input type="text" name="exchangeDisplayName" value="${val('exchangeDisplayName')}" ${configDisabled}></div>
+                            <div class="form-group"><label>SMTP Address</label><input type="text" name="smtpAddress" value="${val('smtpAddress')}" ${configDisabled}></div>
+                        </div>
+                        <div class="grid-2">
+                             <div class="form-group"><label>Member Of</label><input type="text" name="memberOf" value="${val('memberOf')}" ${configDisabled}></div>
+                             <div class="form-group"><label>DG Members</label><input type="text" name="dgMembers" value="${val('dgMembers')}" ${configDisabled}></div>
+                        </div>
+                        <div class="grid-3">
+                            <div class="form-group"><label>Mail Size</label><input type="text" name="mailSizeLimit" value="${val('mailSizeLimit')}" ${configDisabled}></div>
+                            <div class="form-group"><label>Recipient Limit</label><input type="text" name="recipientLimit" value="${val('recipientLimit')}" ${configDisabled}></div>
+                            <div class="form-group"><label>Storage Limit</label><input type="text" name="mailboxStorageLimit" value="${val('mailboxStorageLimit')}" ${configDisabled}></div>
+                        </div>
+                         <div class="form-group"><label>Group Policy Level</label>
+                             <select name="groupPolicyLevel" ${configDisabled}>
+                                <option value="">Select Level...</option>
+                                <option value="Highly Managed" ${val('groupPolicyLevel') === 'Highly Managed' ? 'selected' : ''}>Highly Managed</option>
+                                <option value="Lightly Managed" ${val('groupPolicyLevel') === 'Lightly Managed' ? 'selected' : ''}>Lightly Managed</option>
+                                <option value="Kiosk" ${val('groupPolicyLevel') === 'Kiosk' ? 'selected' : ''}>Kiosk</option>
+                            </select>
+                        </div>
+                         <div class="form-group"><label>Extra Facility</label><textarea name="extraFacility" rows="2" ${configDisabled}>${val('extraFacility')}</textarea></div>
+                         <div class="form-group full-width">
+                            <label>DSI Remarks / Instructions</label>
+                            <textarea name="remarks" rows="3" ${dsiRemarksDisabled}>${val('remarks')}</textarea>
+                        </div>
+                    </div>
+
+                    <!-- Approvals -->
+                     ${(role === 'DSIManager' || role === 'ITHOD' || role !== 'HR') ? `
+                        <div class="section-title"><span>Approval Remarks</span></div>
+                        <div class="form-group">
+                            <textarea name="dsiRemarks" rows="3" placeholder="Enter logic or comments here..." ${dsiRemarksDisabled}>${val('dsiRemarks')}</textarea>
+                        </div>
+                    ` : ''}
                     ` : ''}
 
-                    ${role === 'DSI' ? `<button type="submit" class="btn-primary">Save & Forward to DCI Manager</button>` : ''}
+                    <!-- OPS Checklist Dynamic -->
+                    ${opsChecklistHTML}
+
+                    <!-- DCI Implementation -->
+                    ${role === 'DCIImplementer' ? `
+                         <div class="dci-box" style="border-color: var(--primary);">
+                            <div class="section-title"><span>Proof of Implementation</span></div>
+                            <div class="form-group"><label>Implementer Name</label><input type="text" name="implementerName" required></div>
+                            <div class="form-group" style="padding: 20px; border: 2px dashed #cbd5e1; text-align: center; border-radius: 8px;">
+                                <label style="cursor: pointer; color: var(--primary); font-weight: 600;">Click to Upload Screenshots (AD/Exchange)</label>
+                                <input type="file" name="dciProof" multiple accept="image/*" required style="margin-top: 10px;">
+                            </div>
+                        </div>
+                    ` : ''}
+
+                </div>
+
+                <div class="action-bar">
+                    ${role === 'HR' ? `<button type="submit" class="btn btn-primary">Submit Request</button>` : ''}
+                    ${role === 'IT' ? `<button type="submit" class="btn btn-primary">Save & Forward to HOD</button>` : ''}
+
+                    ${role === 'HOD' ? `
+                        <button type="submit" name="action" value="Reject" class="btn btn-danger">Reject</button>
+                        <button type="submit" name="action" value="Approve" class="btn btn-success">Approve</button>
+                    ` : ''}
+
+                    ${role === 'DSI' ? `<button type="submit" class="btn btn-primary">Save & Forward to Manager</button>` : ''}
 
                     ${(role === 'DSIManager' || role === 'ITHOD') ? `
-                        <button type="submit" name="action" value="Approve" class="btn-success">Approve Request</button>
-                        <button type="submit" name="action" value="Reject" class="btn-danger" style="margin-left: 10px;">Reject Request</button>
+                        <button type="submit" name="action" value="Reject" class="btn btn-danger">Reject Request</button>
+                        <button type="submit" name="action" value="Approve" class="btn btn-success">Approve Request</button>
                     ` : ''}
 
-                    ${role === 'DCIImplementer' ? `<button type="submit" class="btn-primary">Upload Proofs & Complete</button>` : ''}
-                    ${role === 'OPS' ? `<button type="submit" class="btn-success">Verify & Close Request</button>` : ''}
+                    ${role === 'DCIImplementer' ? `<button type="submit" class="btn btn-primary">Upload Proofs & Complete</button>` : ''}
+                    ${role === 'OPS' ? `<button type="submit" class="btn btn-success">Verify & Close Request</button>` : ''}
                 </div>
-            </div>
-        </form>
+            </form>
+        </div>
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const btn = document.getElementById('btnGetEmployee');
+                if (btn) {
+                    btn.addEventListener('click', async () => {
+                        const empIdInput = document.getElementById('employeeIdInput');
+                        const empId = empIdInput.value.trim();
+
+                        if (!empId) {
+                            alert('Please enter an Employee ID');
+                            empIdInput.focus();
+                            return;
+                        }
+
+                        const originalText = btn.textContent;
+                        btn.textContent = 'Fetching...';
+                        btn.disabled = true;
+
+                        try {
+                            const res = await fetch('/api/hrms/employee/' + empId);
+                            if (!res.ok) throw new Error('Employee not found');
+                            const data = await res.json();
+
+                            // Populate fields
+                            const setVal = (name, val) => {
+                                const el = document.querySelector('input[name="' + name + '"]');
+                                if (el && val) el.value = val;
+                            };
+
+                            setVal('fullName', data.fullName);
+                            setVal('department', data.department);
+                            setVal('designation', data.designation);
+                            setVal('projectUnit', data.projectUnit);
+                            setVal('joiningDate', data.joiningDate);
+                            setVal('officeExtension', data.officeExtension);
+
+                        } catch (err) {
+                            alert(err.message);
+                        } finally {
+                            btn.textContent = originalText;
+                            btn.disabled = false;
+                        }
+                    });
+                }
+            });
+        </script>
     </body>
     </html>
     `;
@@ -448,16 +460,16 @@ const renderForm = async (req, res, token) => {
 
 const renderSuccess = (title, message) => `
     <!DOCTYPE html>
-    <html>
-    <head><title>Success</title><style>body{font-family:'Segoe UI';padding:40px;text-align:center;background:#faf9f8;} .box{background:white;padding:40px;max-width:500px;margin:0 auto;box-shadow:0 1.6px 3.6px 0 rgba(0,0,0,0.132);} h2{color:#107C10;}</style></head>
-    <body><div class="box"><h2>${title}</h2><p>${message}</p></div></body>
-    </html>
+        <html>
+            <head><title>Success</title><style>body{font-family:'Segoe UI';padding:40px;text-align:center;background:#faf9f8;} .box{background:white;padding:40px;max-width:500px;margin:0 auto;box-shadow:0 1.6px 3.6px 0 rgba(0,0,0,0.132);} h2{color:#107C10;}</style></head>
+            <body><div class="box"><h2>${title}</h2><p>${message}</p></div></body>
+        </html>
 `;
 
 const renderError = (message) => `
     <!DOCTYPE html>
-    <html>
-    <head><title>Error</title><style>body{font-family:'Segoe UI';padding:40px;text-align:center;background:#faf9f8;} .box{background:white;padding:40px;max-width:500px;margin:0 auto;box-shadow:0 1.6px 3.6px 0 rgba(0,0,0,0.132);} h2{color:#D13438;}</style></head>
-    <body><div class="box"><h2>Error</h2><p>${message}</p></div></body>
-    </html>
+        <html>
+            <head><title>Error</title><style>body{font-family:'Segoe UI';padding:40px;text-align:center;background:#faf9f8;} .box{background:white;padding:40px;max-width:500px;margin:0 auto;box-shadow:0 1.6px 3.6px 0 rgba(0,0,0,0.132);} h2{color:#D13438;}</style></head>
+            <body><div class="box"><h2>Error</h2><p>${message}</p></div></body>
+        </html>
 `;

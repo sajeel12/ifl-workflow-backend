@@ -37,8 +37,9 @@ router.get('/health', (req, res) => {
 });
 
 
-import { findUser, debugDumpAD, getAllUsers } from '../services/adService.js';
 
+import { findUser, debugDumpAD, getAllUsers } from '../services/adService.js';
+import * as hrmsController from '../controllers/hrmsController.js';
 
 router.get('/ad-users', ssoMiddleware, async (req, res) => {
     try {
@@ -54,6 +55,7 @@ router.get('/ad-users', ssoMiddleware, async (req, res) => {
     }
 });
 
+router.get('/hrms/employee/:id', hrmsController.getEmployee);
 
 router.get('/ad-debug/:username', async (req, res) => {
     try {
