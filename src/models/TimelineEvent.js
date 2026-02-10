@@ -7,15 +7,20 @@ const TimelineEvent = sequelize.define('TimelineEvent', {
         primaryKey: true,
         autoIncrement: true
     },
-    employeeId: {
-        type: DataTypes.INTEGER
-    },
-    eventType: {
-        type: DataTypes.STRING,
+    requestId: {
+        type: DataTypes.INTEGER,
         allowNull: false
     },
-    description: {
-        type: DataTypes.TEXT
+    action: {
+        type: DataTypes.STRING, // 'Submitted', 'Approved', 'Rejected', 'Configured'
+        allowNull: false
+    },
+    actorRole: {
+        type: DataTypes.STRING, // 'HR', 'IT', 'HOD', ...
+        allowNull: false
+    },
+    details: {
+        type: DataTypes.TEXT // Remarks, changed fields, etc.
     },
     timestamp: {
         type: DataTypes.DATE,
