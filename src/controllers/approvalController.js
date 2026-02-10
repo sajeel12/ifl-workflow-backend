@@ -43,13 +43,10 @@ export const handleApprovalClick = async (req, res) => {
             `);
         }
 
-                       
-                    </div >
-    <div class="container">
-        <h2>Invalid Req
-            const approval = await WorkflowApproval.findOne({where: {actionToken: token } });
 
-            if (!approval) {
+        const approval = await WorkflowApproval.findOne({ where: { actionToken: token } });
+
+        if (!approval) {
             return res.status(404).send(`
             <!DOCTYPE html>
             <html>
@@ -80,7 +77,7 @@ export const handleApprovalClick = async (req, res) => {
         }
 
 
-            if (approval.status !== 'Pending') {
+        if (approval.status !== 'Pending') {
             return res.status(200).send(`
             <!DOCTYPE html>
             <html>
@@ -114,13 +111,13 @@ export const handleApprovalClick = async (req, res) => {
         }
 
 
-            const request = await AccessRequest.findByPk(approval.requestId);
+        const request = await AccessRequest.findByPk(approval.requestId);
 
-            const requester = await Employee.findByPk(request.employeeId);
-            const requesterName = requester ? requester.name : 'Unknown User';
+        const requester = await Employee.findByPk(request.employeeId);
+        const requesterName = requester ? requester.name : 'Unknown User';
 
 
-            if (req.method === 'GET') {
+        if (req.method === 'GET') {
             return res.send(`
             <!DOCTYPE html>
             <html>
@@ -326,7 +323,7 @@ export const handleApprovalClick = async (req, res) => {
         }
 
 
-            if (req.method === 'POST') {
+        if (req.method === 'POST') {
             if (!action || !['Approve', 'Reject'].includes(action)) {
                 return res.status(400).send('Invalid action');
             }
@@ -382,8 +379,8 @@ export const handleApprovalClick = async (req, res) => {
         }
 
     } catch (err) {
-                logger.error(`[Approval] Error: ${err.message}`);
-            return res.status(500).send(`
+        logger.error(`[Approval] Error: ${err.message}`);
+        return res.status(500).send(`
             <!DOCTYPE html>
             <html>
                 <head>
