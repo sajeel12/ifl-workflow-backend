@@ -9,7 +9,7 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     },
     // Meta Fields
     status: {
-        type: DataTypes.STRING, // 'Draft', 'PendingIT', 'PendingDSI', 'Completed', 'Rejected'
+        type: DataTypes.STRING, // 'Draft', 'PendingIT', 'PendingDCI', 'Completed', 'Rejected'
         defaultValue: 'Draft'
     },
     currentStageToken: {
@@ -18,7 +18,7 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     },
     hrSubmittedAt: { type: DataTypes.DATE },
     itSubmittedAt: { type: DataTypes.DATE },
-    dsiDecidedAt: { type: DataTypes.DATE },
+    dciDecidedAt: { type: DataTypes.DATE },
 
     // Section 1: Requestor Information (HR)
     employeeId: { type: DataTypes.STRING },
@@ -60,7 +60,7 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         allowNull: true
     },
 
-    // --- Section 4: DSI Approval & Configuration (DSI) ---
+    // --- Section 4: DCI Approval & Configuration (DCI) ---
     ntUserName: {
         type: DataTypes.STRING,
         allowNull: true
@@ -103,7 +103,7 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     },
 
     // --- Approvals & Timestamps ---
-    dsiRemarks: {
+    dciRemarks: {
         type: DataTypes.TEXT,
         allowNull: true
     },
@@ -123,11 +123,11 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         type: DataTypes.DATE,
         allowNull: true
     },
-    dsiSubmittedAt: {
-        type: DataTypes.DATE, // When DSI Team submits to Manager
+    dciSubmittedAt: {
+        type: DataTypes.DATE, // When DCI Team submits to Manager
         allowNull: true
     },
-    dsiManagerDecidedAt: {
+    dciManagerDecidedAt: {
         type: DataTypes.DATE,
         allowNull: true
     },

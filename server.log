@@ -3,7 +3,7 @@ nohup: ignoring input
 > ifl-workflow-backend@1.0.0 start
 > node server.js
 
-info: Database connected. {"timestamp":"2026-02-10T06:08:34.515Z"}
-warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-02-10T06:08:34.520Z"}
-info: Database synced (force mode). {"timestamp":"2026-02-10T06:08:34.619Z"}
-info: Server running on port 3000 {"timestamp":"2026-02-10T06:08:34.624Z"}
+info: Database connected. {"timestamp":"2026-02-10T06:17:44.703Z"}
+warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-02-10T06:17:44.706Z"}
+info: Database synced (force mode). {"timestamp":"2026-02-10T06:17:44.801Z"}
+info: Server running on port 3000 {"timestamp":"2026-02-10T06:17:44.806Z"}

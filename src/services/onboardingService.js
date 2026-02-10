@@ -9,9 +9,9 @@ import path from 'path';
 // Dummy emails for workflow stages
 // Dummy emails
 const IT_EMAIL = 'sajeel.dilshad@perception-it.com';
-const DSI_EMAIL = 'sajeel.dilshad@perception-it.com';
+const DCI_EMAIL = 'sajeel.dilshad@perception-it.com';
 const HOD_EMAIL_DUMMY = 'sajeel.dilshad@perception-it.com';
-const DSI_MANAGER_EMAIL = 'sajeel.dilshad@perception-it.com';
+const DCI_MANAGER_EMAIL = 'sajeel.dilshad@perception-it.com';
 const IT_HOD_EMAIL = 'sajeel.dilshad@perception-it.com';
 const DCI_IMPLEMENTER_EMAIL = 'sajeel.dilshad@perception-it.com';
 const OPS_TEAM_EMAIL = 'sajeel.dilshad@perception-it.com';
@@ -30,14 +30,14 @@ const sendStageEmail = async (email, request, token, type) => {
 
 // ... (existing functions) ...
 
-export const handleDSIManagerApproval = async (token, action, remarks) => {
-    logger.info(`[Onboarding] DSI Manager Approval`);
+export const handleDCIManagerApproval = async (token, action, remarks) => {
+    logger.info(`[Onboarding] DCI Manager Approval`);
     try {
         const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
-        if (!request || request.status !== 'PendingDSIManager') throw new Error('Invalid Token');
+        if (!request || request.status !== 'PendingDCIManager') throw new Error('Invalid Token');
 
         if (action === 'Reject') {
-            await request.update({ status: 'Rejected', approvalStatus: 'Rejected', dsiRemarks: remarks, currentStageToken: null });
+            await request.update({ status: 'Rejected', approvalStatus: 'Rejected', dciRemarks: remarks, currentStageToken: null });
             return request;
         }
 
@@ -47,9 +47,9 @@ export const handleDSIManagerApproval = async (token, action, remarks) => {
             const newToken = crypto.randomBytes(20).toString('hex');
             await request.update({
                 status: 'PendingITHOD',
-                dsiRemarks: remarks,
+                dciRemarks: remarks,
                 currentStageToken: newToken,
-                dsiManagerDecidedAt: new Date()
+                dciManagerDecidedAt: new Date()
             });
             await sendStageEmail(IT_HOD_EMAIL, request, newToken, 'IT_HOD_APPROVAL');
         } else {
@@ -58,16 +58,16 @@ export const handleDSIManagerApproval = async (token, action, remarks) => {
             await request.update({
                 status: 'PendingDCIImplementation',
                 approvalStatus: 'Approved',
-                dsiRemarks: remarks,
+                dciRemarks: remarks,
                 currentStageToken: newToken,
-                dsiManagerDecidedAt: new Date()
+                dciManagerDecidedAt: new Date()
             });
             await generateAndStorePDF(request); // PDF serves as Work Order
             await sendStageEmail(DCI_IMPLEMENTER_EMAIL, request, newToken, 'DCI_IMPLEMENTATION');
         }
         return request;
     } catch (err) {
-        logger.error(`[Onboarding] DSI Manager Error: ${err.message}`);
+        logger.error(`[Onboarding] DCI Manager Error: ${err.message}`);
         throw err;
     }
 };
@@ -153,8 +153,8 @@ export const getFormContext = async (token) => {
     let role = 'ReadOnly';
     if (request.status === 'PendingIT') role = 'IT';
     if (request.status === 'PendingHOD') role = 'HOD';
-    if (request.status === 'PendingDSI') role = 'DSI';
-    if (request.status === 'PendingDSIManager') role = 'DSIManager';
+    if (request.status === 'PendingDCI') role = 'DCI';
+    if (request.status === 'PendingDCIManager') role = 'DCIManager';
     if (request.status === 'PendingITHOD') role = 'ITHOD';
     if (request.status === 'PendingDCIImplementation') role = 'DCIImplementer';
     if (request.status === 'PendingOPSAction') role = 'OPS';
@@ -216,11 +216,11 @@ export const handleHODApproval = async (token, action) => {
 
         const newToken = crypto.randomBytes(20).toString('hex');
         await request.update({
-            status: 'PendingDSI',
+            status: 'PendingDCI',
             currentStageToken: newToken,
             hodApprovedAt: new Date()
         });
-        await sendStageEmail(DSI_EMAIL, request, newToken, 'DSI_INPUT');
+        await sendStageEmail(DCI_EMAIL, request, newToken, 'DCI_INPUT');
         return request;
     } catch (err) {
         logger.error(`[Onboarding] HOD Error: ${err.message}`);
@@ -228,23 +228,23 @@ export const handleHODApproval = async (token, action) => {
     }
 };
 
-export const updateDSIDetails = async (token, data) => {
-    logger.info(`[Onboarding] Updating DSI details`);
+export const updateDCIDetails = async (token, data) => {
+    logger.info(`[Onboarding] Updating DCI details`);
     try {
         const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
-        if (!request || request.status !== 'PendingDSI') throw new Error('Invalid Token');
+        if (!request || request.status !== 'PendingDCI') throw new Error('Invalid Token');
 
         const newToken = crypto.randomBytes(20).toString('hex');
         await request.update({
             ...data,
-            status: 'PendingDSIManager',
+            status: 'PendingDCIManager',
             currentStageToken: newToken,
-            dsiSubmittedAt: new Date()
+            dciSubmittedAt: new Date()
         });
-        await sendStageEmail(DSI_MANAGER_EMAIL, request, newToken, 'DSI_MANAGER_APPROVAL');
+        await sendStageEmail(DCI_MANAGER_EMAIL, request, newToken, 'DCI_MANAGER_APPROVAL');
         return request;
     } catch (err) {
-        logger.error(`[Onboarding] DSI Update Error: ${err.message}`);
+        logger.error(`[Onboarding] DCI Update Error: ${err.message}`);
         throw err;
     }
 };

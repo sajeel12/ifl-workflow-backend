@@ -80,13 +80,13 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         drawSection('Approvals');
         drawField('Status', request.approvalStatus);
         if (request.hodApprovedAt) drawField('HOD Approved At', request.hodApprovedAt.toLocaleString());
-        if (request.dsiManagerDecidedAt) drawField('DSI Manager Action At', request.dsiManagerDecidedAt.toLocaleString());
+        if (request.dciManagerDecidedAt) drawField('DCI Manager Action At', request.dciManagerDecidedAt.toLocaleString());
         if (request.itHodDecidedAt) drawField('IT HOD Action At', request.itHodDecidedAt.toLocaleString());
 
-        if (request.dsiRemarks) {
+        if (request.dciRemarks) {
             doc.moveDown();
             doc.text('Remarks:', { underline: true });
-            doc.text(request.dsiRemarks);
+            doc.text(request.dciRemarks);
         }
 
         doc.end();

@@ -47,13 +47,13 @@ const handleSubmission = async (req, res, token) => {
                 await onboardingService.handleHODApproval(token, action);
                 return res.send(renderSuccess(`Request ${action}ed`, `The request has been forwarded to the DCI Team. (Action: ${action})`));
             }
-            else if (role === 'DSI') {
-                await onboardingService.updateDSIDetails(token, data);
+            else if (role === 'DCI') {
+                await onboardingService.updateDCIDetails(token, data);
                 return res.send(renderSuccess('Configuration Saved', 'The request has been forwarded to the DCI Manager for final approval.'));
             }
-            else if (role === 'DSIManager') {
-                const { action, dsiRemarks } = data;
-                await onboardingService.handleDSIManagerApproval(token, action, dsiRemarks);
+            else if (role === 'DCIManager') {
+                const { action, dciRemarks } = data;
+                await onboardingService.handleDCIManagerApproval(token, action, dciRemarks);
                 return res.send(renderSuccess(`Decision Recorded`, `The request has been processed. (Action: ${action})`));
             }
             else if (role === 'ITHOD') {
@@ -108,7 +108,8 @@ const renderForm = async (req, res, token) => {
         request = context.request;
         role = context.role;
     } else if (req.query.mock) {
-        role = req.query.mock.toUpperCase(); // IT, HOD, DSI, OPS, HR
+        role = req.query.mock.toUpperCase(); // IT, HOD, DCI, OPS, HR
+        if (role === 'DSI') role = 'DCI'; // Handle legacy DSI param
         request = {
             id: 'MOCK-' + role,
             fullName: 'Test User',
@@ -135,7 +136,7 @@ const renderForm = async (req, res, token) => {
         // Adjust status/role for flow logic
         if (role === 'IT') request.status = 'PendingIT';
         if (role === 'HOD') request.status = 'PendingHOD';
-        if (role === 'DSI') request.status = 'PendingDSI';
+        if (role === 'DCI') request.status = 'PendingDCI';
         if (role === 'DCIIMPLEMENTER') {
             role = 'DCIImplementer';
             request.status = 'PendingDCIImplementation';
@@ -145,10 +146,10 @@ const renderForm = async (req, res, token) => {
 
     // Role-based Config
     const hrDisabled = role !== 'HR' ? 'disabled' : '';
-    const isServiceEditable = (role === 'IT' || role === 'DSI');
+    const isServiceEditable = (role === 'IT' || role === 'DCI');
     const servicesDisabled = !isServiceEditable ? 'disabled' : '';
-    const configDisabled = role !== 'DSI' ? 'disabled' : '';
-    const dsiRemarksDisabled = role !== 'DSIManager' ? 'disabled' : '';
+    const configDisabled = role !== 'DCI' ? 'disabled' : '';
+    const dciRemarksDisabled = role !== 'DCIManager' ? 'disabled' : '';
 
     const val = (field) => request[field] || '';
     const chk = (field) => request[field] ? 'checked' : '';
@@ -163,7 +164,7 @@ const renderForm = async (req, res, token) => {
 
     // Stepper Logic
     const getStepClass = (stepRole) => {
-        const order = ['HR', 'IT', 'HOD', 'DSI', 'DSIManager', 'ITHOD', 'Approved', 'DCIImplementer', 'OPS', 'Completed'];
+        const order = ['HR', 'IT', 'HOD', 'DCI', 'DCIManager', 'ITHOD', 'Approved', 'DCIImplementer', 'OPS', 'Completed'];
         const currentIdx = order.indexOf(role);
         const stepIdx = order.indexOf(stepRole);
         if (currentIdx === stepIdx) return 'active';
@@ -174,7 +175,7 @@ const renderForm = async (req, res, token) => {
     const steps = [
         { label: 'Initial Request', status: getStepClass('HR') },
         { label: 'IT Services', status: getStepClass('IT') },
-        { label: 'Approvals', status: (['HOD', 'DSI', 'DSIManager', 'ITHOD'].includes(role) || request.approvalStatus === 'Approved') ? 'active' : (['DCIImplementer', 'OPS', 'Completed'].includes(request.status) ? 'completed' : '') },
+        { label: 'Approvals', status: (['HOD', 'DCI', 'DCIManager', 'ITHOD'].includes(role) || request.approvalStatus === 'Approved') ? 'active' : (['DCIImplementer', 'OPS', 'Completed'].includes(request.status) ? 'completed' : '') },
         { label: 'Fulfillment', status: (['DCIImplementer', 'OPS', 'Completed'].includes(role) || request.status === 'Completed') ? 'active' : '' }
     ];
 
@@ -378,16 +379,16 @@ const renderForm = async (req, res, token) => {
                         </div>
                          <div class="form-group"><label>Extra Facility</label><textarea name="extraFacility" rows="2" ${configDisabled}>${val('extraFacility')}</textarea></div>
                          <div class="form-group full-width">
-                            <label>DSI Remarks / Instructions</label>
-                            <textarea name="remarks" rows="3" ${dsiRemarksDisabled}>${val('remarks')}</textarea>
+                            <label>DCI Remarks / Instructions</label>
+                            <textarea name="dciRemarks" rows="3" ${dciRemarksDisabled}>${val('dciRemarks')}</textarea>
                         </div>
                     </div>
 
                     <!-- Approvals -->
-                     ${(role === 'DSIManager' || role === 'ITHOD' || role !== 'HR') ? `
+                     ${(role === 'DCIManager' || role === 'ITHOD' || role !== 'HR') ? `
                         <div class="section-title"><span>Approval Remarks</span></div>
                         <div class="form-group">
-                            <textarea name="dsiRemarks" rows="3" placeholder="Enter logic or comments here..." ${dsiRemarksDisabled}>${val('dsiRemarks')}</textarea>
+                            <textarea name="dciRemarks" rows="3" placeholder="Enter logic or comments here..." ${dciRemarksDisabled}>${val('dciRemarks')}</textarea>
                         </div>
                     ` : ''}
                     ` : ''}
@@ -418,9 +419,9 @@ const renderForm = async (req, res, token) => {
                         <button type="submit" name="action" value="Approve" class="btn btn-success">Approve</button>
                     ` : ''}
 
-                    ${role === 'DSI' ? `<button type="submit" class="btn btn-primary">Save & Forward to Manager</button>` : ''}
+                    ${role === 'DCI' ? `<button type="submit" class="btn btn-primary">Save & Forward to Manager</button>` : ''}
 
-                    ${(role === 'DSIManager' || role === 'ITHOD') ? `
+                    ${(role === 'DCIManager' || role === 'ITHOD') ? `
                         <button type="submit" name="action" value="Reject" class="btn btn-danger">Reject Request</button>
                         <button type="submit" name="action" value="Approve" class="btn btn-success">Approve Request</button>
                     ` : ''}

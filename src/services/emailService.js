@@ -264,7 +264,7 @@ export const sendOnboardingITNotification = async (toEmail, request, actionLink)
     return sendApprovalEmail(toEmail, subject, message + '\n\n' + requestDetails, actionLink, request.fullName, '');
 };
 
-export const sendOnboardingDSINotification = async (toEmail, request, actionLink) => {
+export const sendOnboardingDCINotification = async (toEmail, request, actionLink) => {
     const subject = `DCI Approval Required: Onboarding Request #${request.id} for ${request.fullName}`;
     const message = `IT has completed the configuration for ${request.fullName}. Please review and provide final approval.`;
 
@@ -286,11 +286,11 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
             subject = `HOD Review: Onboarding Request for ${userInfo}`;
             message = `IT Operations has configured services. Please review and approve.`;
             break;
-        case 'DSI_INPUT': // Renamed concept to DCI
+        case 'DCI_INPUT':
             subject = `DCI Team Action: Configure ID for ${userInfo}`;
             message = `HOD has approved the request. Please configure DCI services (NT User, Email, etc.).`;
             break;
-        case 'DSI_MANAGER_APPROVAL': // Renamed concept to DCI
+        case 'DCI_MANAGER_APPROVAL':
             subject = `DCI Manager Approval: Onboarding Request for ${userInfo}`;
             message = `DCI Team has submitted the configuration. Please provide final approval.`;
             break;
