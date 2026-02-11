@@ -6,16 +6,7 @@ import logger from '../utils/logger.js';
 import * as pdfService from './pdfService.js';
 import path from 'path';
 
-// Dummy emails for workflow stages
-// Dummy emails for workflow stages
-// Dummy emails
-const IT_EMAIL = 'sajeel.dilshad@perception-it.com';
-const DCI_EMAIL = 'sajeel.dilshad@perception-it.com';
-const HOD_EMAIL_DUMMY = 'sajeel.dilshad@perception-it.com';
-const DCI_MANAGER_EMAIL = 'sajeel.dilshad@perception-it.com';
-const IT_HOD_EMAIL = 'sajeel.dilshad@perception-it.com';
-const DCI_IMPLEMENTER_EMAIL = 'sajeel.dilshad@perception-it.com';
-const OPS_TEAM_EMAIL = 'sajeel.dilshad@perception-it.com';
+import RecipientService from './recipientService.js';
 
 
 // Generic notification sender helper
@@ -70,7 +61,9 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
                 dciManagerDecidedAt: new Date()
             });
             await logTimelineEvent(request.id, 'DCI Manager Approved (High Risk)', 'DCIManager', remarks);
-            await sendStageEmail(IT_HOD_EMAIL, request, newToken, 'IT_HOD_APPROVAL');
+            await logTimelineEvent(request.id, 'DCI Manager Approved (High Risk)', 'DCIManager', remarks);
+            const itHodEmail = await RecipientService.get('IT_HOD');
+            await sendStageEmail(itHodEmail, request, newToken, 'IT_HOD_APPROVAL');
         } else {
             // Move to Implementation Phase
             const newToken = crypto.randomBytes(20).toString('hex');
@@ -83,7 +76,9 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
             });
             await logTimelineEvent(request.id, 'DCI Manager Approved', 'DCIManager', remarks);
             await generateAndStorePDF(request); // PDF serves as Work Order
-            await sendStageEmail(DCI_IMPLEMENTER_EMAIL, request, newToken, 'DCI_IMPLEMENTATION');
+            await generateAndStorePDF(request); // PDF serves as Work Order
+            const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER');
+            await sendStageEmail(implementerEmail, request, newToken, 'DCI_IMPLEMENTATION');
         }
         return request;
     } catch (err) {
@@ -138,7 +133,9 @@ export const handleDCIImplementation = async (token, filePaths, implementerName)
             currentStageToken: newToken
         });
         await logTimelineEvent(request.id, 'DCI Implementation Completed', 'DCIImplementer', `Implemented by ${implementerName}`);
-        await sendStageEmail(OPS_TEAM_EMAIL, request, newToken, 'OPS_ACTION');
+        await logTimelineEvent(request.id, 'DCI Implementation Completed', 'DCIImplementer', `Implemented by ${implementerName}`);
+        const opsEmail = await RecipientService.get('OPS_TEAM');
+        await sendStageEmail(opsEmail, request, newToken, 'OPS_ACTION');
         return request;
     } catch (err) {
         logger.error(`[Onboarding] DCI Implementation Error: ${err.message}`);
@@ -197,7 +194,9 @@ export const createRequest = async (data) => {
             hrSubmittedAt: new Date()
         });
         await logTimelineEvent(request.id, 'Request Initiated', 'HR', 'Initial submission');
-        await sendStageEmail(IT_EMAIL, request, token, 'IT_OPS');
+        await logTimelineEvent(request.id, 'Request Initiated', 'HR', 'Initial submission');
+        const itEmail = await RecipientService.get('IT_OPS');
+        await sendStageEmail(itEmail, request, token, 'IT_OPS');
         return request;
     } catch (err) {
         logger.error(`[Onboarding] Error creating request: ${err.message}`);
@@ -219,8 +218,10 @@ export const updateITDetails = async (token, data) => {
             itSubmittedAt: new Date()
         });
         await logTimelineEvent(request.id, 'IT Services Configured', 'IT', JSON.stringify(data));
+        await logTimelineEvent(request.id, 'IT Services Configured', 'IT', JSON.stringify(data));
         // In real app, look up HOD email based on employeeId/Dep
-        await sendStageEmail(HOD_EMAIL_DUMMY, request, newToken, 'HOD_REVIEW');
+        const hodEmail = await RecipientService.get('HOD', { employeeId: request.employeeId });
+        await sendStageEmail(hodEmail, request, newToken, 'HOD_REVIEW');
         return request;
     } catch (err) {
         logger.error(`[Onboarding] IT Update Error: ${err.message}`);
@@ -249,7 +250,9 @@ export const handleHODApproval = async (token, action, remarks) => {
             hodApprovedAt: new Date()
         });
         await logTimelineEvent(request.id, 'HOD Approved', 'HOD', remarks);
-        await sendStageEmail(DCI_EMAIL, request, newToken, 'DCI_INPUT');
+        await logTimelineEvent(request.id, 'HOD Approved', 'HOD', remarks);
+        const dciEmail = await RecipientService.get('DCI_TEAM');
+        await sendStageEmail(dciEmail, request, newToken, 'DCI_INPUT');
         return request;
     } catch (err) {
         logger.error(`[Onboarding] HOD Error: ${err.message}`);
@@ -271,7 +274,9 @@ export const updateDCIDetails = async (token, data) => {
             dciSubmittedAt: new Date()
         });
         await logTimelineEvent(request.id, 'DCI Configuration Submitted', 'DCI', JSON.stringify(data));
-        await sendStageEmail(DCI_MANAGER_EMAIL, request, newToken, 'DCI_MANAGER_APPROVAL');
+        await logTimelineEvent(request.id, 'DCI Configuration Submitted', 'DCI', JSON.stringify(data));
+        const dciManagerEmail = await RecipientService.get('DCI_MANAGER');
+        await sendStageEmail(dciManagerEmail, request, newToken, 'DCI_MANAGER_APPROVAL');
         return request;
     } catch (err) {
         logger.error(`[Onboarding] DCI Update Error: ${err.message}`);

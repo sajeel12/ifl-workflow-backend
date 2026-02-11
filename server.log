@@ -3,7 +3,13 @@ nohup: ignoring input
 > ifl-workflow-backend@1.0.0 start
 > node server.js
 
-info: Database connected. {"timestamp":"2026-02-10T09:43:05.505Z"}
-warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-02-10T09:43:05.507Z"}
-info: Database synced (force mode). {"timestamp":"2026-02-10T09:43:05.584Z"}
-info: Server running on port 3000 {"timestamp":"2026-02-10T09:43:05.586Z"}
+file:///home/sajeel/Documents/experiments/IbrahimFibers/ifl-workflow-backend/src/middleware/ssoMiddleware.js:1
+import { findUser } from '../services/adService.js';
+         ^^^^^^^^
+SyntaxError: The requested module '../services/adService.js' does not provide an export named 'findUser'
+    at ModuleJob._instantiate (node:internal/modules/esm/module_job:180:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:263:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:547:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:116:5)
+
+Node.js v22.12.0
