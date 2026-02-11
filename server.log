@@ -3,8 +3,8 @@ nohup: ignoring input
 > ifl-workflow-backend@1.0.0 start
 > node server.js
 
-info: [ADService] ActiveDirectory client initialized. {"timestamp":"2026-02-11T06:40:36.886Z"}
-info: Database connected. {"timestamp":"2026-02-11T06:40:36.899Z"}
-warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-02-11T06:40:36.903Z"}
-info: Database synced (force mode). {"timestamp":"2026-02-11T06:40:37.017Z"}
-info: Server running on port 3000 {"timestamp":"2026-02-11T06:40:37.022Z"}
+info: [ADService] ActiveDirectory client initialized. {"timestamp":"2026-02-11T09:47:46.617Z"}
+info: Database connected. {"timestamp":"2026-02-11T09:47:46.626Z"}
+warn: Could not drop foreign keys: SQLITE_ERROR: near "DECLARE": syntax error {"timestamp":"2026-02-11T09:47:46.627Z"}
+info: Database synced (force mode). {"timestamp":"2026-02-11T09:47:46.704Z"}
+info: Server running on port 3000 {"timestamp":"2026-02-11T09:47:46.706Z"}
