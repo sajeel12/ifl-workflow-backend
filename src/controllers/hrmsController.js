@@ -1,44 +1,22 @@
-
-// Mock HRMS Controller
-// This will eventually connect to the external HRMS API
+import HRMSService from '../services/hrmsService.js';
 
 export const getEmployee = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Mock Data for specific IDs or generic for testing
-        // In real implementation, this would be: 
-        // const response = await fetch(`${process.env.HRMS_API_URL}/employees/${id}`);
-        // const data = await response.json();
+        if (!id) {
+            return res.status(400).json({ error: 'Employee ID is required' });
+        }
 
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const employee = await HRMSService.getEmployee(id);
 
-        if (id === 'ERROR') {
+        if (!employee) {
             return res.status(404).json({ error: 'Employee not found' });
         }
 
-        const mockEmployee = {
-            id: id,
-            fullName: 'Test Employee Name',
-            designation: 'Senior Software Engineer',
-            department: 'Information Technology',
-            projectUnit: 'Head Office', // Assuming 'Project / Unit' field
-            joiningDate: '2023-01-15',
-            mobile: '0300-1234567',
-            officeExtension: '1234'
-        };
-
-        // Specific mock for testing
-        if (id === '1001') {
-            mockEmployee.fullName = 'Ahmed Ali';
-            mockEmployee.designation = 'Assistant Manager';
-            mockEmployee.department = 'Finance';
-        }
-
-        res.json(mockEmployee);
+        res.json(employee);
     } catch (error) {
-        console.error('HRMS Fetch Error:', error);
+        console.error('HRMS Controller Error:', error);
         res.status(500).json({ error: 'Failed to fetch employee data' });
     }
 };

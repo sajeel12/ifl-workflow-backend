@@ -1,6 +1,6 @@
 import logger from '../utils/logger.js';
 import ADService from './adService.js';
-// import hrmsService from './hrmsService.js'; // Future
+import HRMSService from './hrmsService.js';
 
 const RecipientService = {
     /**
@@ -32,11 +32,16 @@ const RecipientService = {
                     break;
 
                 case 'HOD':
-                    // TODO: Connect to HRMS Service
-                    // const hod = await hrmsService.getManager(context.employeeId);
-                    // recipientEmail = hod.email;
-                    recipientEmail = 'hod.dummy@ifl.com'; // Mock for now
-                    source = 'HRMS_Mock';
+                    // Connect to HRMS Service
+                    const manager = await HRMSService.getManager(context.employeeId);
+                    if (manager && manager.email) {
+                        recipientEmail = manager.email;
+                        source = 'HRMS_API';
+                    } else {
+                        // Fallback if no manager found in HRMS
+                        recipientEmail = 'hod.substitute@ifl.com';
+                        source = 'HRMS_Fallback';
+                    }
                     break;
 
                 case 'DCI_MANAGER':
