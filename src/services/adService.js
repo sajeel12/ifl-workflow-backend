@@ -1,5 +1,5 @@
 import logger from '../utils/logger.js';
-import ActiveDirectory from 'activedirectory2';
+// import ActiveDirectory from 'activedirectory2'; // Dynamic import used below
 
 // AD Connection Config (used by SSO middleware)
 const adConfig = {
@@ -10,11 +10,19 @@ const adConfig = {
 };
 
 let ad = null;
-try {
-    ad = new ActiveDirectory(adConfig);
-} catch (err) {
-    logger.warn(`[ADService] Could not initialize AD client: ${err.message}`);
-}
+
+// Initialize AD Client dynamically
+(async () => {
+    try {
+        const adModule = await import('activedirectory2');
+        const ActiveDirectory = adModule.default;
+        ad = new ActiveDirectory(adConfig);
+        logger.info('[ADService] ActiveDirectory client initialized.');
+    } catch (err) {
+        logger.warn(`[ADService] Could not initialize AD client (Module not found or config error): ${err.message}`);
+        logger.warn('[ADService] Running in MOCK mode.');
+    }
+})();
 
 /**
  * Find a user in Active Directory by sAMAccountName.
@@ -74,6 +82,19 @@ const ADService = {
     getUser: async (sAMAccountName) => {
         // Future implementation
     }
+};
+
+export const getAllUsers = async (limit = 10) => {
+    logger.info(`[ADService] Mock getAllUsers called with limit ${limit}`);
+    return [
+        { sAMAccountName: 'mock.user1', mail: 'mock1@ifl.com', displayName: 'Mock User 1' },
+        { sAMAccountName: 'mock.user2', mail: 'mock2@ifl.com', displayName: 'Mock User 2' }
+    ];
+};
+
+export const debugDumpAD = async () => {
+    logger.info('[ADService] Mock debugDumpAD called');
+    return { message: 'Debug dump not implemented in mock mode' };
 };
 
 export default ADService;
