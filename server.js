@@ -40,17 +40,22 @@ async function startServer() {
             await dropAllForeignKeys();
         }
 
-        const syncOptions = { alter: true }; // Prevent data loss on boot
+        const syncAlter = process.env.DB_SYNC_ALTER === 'true' || false;
+        const syncOptions = { alter: syncAlter };
 
-        if (isSqlite) {
-            // SQLite alter often fails with FK constraints initially during the shadow-table shuffle
+        if (isSqlite && syncAlter) {
+            logger.info('Database sync starting (alter mode)... This may take a moment.');
+            const startTime = Date.now();
             await sequelize.query('PRAGMA foreign_keys = OFF');
             await sequelize.sync(syncOptions);
             await sequelize.query('PRAGMA foreign_keys = ON');
-            logger.info(`Database synced (SQLite alter mode with FK bypass).`);
+            const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+            logger.info(`Database synced in ${duration}s (SQLite alter mode with FK bypass).`);
         } else {
-            await sequelize.sync(syncOptions);
-            logger.info(`Database synced (alter mode).`);
+            const startTime = Date.now();
+            await sequelize.sync({ alter: syncAlter });
+            const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+            logger.info(`Database synced in ${duration}s (sync results).`);
         }
 
         app.listen(PORT, '0.0.0.0', () => {
