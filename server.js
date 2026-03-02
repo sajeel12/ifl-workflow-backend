@@ -1,6 +1,10 @@
 import app from './app.js';
 import sequelize from './src/config/database.js';
 import logger from './src/utils/logger.js';
+import Employee from './src/models/Employee.js';
+import OnboardingRequest from './src/models/OnboardingRequest.js';
+import TimelineEvent from './src/models/TimelineEvent.js';
+import SyncLog from './src/models/SyncLog.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -31,15 +35,14 @@ async function startServer() {
 
         const isDev = process.env.NODE_ENV !== 'production';
 
-        if (isDev) {
-
+        if (isDev && process.env.DB_DIALECT !== 'sqlite') {
             await dropAllForeignKeys();
         }
-
-        const syncOptions = isDev ? { force: true } : { alter: true };
+        // const syncOptions = isDev ? { force: true } : { alter: true };
+        const syncOptions = { alter: true }; // Prevent data loss on boot
 
         await sequelize.sync(syncOptions);
-        logger.info(`Database synced (${isDev ? 'force' : 'alter'} mode).`);
+        logger.info(`Database synced (alter mode).`);
 
         app.listen(PORT, '0.0.0.0', () => {
             logger.info(`Server running on port ${PORT}`);

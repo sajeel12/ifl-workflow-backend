@@ -10,7 +10,7 @@ async function verifyWorkflow() {
     console.log('[1] HR Submitting Request...');
     const hrData = new URLSearchParams({
         employeeId: 'EMP-001',
-        fullName: 'John Doe',
+        fullName: 'Ahmed Khan',
         department: 'Engineering',
         designation: 'Software Engineer',
         joiningDate: '2025-01-01',
@@ -39,7 +39,7 @@ async function verifyWorkflow() {
         driver: sqlite3.Database
     });
 
-    const request = await db.get("SELECT * FROM OnboardingRequests WHERE fullName = 'John Doe' ORDER BY id DESC LIMIT 1");
+    const request = await db.get("SELECT * FROM OnboardingRequests WHERE fullName = 'Ahmed Khan' ORDER BY id DESC LIMIT 1");
     if (!request) {
         console.error('❌ Request not found in DB');
         process.exit(1);
@@ -50,7 +50,7 @@ async function verifyWorkflow() {
     // 3. Simulate IT Submission
     console.log('[3] IT Submitting Configuration...');
     const itData = new URLSearchParams({
-        ntUserName: 'john.doe',
+        ntUserName: 'ahmed.khan',
         groupPolicyLevel: 'IT User',
         emailIncoming: 'on'
     });

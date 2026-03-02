@@ -1,0 +1,185 @@
+<div class="cron-builder-container"
+    style="background: var(--bg-card); padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; width: 100%; max-width: 600px;">
+
+    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0 0 16px 0; font-weight: 500;">
+        <input type="checkbox" id="enableSchedule" <%=config.enabled ? 'checked' : '' %> style="width: 18px; height:
+        18px;">
+        <span>Enable Automated Background Synchronization</span>
+    </label>
+
+    <div id="cronControls" style="display: <%= config.enabled ? 'block' : 'none' %>;">
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; align-items: center;">
+            <select id="cbType" class="form-input"
+                style="padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color);">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="custom">Advanced (Custom Cron)</option>
+            </select>
+
+            <!-- Daily & Weekly specific fields -->
+            <div id="cbTimeGrp" style="display: flex; gap: 8px; align-items: center;">
+                <span style="font-size: 0.9rem; color: var(--text-muted);">at</span>
+                <input type="time" id="cbTime" class="form-input" value="02:00"
+                    style="padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color);">
+            </div>
+
+            <!-- Weekly specific fields -->
+            <div id="cbDowGrp" style="display: none; gap: 8px; align-items: center;">
+                <span style="font-size: 0.9rem; color: var(--text-muted);">on</span>
+                <select id="cbDow" class="form-input"
+                    style="padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    <option value="0">Sunday</option>
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                </select>
+            </div>
+
+            <!-- Monthly specific fields -->
+            <div id="cbDomGrp" style="display: none; gap: 8px; align-items: center;">
+                <span style="font-size: 0.9rem; color: var(--text-muted);">on day</span>
+                <input type="number" id="cbDom" class="form-input" min="1" max="31" value="1"
+                    style="width: 70px; padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color);">
+                <span style="font-size: 0.9rem; color: var(--text-muted);">of the month</span>
+            </div>
+
+            <!-- Custom specific fields -->
+            <div id="cbCustomGrp" style="display: none; gap: 8px; align-items: center; flex: 1;">
+                <input type="text" id="cbCustomValue" class="form-input" placeholder="e.g. 0 2 * * *"
+                    value="<%= config.expression %>"
+                    style="width: 100%; padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color); font-family: monospace;">
+            </div>
+        </div>
+
+        <div
+            style="background: #f1f5f9; padding: 12px; border-radius: 4px; font-size: 0.85rem; color: #475569; display: flex; justify-content: space-between; align-items: center;">
+            <div>Compiled Expression: <strong style="font-family: monospace; font-size: 1rem; color: #0078D4;"
+                    id="cronPreview">0 2 * * *</strong></div>
+        </div>
+    </div>
+
+    <input type="hidden" id="cronExpression" value="<%= config.expression %>">
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const enableCb = document.getElementById('enableSchedule');
+        const controls = document.getElementById('cronControls');
+        const typeSel = document.getElementById('cbType');
+        const timeGrp = document.getElementById('cbTimeGrp');
+        const dowGrp = document.getElementById('cbDowGrp');
+        const domGrp = document.getElementById('cbDomGrp');
+        const customGrp = document.getElementById('cbCustomGrp');
+        const timeInp = document.getElementById('cbTime');
+        const dowSel = document.getElementById('cbDow');
+        const domInp = document.getElementById('cbDom');
+        const customValueInp = document.getElementById('cbCustomValue');
+        const hiddenExpr = document.getElementById('cronExpression');
+        const preview = document.getElementById('cronPreview');
+        const btnSave = document.getElementById('btnSaveConfig');
+
+        // Initial setup based on current config from server
+        let initialCron = hiddenExpr.value.trim() || '0 2 * * *';
+        parseInitialCron(initialCron);
+        updateUI();
+
+        // Listen for enabled toggle
+        enableCb.addEventListener('change', (e) => {
+            controls.style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        // Listen for Type changes
+        typeSel.addEventListener('change', () => {
+            updateUI();
+            generateCron();
+        });
+
+        // Listen for input changes to re-generate the cron expression
+        [timeInp, dowSel, domInp, customValueInp].forEach(el => {
+            el.addEventListener('input', generateCron);
+            el.addEventListener('change', generateCron);
+        });
+
+        function updateUI() {
+            const type = typeSel.value;
+            timeGrp.style.display = (type === 'daily' || type === 'weekly' || type === 'monthly') ? 'flex' : 'none';
+            dowGrp.style.display = (type === 'weekly') ? 'flex' : 'none';
+            domGrp.style.display = (type === 'monthly') ? 'flex' : 'none';
+            customGrp.style.display = (type === 'custom') ? 'flex' : 'none';
+        }
+
+        function generateCron() {
+            const type = typeSel.value;
+            let expr = '';
+
+            const [hh, mm] = (timeInp.value || '00:00').split(':');
+            const hour = parseInt(hh, 10);
+            const minute = parseInt(mm, 10);
+
+            if (type === 'daily') {
+                expr = `${minute} ${hour} * * *`;
+            } else if (type === 'weekly') {
+                const dow = dowSel.value;
+                expr = `${minute} ${hour} * * ${dow}`;
+            } else if (type === 'monthly') {
+                let dom = parseInt(domInp.value, 10) || 1;
+                if (dom < 1) dom = 1;
+                if (dom > 31) dom = 31;
+                expr = `${minute} ${hour} ${dom} * *`;
+            } else if (type === 'custom') {
+                expr = customValueInp.value.trim() || '0 2 * * *';
+            }
+
+            hiddenExpr.value = expr;
+            preview.innerText = expr;
+        }
+
+        function parseInitialCron(expr) {
+            preview.innerText = expr;
+            hiddenExpr.value = expr;
+            customValueInp.value = expr;
+
+            // Simple parser to map cron string back to UI elements if possible
+            const parts = expr.split(/\s+/);
+            if (parts.length === 5) {
+                const [min, hr, dom, mon, dow] = parts;
+
+                // If minute and hour are explicit numbers
+                if (!isNaN(min) && !isNaN(hr)) {
+                    // Format back to HH:MM input
+                    const hhStr = hr.padStart(2, '0');
+                    const mmStr = min.padStart(2, '0');
+                    timeInp.value = `${hhStr}:${mmStr}`;
+
+                    if (dom === '*' && mon === '*' && dow === '*') {
+                        typeSel.value = 'daily';
+                        return;
+                    }
+                    if (dom === '*' && mon === '*' && !isNaN(dow)) {
+                        typeSel.value = 'weekly';
+                        dowSel.value = dow;
+                        return;
+                    }
+                    if (!isNaN(dom) && mon === '*' && dow === '*') {
+                        typeSel.value = 'monthly';
+                        domInp.value = dom;
+                        return;
+                    }
+                }
+            }
+
+            // Fallback to custom
+            typeSel.value = 'custom';
+            updateUI();
+        }
+
+        // On Load, run generation once if it's not custom to ensure elements map
+        if (typeSel.value !== 'custom') {
+            generateCron();
+        }
+    });
+</script>

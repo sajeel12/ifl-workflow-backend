@@ -1,8 +1,18 @@
 import express from 'express';
 import cors from 'cors';
 import apiRoutes from './src/routes/api.js';
+import adminRoutes from './src/routes/admin.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Configure View Engine
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'src/views'));
 
 
 app.use(cors({
@@ -15,6 +25,7 @@ app.use(express.static('public'));
 
 
 app.use('/api', apiRoutes);
+app.use('/admin', adminRoutes);
 
 
 app.get('/', (req, res) => {

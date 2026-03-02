@@ -1,0 +1,186 @@
+<%- include('../partials/header') %>
+    <style>
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #201f1e;
+        }
+
+        .subtitle {
+            color: #605e5c;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0078D4;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #0078D4;
+            display: inline-block;
+            padding-bottom: 4px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+            background: #f3f2f1;
+            padding: 20px;
+        }
+
+        .field-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #605e5c;
+            margin-bottom: 4px;
+        }
+
+        .field-value {
+            font-size: 15px;
+            font-weight: 400;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #8a8886;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 100px;
+            border-radius: 0;
+        }
+
+        textarea:focus {
+            outline: 2px solid #0078D4;
+            border-color: transparent;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #605e5c;
+            margin-top: 4px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 32px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-radius: 0;
+        }
+
+        .btn-approve {
+            background-color: #107C10;
+            color: white;
+        }
+
+        .btn-approve:hover {
+            background-color: #0c5d0c;
+        }
+
+        .btn-reject {
+            background-color: #D13438;
+            color: white;
+        }
+
+        .btn-reject:hover {
+            background-color: #a4262c;
+        }
+
+        @media (max-width: 600px) {
+            .button-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+
+    <!-- Consistent Modern Header -->
+    <header class="app-header"
+        style="padding: 24px 32px; background: #0078D4; color: white; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
+            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
+            <div class="app-title">
+                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Access Request Approval</h1>
+                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">Data Center & Cloud
+                    Infrastructure</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="card">
+            <h1>Access Request Approval</h1>
+            <p class="subtitle">Request #<%= request.requestId %> • <%= approval.approverRole %>
+            </p>
+
+            <div class="section-title">Request Details</div>
+            <div class="info-grid">
+                <div>
+                    <div class="field-label">REQUESTER</div>
+                    <div class="field-value">
+                        <%= requesterName %> <span style="font-size: 13px; color: #605e5c;">(<%= requesterEmail %>
+                                    )</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="field-label">REQUEST TYPE</div>
+                    <div class="field-value">
+                        <%= request.requestType %>
+                    </div>
+                </div>
+                <div>
+                    <div class="field-label">CURRENT STAGE</div>
+                    <div class="field-value">
+                        <%= request.workflowStage %>
+                    </div>
+                </div>
+                <div style="grid-column: 1/-1">
+                    <div class="field-label">JUSTIFICATION</div>
+                    <div class="field-value">
+                        <%= request.justification %>
+                    </div>
+                </div>
+            </div>
+
+            <form method="POST" action="/api/approvals/handle?token=<%= token %>">
+                <div class="form-group">
+                    <label for="comment">Approver Comment (Optional)</label>
+                    <textarea id="comment" name="comment" placeholder="Add context for your decision..."></textarea>
+                    <div class="help-text">This comment will be recorded in the audit trail.</div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" name="action" value="Approve" class="btn-approve">Approve Request</button>
+                    <button type="submit" name="action" value="Reject" class="btn-reject">Reject Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <%- include('../partials/footer') %>

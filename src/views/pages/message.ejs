@@ -1,0 +1,26 @@
+<%- include('../partials/header') %>
+    <header class="app-header"
+        style="background: #0078D4; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1); color: white;">
+        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
+            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
+            <div class="app-title">
+                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Ibrahim Fibres Limited</h1>
+                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">Workflow System</p>
+            </div>
+        </div>
+    </header>
+    <div class="message-container">
+        <% if (locals.icon) { %>
+            <div class="message-icon <%= locals.iconClass ? iconClass : '' %>"><%- icon %></div>
+            <% } %>
+
+                <h2 class="message-title <%= locals.titleClass ? titleClass : '' %>">
+                    <%= heading %>
+                </h2>
+                <p class="message-text"><%- message %></p>
+
+                <% if (locals.metaHtml) { %>
+                    <%- metaHtml %>
+                        <% } %>
+    </div>
+    <%- include('../partials/footer') %>

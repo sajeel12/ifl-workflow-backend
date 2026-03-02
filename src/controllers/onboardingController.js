@@ -12,7 +12,12 @@ export const handleRequest = async (req, res) => {
         }
     } catch (err) {
         logger.error(`[Onboarding] Error: ${err.message}`);
-        return res.status(500).send(`Error: ${err.message}`);
+        return res.status(500).render('pages/message', {
+            title: 'Error',
+            heading: 'Internal Server Error',
+            titleClass: 'error',
+            message: err.message
+        });
     }
 };
 
@@ -31,35 +36,35 @@ const handleSubmission = async (req, res, token) => {
         if (!token) {
             // HR Submission
             await onboardingService.createRequest(data);
-            return res.send(renderSuccess('Request Submitted', 'The request has been sent to IT Operations for service configuration.'));
+            return renderSuccess(res, 'Request Submitted', 'The request has been sent to IT Operations for service configuration.');
         } else {
             const context = await onboardingService.getFormContext(token);
-            if (!context) return res.send(renderError('Invalid or Expired Token'));
+            if (!context) return renderError(res, 'Invalid or Expired Token');
 
             const { role, request } = context;
 
             if (role === 'IT') {
                 await onboardingService.updateITDetails(token, data);
-                return res.send(renderSuccess('Services Configured', 'The request has been forwarded to the HOD for review.'));
+                return renderSuccess(res, 'Services Configured', 'The request has been forwarded to the HOD for review.');
             }
             else if (role === 'HOD') {
                 const { action, hodRemarks } = data;
                 await onboardingService.handleHODApproval(token, action, hodRemarks);
-                return res.send(renderSuccess(`Request ${action}ed`, `The request has been forwarded to the DCI Team. (Action: ${action})`));
+                return renderSuccess(res, `Request ${action}ed`, `The request has been forwarded to the DCI Team. (Action: ${action})`);
             }
             else if (role === 'DCI') {
                 await onboardingService.updateDCIDetails(token, data);
-                return res.send(renderSuccess('Configuration Saved', 'The request has been forwarded to the DCI Manager for final approval.'));
+                return renderSuccess(res, 'Configuration Saved', 'The request has been forwarded to the DCI Manager for final approval.');
             }
             else if (role === 'DCIManager') {
                 const { action, dciRemarks } = data;
                 await onboardingService.handleDCIManagerApproval(token, action, dciRemarks);
-                return res.send(renderSuccess(`Decision Recorded`, `The request has been processed. (Action: ${action})`));
+                return renderSuccess(res, `Decision Recorded`, `The request has been processed. (Action: ${action})`);
             }
             else if (role === 'ITHOD') {
                 const { action } = data;
                 await onboardingService.handleITHODApproval(token, action);
-                return res.send(renderSuccess(`Decision Recorded`, `The request has been finalized. (Action: ${action})`));
+                return renderSuccess(res, `Decision Recorded`, `The request has been finalized. (Action: ${action})`);
             }
             else if (role === 'OPS') {
                 const { opsName } = data;
@@ -71,14 +76,14 @@ const handleSubmission = async (req, res, token) => {
                     }
                 });
                 await onboardingService.handleOPSAction(token, checklistData, opsName);
-                return res.send(renderSuccess('Setup Completed', 'The workstation setup has been verified and recorded.'));
+                return renderSuccess(res, 'Setup Completed', 'The workstation setup has been verified and recorded.');
             }
             else {
-                return res.send(renderError('Action not permitted.'));
+                return renderError(res, 'Action not permitted.');
             }
         }
     } catch (err) {
-        return res.send(renderError(err.message));
+        return renderError(res, err.message);
     }
 };
 
@@ -86,15 +91,15 @@ export const handleProofUpload = async (req, res) => {
     try {
         const { token, implementerName } = req.body;
         if (!req.files || req.files.length === 0) {
-            return res.send(renderError('No files uploaded.'));
+            return renderError(res, 'No files uploaded.');
         }
 
         const filePaths = req.files.map(f => f.path);
         await onboardingService.handleDCIImplementation(token, filePaths, implementerName);
 
-        return res.send(renderSuccess('Proofs Uploaded', 'Implementation proofs have been submitted. Request forwarded to OPS.'));
+        return renderSuccess(res, 'Proofs Uploaded', 'Implementation proofs have been submitted. Request forwarded to OPS.');
     } catch (err) {
-        return res.send(renderError(err.message));
+        return renderError(res, err.message);
     }
 };
 
@@ -104,7 +109,7 @@ const renderForm = async (req, res, token) => {
 
     if (token) {
         const context = await onboardingService.getFormContext(token);
-        if (!context) return res.send(renderError('Invalid or Expired Token'));
+        if (!context) return renderError(res, 'Invalid or Expired Token');
         request = context.request;
         role = context.role;
     } else if (req.query.mock) {
@@ -173,6 +178,7 @@ const renderForm = async (req, res, token) => {
         if (currentIdx > stepIdx) return 'completed';
         return '';
     };
+
     // Simplified Mapping for Visual Stepper
     const steps = [
         { label: 'Initial Request', status: getStepClass('HR') },
@@ -180,7 +186,6 @@ const renderForm = async (req, res, token) => {
         { label: 'Approvals', status: (['HOD', 'DCI', 'DCIManager', 'ITHOD'].includes(role) || request.approvalStatus === 'Approved') ? 'active' : (['DCIImplementer', 'OPS', 'Completed'].includes(request.status) ? 'completed' : '') },
         { label: 'Fulfillment', status: (['DCIImplementer', 'OPS', 'Completed'].includes(role) || request.status === 'Completed') ? 'active' : '' }
     ];
-
 
     // OPS Checklist Generation
     let opsChecklistHTML = '';
@@ -216,288 +221,43 @@ const renderForm = async (req, res, token) => {
         `;
     }
 
-    const html = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Onboarding - ${role}</title>
-        <link rel="stylesheet" href="/css/modern.css">
-    </head>
-    <body>
-        <div class="app-container">
-            <header class="app-header">
-                <div class="brand-section">
-                    <img src="/logo.png" alt="IFL Logo" class="logo">
-                    <div class="app-title">
-                        <h1>Ibrahim Fibres Limited</h1>
-                        <p>IT Onboarding Workflow</p>
-                    </div>
-                </div>
-                <div class="status-section">
-                    ${token ? `<div class="status-badge">REQ #${request.id || 'NEW'} | ${role}</div>` : ''}
-                </div>
-            </header>
-
-            <div class="steps-container">
-                <div class="steps">
-                    ${steps.map((s, i) => `
-                        <div class="step-item ${s.status}">
-                            <div class="step-circle">${i + 1}</div>
-                            <div class="step-label">${s.label}</div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-
-            <form method="POST" action="${formAction}" ${formEnctype}>
-                ${role === 'DCIImplementer' ? `<input type="hidden" name="token" value="${token}">` : ''}
-                
-                <div class="form-content">
-                    
-                    <!-- Section 1: Requestor Information -->
-                    <div class="section-title">
-                        <span>Employee Details</span>
-                        <span class="section-tag">HR</span>
-                    </div>
-                         <div class="form-group full-width" style="background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 24px;">
-                            <label style="font-weight: 700; color: #0f172a; font-size: 1rem;">Employee ID <!-- (SAP ID) --></label>
-                            <div style="display: flex; gap: 12px; align-items: center;">
-                                <input type="text" id="employeeIdInput" name="employeeId" value="${val('employeeId')}" ${hrDisabled} required style="flex: 1; font-size: 1.1rem; padding: 12px; max-width: 300px;">
-                                ${role === 'HR' ? '<button type="button" id="btnGetEmployee" class="btn btn-primary" style="height: 48px; display: flex; align-items: center; gap: 8px;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg> Get Employee Data</button>' : ''}
-                            </div>
-                            ${/* role === 'HR' ? '<p style="margin: 8px 0 0; font-size: 0.85rem; color: #64748b;">Enter the 4-digit Employee ID to auto-fill details from HRMS.</p>' : '' */ ''}
-                        </div>
-                    <div class="grid-2">
-                         <div class="form-group">
-                            <label>Full Name</label>
-                            <input type="text" name="fullName" value="${val('fullName')}" ${hrDisabled} required>
-                        </div>
-                         <div class="form-group">
-                            <label>Request Mode</label>
-                            <select name="requestMode" ${hrDisabled}>
-                                <option value="New" ${val('requestMode') === 'New' ? 'selected' : ''}>New Hiring</option>
-                                <option value="Change" ${val('requestMode') === 'Change' ? 'selected' : ''}>Change / Modification</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="grid-3">
-                        <div class="form-group"><label>Department</label><input type="text" name="department" value="${val('department')}" ${hrDisabled}></div>
-                        <div class="form-group"><label>Designation</label><input type="text" name="designation" value="${val('designation')}" ${hrDisabled}></div>
-                        <div class="form-group"><label>Project / Unit</label><input type="text" name="projectUnit" value="${val('projectUnit')}" ${hrDisabled}></div>
-                    </div>
-                    <div class="grid-3">
-                        <div class="form-group"><label>HOD Name</label><input type="text" name="hod" value="${val('hod')}" ${hrDisabled}></div>
-                        <div class="form-group"><label>Joining Date</label><input type="date" name="joiningDate" value="${val('joiningDate') ? new Date(val('joiningDate')).toISOString().split('T')[0] : ''}" ${hrDisabled}></div>
-                        <div class="form-group"><label>Office Extension</label><input type="text" name="officeExtension" value="${val('officeExtension')}" ${hrDisabled}></div>
-                    </div>
-
-                    ${(role !== 'HR' || request.id) ? `
-                    <!-- Section 2: IT Services -->
-                    <div class="it-services-box">
-                        <div class="section-title">
-                            <span>IT Services Configuration</span>
-                            <span class="section-tag">IT Operations</span>
-                        </div>
-                        
-                        <div class="checkbox-card-group">
-                            <label class="checkbox-card">
-                                <input type="checkbox" name="intranetAccess" ${request.intranetAccess !== false ? 'checked' : ''} ${servicesDisabled}>
-                                <span>Intranet Access</span>
-                            </label>
-                        </div>
-
-                        <div style="margin-top: 20px;">
-                            <label style="margin-bottom: 8px; display:block; font-weight:600;">Email Services</label>
-                             <div class="checkbox-card-group">
-                                <label class="checkbox-card">
-                                    <input type="checkbox" name="emailIncoming" ${chk('emailIncoming')} ${servicesDisabled}>
-                                    <span>Incoming Email</span>
-                                </label>
-                                <label class="checkbox-card">
-                                    <input type="checkbox" name="emailOutgoing" ${chk('emailOutgoing')} ${servicesDisabled}>
-                                    <span>Outgoing Email</span>
-                                </label>
-                            </div>
-                        </div>
-                         <div class="form-group full-width" style="margin-top: 10px;">
-                            <input type="text" name="emailPurpose" placeholder="Purpose of External Email..." value="${val('emailPurpose')}" ${servicesDisabled}>
-                        </div>
-
-                         <div style="margin-top: 20px;">
-                            <label style="margin-bottom: 8px; display:block; font-weight:600;">Printing Services</label>
-                            <div class="grid-2">
-                                <div style="display:flex; gap:10px; align-items:center;">
-                                     <input type="checkbox" name="laserPrinter" ${chk('laserPrinter')} ${servicesDisabled} style="width:20px; height:20px;">
-                                     <input type="text" name="laserPrinterLocation" placeholder="Laser Printer Location" value="${val('laserPrinterLocation')}" ${servicesDisabled}>
-                                </div>
-                                <div style="display:flex; gap:10px; align-items:center;">
-                                     <input type="checkbox" name="dotMatrixPrinter" ${chk('dotMatrixPrinter')} ${servicesDisabled} style="width:20px; height:20px;">
-                                     <input type="text" name="dotMatrixPrinterLocation" placeholder="Dot Matrix Location" value="${val('dotMatrixPrinterLocation')}" ${servicesDisabled}>
-                                </div>
-                            </div>
-                        </div>
-
-                         <div style="margin-top: 20px; padding-top:20px; border-top:1px dashed #cbd5e1;">
-                            <label style="margin-bottom: 8px; display:block; font-weight:600;">File Share Services</label>
-                            <div class="grid-2">
-                                <div class="form-group"><label>Dept Share (S:)</label><input type="text" name="deptSharePath" value="${val('deptSharePath')}" ${servicesDisabled}></div>
-                                <div class="form-group"><label>Home Folder (Z:)</label><input type="text" name="homeFolderPath" value="${val('homeFolderPath')}" ${servicesDisabled}></div>
-                            </div>
-                            <div class="form-group"><label>IFL Portal Link</label><input type="text" name="iflPortalLink" value="${val('iflPortalLink')}" ${servicesDisabled}></div>
-                        </div>
-                    </div>
-                    ` : ''}
-
-                    ${(role === 'HOD' || request.hodRemarks) ? `
-                    <div class="section-title"><span>HOD Remarks</span></div>
-                    <div class="form-group full-width">
-                        <textarea name="hodRemarks" rows="3" placeholder="Enter HOD comments here..." ${hodRemarksDisabled}>${val('hodRemarks')}</textarea>
-                    </div>
-                    ` : ''}
-
-                    ${(!['HR', 'IT', 'HOD'].includes(role) || request.ntUserName) ? `
-                    <!-- Section 3: DCI Configuration -->
-                    <div class="dci-box">
-                        <div class="section-title">
-                            <span>DCI Configuration</span>
-                            <span class="section-tag">DCI Team</span>
-                        </div>
-                        <div class="grid-3">
-                            <div class="form-group"><label>NT User Name</label><input type="text" name="ntUserName" value="${val('ntUserName')}" ${configDisabled}></div>
-                            <div class="form-group"><label>Exchange Name</label><input type="text" name="exchangeDisplayName" value="${val('exchangeDisplayName')}" ${configDisabled}></div>
-                            <div class="form-group"><label>SMTP Address</label><input type="text" name="smtpAddress" value="${val('smtpAddress')}" ${configDisabled}></div>
-                        </div>
-                        <div class="grid-2">
-                             <div class="form-group"><label>Member Of</label><input type="text" name="memberOf" value="${val('memberOf')}" ${configDisabled}></div>
-                             <div class="form-group"><label>DG Members</label><input type="text" name="dgMembers" value="${val('dgMembers')}" ${configDisabled}></div>
-                        </div>
-                        <div class="grid-3">
-                            <div class="form-group"><label>Mail Size</label><input type="text" name="mailSizeLimit" value="${val('mailSizeLimit')}" ${configDisabled}></div>
-                            <div class="form-group"><label>Recipient Limit</label><input type="text" name="recipientLimit" value="${val('recipientLimit')}" ${configDisabled}></div>
-                            <div class="form-group"><label>Storage Limit</label><input type="text" name="mailboxStorageLimit" value="${val('mailboxStorageLimit')}" ${configDisabled}></div>
-                        </div>
-                         <div class="form-group"><label>Group Policy Level</label>
-                             <select name="groupPolicyLevel" ${configDisabled}>
-                                <option value="">Select Level...</option>
-                                <option value="Highly Managed" ${val('groupPolicyLevel') === 'Highly Managed' ? 'selected' : ''}>Highly Managed</option>
-                                <option value="Lightly Managed" ${val('groupPolicyLevel') === 'Lightly Managed' ? 'selected' : ''}>Lightly Managed</option>
-                                <option value="Kiosk" ${val('groupPolicyLevel') === 'Kiosk' ? 'selected' : ''}>Kiosk</option>
-                            </select>
-                        </div>
-                         <div class="form-group"><label>Extra Facility</label><textarea name="extraFacility" rows="2" ${configDisabled}>${val('extraFacility')}</textarea></div>
-                         <div class="form-group full-width">
-                            <label>DCI Remarks / Instructions</label>
-                            <textarea name="dciRemarks" rows="3" ${dciRemarksDisabled}>${val('dciRemarks')}</textarea>
-                        </div>
-                    </div>
-
-                    <!-- Approvals -->
-                    ` : ''}
-
-                    <!-- OPS Checklist Dynamic -->
-                    ${opsChecklistHTML}
-
-                    <!-- DCI Implementation -->
-                    ${role === 'DCIImplementer' ? `
-                         <div class="dci-box" style="border-color: var(--primary);">
-                            <div class="section-title"><span>Proof of Implementation</span></div>
-                            <div class="form-group"><label>Implementer Name</label><input type="text" name="implementerName" required></div>
-                            <div class="form-group" style="padding: 20px; border: 2px dashed #cbd5e1; text-align: center; border-radius: 8px;">
-                                <label style="cursor: pointer; color: var(--primary); font-weight: 600;">Click to Upload Screenshots (AD/Exchange)</label>
-                                <input type="file" name="dciProof" multiple accept="image/*" required style="margin-top: 10px;">
-                            </div>
-                        </div>
-                    ` : ''}
-
-                </div>
-
-                <div class="action-bar">
-                    ${role === 'HR' ? `<button type="submit" class="btn btn-primary">Submit Request</button>` : ''}
-                    ${role === 'IT' ? `<button type="submit" class="btn btn-primary">Save & Forward to HOD</button>` : ''}
-
-                    ${role === 'HOD' ? `
-                        <button type="submit" name="action" value="Reject" class="btn btn-danger">Reject</button>
-                        <button type="submit" name="action" value="Approve" class="btn btn-success">Approve</button>
-                    ` : ''}
-
-                    ${role === 'DCI' ? `<button type="submit" class="btn btn-primary">Save & Forward to Manager</button>` : ''}
-
-                    ${(role === 'DCIManager' || role === 'ITHOD') ? `
-                        <button type="submit" name="action" value="Reject" class="btn btn-danger">Reject Request</button>
-                        <button type="submit" name="action" value="Approve" class="btn btn-success">Approve Request</button>
-                    ` : ''}
-
-                    ${role === 'DCIImplementer' ? `<button type="submit" class="btn btn-primary">Upload Proofs & Complete</button>` : ''}
-                    ${role === 'OPS' ? `<button type="submit" class="btn btn-success">Verify & Close Request</button>` : ''}
-                </div>
-            </form>
-        </div>
-        <script>
-            document.addEventListener('DOMContentLoaded', () => {
-                const btn = document.getElementById('btnGetEmployee');
-                if (btn) {
-                    btn.addEventListener('click', async () => {
-                        const empIdInput = document.getElementById('employeeIdInput');
-                        const empId = empIdInput.value.trim();
-
-                        if (!empId) {
-                            alert('Please enter an Employee ID');
-                            empIdInput.focus();
-                            return;
-                        }
-
-                        const originalText = btn.textContent;
-                        btn.textContent = 'Fetching...';
-                        btn.disabled = true;
-
-                        try {
-                            const res = await fetch('/api/hrms/employee/' + empId);
-                            if (!res.ok) throw new Error('Employee not found');
-                            const data = await res.json();
-
-                            // Populate fields
-                            const setVal = (name, val) => {
-                                const el = document.querySelector('input[name="' + name + '"]');
-                                if (el && val) el.value = val;
-                            };
-
-                            setVal('fullName', data.fullName);
-                            setVal('department', data.department);
-                            setVal('designation', data.designation);
-                            setVal('projectUnit', data.projectUnit);
-                            setVal('joiningDate', data.joiningDate);
-                            setVal('officeExtension', data.officeExtension);
-
-                        } catch (err) {
-                            alert(err.message);
-                        } finally {
-                            btn.textContent = originalText;
-                            btn.disabled = false;
-                        }
-                    });
-                }
-            });
-        </script>
-    </body>
-    </html>
-    `;
-    return res.send(html);
+    return res.render('pages/onboarding_form', {
+        title: `Onboarding - ${role}`,
+        request,
+        role,
+        token,
+        hrDisabled,
+        servicesDisabled,
+        configDisabled,
+        dciRemarksDisabled,
+        hodRemarksDisabled,
+        val,
+        chk,
+        formAction,
+        formEnctype,
+        steps,
+        opsChecklistHTML
+    });
 };
 
-const renderSuccess = (title, message) => `
-    <!DOCTYPE html>
-        <html>
-            <head><title>Success</title><style>body{font-family:'Segoe UI';padding:40px;text-align:center;background:#faf9f8;} .box{background:white;padding:40px;max-width:500px;margin:0 auto;box-shadow:0 1.6px 3.6px 0 rgba(0,0,0,0.132);} h2{color:#107C10;}</style></head>
-            <body><div class="box"><h2>${title}</h2><p>${message}</p></div></body>
-        </html>
-`;
+const renderSuccess = (res, title, message) => {
+    return res.render('pages/message', {
+        title: 'Success',
+        heading: title,
+        titleClass: 'success',
+        icon: '✅',
+        iconClass: 'success-icon',
+        message: message
+    });
+};
 
-const renderError = (message) => `
-    <!DOCTYPE html>
-        <html>
-            <head><title>Error</title><style>body{font-family:'Segoe UI';padding:40px;text-align:center;background:#faf9f8;} .box{background:white;padding:40px;max-width:500px;margin:0 auto;box-shadow:0 1.6px 3.6px 0 rgba(0,0,0,0.132);} h2{color:#D13438;}</style></head>
-            <body><div class="box"><h2>Error</h2><p>${message}</p></div></body>
-        </html>
-`;
+const renderError = (res, message) => {
+    return res.render('pages/message', {
+        title: 'Error',
+        heading: 'Error',
+        titleClass: 'error',
+        icon: '❌',
+        iconClass: 'error-icon',
+        message: message
+    });
+};

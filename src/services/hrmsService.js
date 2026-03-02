@@ -1,105 +1,64 @@
 import logger from '../utils/logger.js';
-
-const HRMS_API_BASE_URL = process.env.HRMS_API_BASE_URL; // e.g. http://api.hrms.local
-const HRMS_API_KEY = process.env.HRMS_API_KEY;
+import Employee from '../models/Employee.js';
 
 const HRMSService = {
     /**
-     * Fetch employee by ID
+     * Fetch employee by ID from the local synchronized DB
      */
     getEmployee: async (employeeId) => {
         try {
-            logger.info(`[HRMSService] Fetching details for Employee ID: ${employeeId}`);
+            logger.info(`[HRMSService] Fetching details for Employee ID: ${employeeId} from local DB`);
 
-            // 1. Mock Mode Check (if URL not set)
-            if (!HRMS_API_BASE_URL) {
-                return mockGetEmployee(employeeId);
+            const emp = await Employee.findOne({ where: { employeeId: employeeId } });
+
+            if (!emp) {
+                logger.warn(`[HRMSService] Employee not found in local DB: ${employeeId}`);
+                return null;
             }
 
-            // 2. Real API Call
-            const response = await fetch(`${HRMS_API_BASE_URL}/employees/${employeeId}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': HRMS_API_KEY || ''
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HRMS API Error: ${response.status} ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return mapHRMSResponseToApp(data);
+            // Map DB model to what the app expects
+            return {
+                id: emp.employeeId,
+                fullName: emp.name,
+                designation: emp.designation,
+                department: emp.mainDept || emp.orgElementName,
+                projectUnit: emp.unit,
+                joiningDate: emp.joiningDate,
+                mobile: emp.mobile,
+                officeExtension: emp.extension
+            };
 
         } catch (err) {
             logger.error(`[HRMSService] Error fetching employee ${employeeId}: ${err.message}`);
-            // Fallback to mock in dev?
-            if (process.env.NODE_ENV !== 'production') return mockGetEmployee(employeeId);
             throw err;
         }
     },
 
     /**
-     * Fetch Reporting Manager (HOD) for an employee
+     * Fetch Reporting Manager (HOD) for an employee from local DB
      */
     getManager: async (employeeId) => {
         try {
-            logger.info(`[HRMSService] Fetching Manager for Employee ID: ${employeeId}`);
+            logger.info(`[HRMSService] Fetching Manager for Employee ID: ${employeeId} from local DB`);
 
-            if (!HRMS_API_BASE_URL) {
-                return { email: 'hod.dummy@ifl.com', name: 'Mock HOD', id: '9999' };
+            const emp = await Employee.findOne({ where: { employeeId: employeeId } });
+
+            if (!emp || !emp.managerEmail) {
+                logger.warn(`[HRMSService] Manager not found for Employee ID: ${employeeId}`);
+                return null;
             }
 
-            const response = await fetch(`${HRMS_API_BASE_URL}/employees/${employeeId}/manager`, {
-                headers: { 'x-api-key': HRMS_API_KEY || '' }
-            });
+            return {
+                email: emp.managerEmail,
+                name: emp.managerName,
+                id: emp.managerId
+            };
 
-            if (!response.ok) return null; // Or throw
-
-            return await response.json(); // Expected: { email: '...', name: '...' }
         } catch (err) {
             logger.error(`[HRMSService] Error fetching manager: ${err.message}`);
-            if (process.env.NODE_ENV !== 'production') return { email: 'hod.dummy@ifl.com', name: 'Mock HOD', id: '9999' };
             return null;
         }
     }
-};
-
-// Helper: Map external API format to internal app format
-const mapHRMSResponseToApp = (data) => {
-    return {
-        id: data.employeeCode || data.id,
-        fullName: data.name || data.fullName,
-        designation: data.designation,
-        department: data.department,
-        projectUnit: data.unit || data.projectUnit,
-        joiningDate: data.dateOfJoining || data.joiningDate,
-        mobile: data.contactNumber || data.mobile,
-        officeExtension: data.extension || ''
-    };
-};
-
-// Mock Data Helper
-const mockGetEmployee = (id) => {
-    return new Promise(resolve => setTimeout(() => {
-        const mock = {
-            id: id,
-            fullName: 'Test Employee Name',
-            designation: 'Senior Software Engineer',
-            department: 'Information Technology',
-            projectUnit: 'Head Office',
-            joiningDate: '2023-01-15',
-            mobile: '0300-1234567',
-            officeExtension: '1234'
-        };
-        if (id === '1001') {
-            mock.fullName = 'Ahmed Ali';
-            mock.designation = 'Assistant Manager';
-            mock.department = 'Finance';
-        }
-        resolve(mock);
-    }, 200));
 };
 
 export default HRMSService;

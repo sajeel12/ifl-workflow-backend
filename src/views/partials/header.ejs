@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>
+        <%= locals.title ? title : 'IFL Workflow' %>
+    </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Segoe UI Web (West European)', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+            background-color: #faf9f8;
+            color: #323130;
+        }
+
+        .header {
+            background-color: #0078D4;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .logo {
+            height: 48px;
+            padding: 6px;
+        }
+
+        .brand {
+            color: white;
+            font-weight: 600;
+            font-size: 20px;
+        }
+
+        .main-container {
+            max-width: 720px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            box-shadow: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.132), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.108);
+            padding: 32px;
+            border-radius: 0;
+        }
+
+        /* Common messaging styles */
+        .message-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: white;
+            padding: 40px;
+            box-shadow: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.132);
+            text-align: center;
+        }
+
+        .message-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .success-icon {
+            color: #107C10;
+        }
+
+        .error-icon {
+            color: #D13438;
+        }
+
+        .info-icon {
+            color: #0078D4;
+        }
+
+        .message-title {
+            margin-top: 0;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #201f1e;
+        }
+
+        .message-title.error {
+            color: #D13438;
+        }
+
+        .message-title.info {
+            color: #0078D4;
+        }
+
+        .message-text {
+            color: #323130;
+            margin-bottom: 20px;
+        }
+
+        .meta {
+            color: #605e5c;
+            font-size: 13px;
+            margin-top: 10px;
+        }
+
+        .comment-box {
+            background: #f3f2f1;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .comment-box.success {
+            border-left: 4px solid #107C10;
+        }
+
+        .comment-box.error {
+            border-left: 4px solid #D13438;
+        }
+    </style>
+</head>
+
+<body>

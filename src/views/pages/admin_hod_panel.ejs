@@ -1,0 +1,788 @@
+<%- include('../partials/header') %>
+    <link rel="stylesheet" href="/css/modern.css">
+    <style>
+        body {
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+        }
+
+        /* Admin Panel Specific Styles */
+        .admin-container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .admin-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            padding: 32px;
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 12px 16px;
+            font-size: 1rem;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th,
+        td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .badge.assigned {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge.unassigned {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: var(--text-main);
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .hod-search-results {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            display: none;
+        }
+
+        .hod-result-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .hod-result-item:hover {
+            background-color: #f8fafc;
+        }
+
+        .pagination-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .pagination-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .page-btn {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            color: #475569;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            background-color: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-btn.active {
+            background-color: #0078D4;
+            color: white;
+            border-color: #0078D4;
+        }
+    </style>
+
+    <header class="app-header"
+        style="flex-shrink: 0; z-index: 1000; background: #0078D4; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1); color: white;">
+        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
+            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
+            <div class="app-title">
+                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">IFL Admin Portal</h1>
+                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">System Management</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="portal-wrapper" style="display: flex; flex: 1; min-height: 0; overflow: hidden; background: #faf9f8;">
+        <!-- Left Sidebar -->
+        <aside class="sidebar"
+            style="width: 260px; background: #ffffff; border-right: 1px solid #e2e8f0; padding: 24px 0; flex-shrink: 0; overflow-y: auto;">
+            <div
+                style="padding: 0 24px 16px; font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
+                Administration</div>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                <li>
+                    <a href="/admin/hod-panel"
+                        style="display: flex; align-items: center; padding: 12px 24px; color: #0078D4; background: #f0f6ff; font-weight: 600; text-decoration: none; border-right: 3px solid #0078D4;">
+                        <span style="margin-right: 12px; font-size: 1.2rem;">👥</span> HOD Assignment
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/settings"
+                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
+                        <span style="margin-right: 12px; font-size: 1.2rem;">🔄</span> HRMS Sync
+                    </a>
+                </li>
+                <li>
+                    <a href="#"
+                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
+                        <span style="margin-right: 12px; font-size: 1.2rem;">📊</span> Audit Logs
+                    </a>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="portal-main" style="flex: 1; padding: 32px; overflow-y: auto;">
+            <div class="admin-container" style="margin: 0 auto; max-width: 1200px; padding: 0;">
+                <div class="admin-card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h2 style="margin:0;">Employee Directory</h2>
+                        <div id="stats" style="color: var(--text-muted); font-size: 0.875rem;">Loading...</div>
+                    </div>
+
+                    <div class="search-bar">
+                        <input type="text" id="searchInput"
+                            placeholder="Search employees by name, ID, department, or email..."
+                            onkeyup="if(event.key === 'Enter') loadEmployees()">
+                        <button class="btn btn-primary" onclick="loadEmployees()">Search</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Department</th>
+                                    <th>Designation</th>
+                                    <th>Email</th>
+                                    <th>HOD Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeeTableBody">
+                                <tr>
+                                    <td colspan="6" style="text-align: center;">Loading employees...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="pagination-container">
+                        <div id="paginationInfo" style="font-size: 0.875rem; color: #64748b;">
+                            Showing 0 to 0 of 0 employees
+                        </div>
+                        <div class="pagination-buttons" id="paginationButtons">
+                            <!-- Buttons will be injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Assign HOD Modal -->
+    <div class="modal-overlay" id="assignModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Assign HOD</h2>
+                <button class="close-btn" onclick="closeModal()">×</button>
+            </div>
+
+            <div style="margin-bottom: 20px; background: #f8fafc; padding: 16px; border-radius: 6px;">
+                <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 4px;">Target Employee</div>
+                <div style="font-weight: 600; font-size: 1.1rem;" id="targetEmployeeName">Fatima Ali</div>
+                <div style="font-size: 0.875rem; color: var(--text-muted);" id="targetEmployeeInfo">1001 • IT Dept</div>
+            </div>
+
+            <div class="form-group">
+                <label>Search for HOD (Name, ID, Email)</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="hodSearchInput" placeholder="e.g. Usman Tariq or usman@ifl.com"
+                        onkeyup="if(event.key === 'Enter') searchHod()">
+                    <button class="btn btn-secondary" onclick="searchHod()">Find</button>
+                </div>
+            </div>
+
+            <div class="hod-search-results" id="hodSearchResults">
+                <!-- Results injected here -->
+            </div>
+
+            <form id="assignForm" onsubmit="submitAssignment(event)"
+                style="display: none; margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                <input type="hidden" id="selectedEmpId">
+                <input type="hidden" id="selectedHodId">
+
+                <div style="margin-bottom: 16px;">
+                    <strong>Selected HOD: </strong>
+                    <span id="confirmHodName" style="color: var(--primary);">None</span>
+                </div>
+
+                <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnConfirmAssign">Confirm Assignment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- View Details Modal -->
+    <div class="modal-overlay" id="detailsModal">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>Employee Details</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary" id="btnEditToggle" onclick="toggleEditMode()"
+                        style="font-size: 0.8rem; padding: 6px 12px;">Edit</button>
+                    <button class="close-btn" onclick="closeDetailsModal()">×</button>
+                </div>
+            </div>
+
+            <form id="editEmployeeForm" onsubmit="saveEmployeeDetails(event)">
+                <input type="hidden" id="editEmployeeId">
+                <div id="detailsContent"
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 0.9rem;">
+                    <!-- Loading text or details table will be injected here -->
+                </div>
+
+                <div id="editActions"
+                    style="margin-top: 24px; text-align: right; display: none; gap: 12px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeDetailsModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnSaveDetails">Save Changes</button>
+                </div>
+            </form>
+
+            <div id="viewActions" style="margin-top: 24px; text-align: right;">
+                <button class="btn btn-secondary" onclick="closeDetailsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State Management
+        let currentEmployees = [];
+        let pagination = {
+            page: 1,
+            limit: 10,
+            total: 0,
+            totalPages: 0
+        };
+        let currentSearchQuery = '';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadEmployees();
+
+            // Optimized Debounced Search
+            const searchInput = document.getElementById('searchInput');
+            searchInput.addEventListener('input', debounce(() => {
+                const query = searchInput.value.trim();
+                if (query !== currentSearchQuery) {
+                    currentSearchQuery = query;
+                    loadEmployees(1); // Reset to page 1 on search
+                }
+            }, 300));
+        });
+
+        // Debounce Helper
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        async function loadEmployees(page = 1) {
+            const query = document.getElementById('searchInput').value;
+            const tbody = document.getElementById('employeeTableBody');
+            const stats = document.getElementById('stats');
+
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Searching...</td></tr>';
+
+            try {
+                const url = `/admin/employees?q=${encodeURIComponent(query)}&page=${page}&limit=${pagination.limit}`;
+                const res = await fetch(url);
+                const json = await res.json();
+
+                if (json.success) {
+                    currentEmployees = json.data;
+                    pagination = json.pagination;
+                    renderTable(json.data);
+                    renderPagination();
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: red;">Error: ${json.error}</td></tr>`;
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: red;">Network Error</td></tr>`;
+            }
+        }
+
+        function renderTable(employees) {
+            const tbody = document.getElementById('employeeTableBody');
+
+            if (employees.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 32px; color: #64748b;">No employees found matching your search.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = employees.map(emp => {
+                const statusBadge = emp.hodId
+                    ? `<span class="badge assigned" title="${emp.hodId}">${emp.hodName || emp.hodId}</span>`
+                    : `<span class="badge unassigned">Unassigned</span>`;
+
+                const actionBtn = emp.hodId
+                    ? `<button class="btn" style="padding: 6px 12px; font-size: 0.75rem; background: #fef2f2; color: #ef4444; border: 1px solid #fecaca;" onclick="removeHod('${emp.employeeId}', '${emp.name}')">Remove</button>
+                       <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="openAssignModal('${emp.employeeId}')">Update</button>
+                       <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="viewEmployeeDetails('${emp.employeeId}')">View</button>`
+                    : `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="openAssignModal('${emp.employeeId}')">Assign HOD</button>
+                       <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="viewEmployeeDetails('${emp.employeeId}')">View</button>`;
+
+                return `
+                <tr>
+                    <td><strong>${emp.employeeId}</strong></td>
+                    <td>${emp.name}</td>
+                    <td>${emp.department || '-'}</td>
+                    <td>${emp.designation || '-'}</td>
+                    <td>${emp.email || '-'}</td>
+                    <td>${statusBadge}</td>
+                    <td style="display: flex; gap: 8px;">${actionBtn}</td>
+                </tr>
+            `;
+            }).join('');
+        }
+
+        function renderPagination() {
+            const info = document.getElementById('paginationInfo');
+            const btns = document.getElementById('paginationButtons');
+            const stats = document.getElementById('stats');
+
+            const start = (pagination.page - 1) * pagination.limit + 1;
+            const end = Math.min(pagination.page * pagination.limit, pagination.total);
+
+            if (pagination.total === 0) {
+                info.innerText = 'No records found';
+                stats.innerText = 'Showing 0 employees';
+                btns.innerHTML = '';
+                return;
+            }
+
+            info.innerText = `Showing ${start} to ${end} of ${pagination.total} employees`;
+            stats.innerText = `Total: ${pagination.total} employees`;
+
+            let html = '';
+
+            // Previous Button
+            html += `<button class="page-btn" ${pagination.page === 1 ? 'disabled' : ''} onclick="loadEmployees(${pagination.page - 1})">Previous</button>`;
+
+            // Page Numbers (Smart Pagination)
+            const startPage = Math.max(1, pagination.page - 2);
+            const endPage = Math.min(pagination.totalPages, startPage + 4);
+
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="page-btn ${i === pagination.page ? 'active' : ''}" onclick="loadEmployees(${i})">${i}</button>`;
+            }
+
+            // Next Button
+            html += `<button class="page-btn" ${pagination.page === pagination.totalPages ? 'disabled' : ''} onclick="loadEmployees(${pagination.page + 1})">Next</button>`;
+
+            btns.innerHTML = html;
+        }
+
+        // Modal Logic
+        function openAssignModal(empId) {
+            const emp = currentEmployees.find(e => e.employeeId === empId);
+            if (!emp) return;
+
+            document.getElementById('selectedEmpId').value = emp.employeeId;
+            document.getElementById('targetEmployeeName').innerText = emp.name;
+            document.getElementById('targetEmployeeInfo').innerText = `${emp.employeeId} • ${emp.department || 'No Dept'}`;
+
+            // Reset Search
+            document.getElementById('hodSearchInput').value = '';
+            document.getElementById('hodSearchResults').style.display = 'none';
+            document.getElementById('assignForm').style.display = 'none';
+
+            document.getElementById('assignModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('assignModal').classList.remove('active');
+        }
+
+        async function searchHod() {
+            const query = document.getElementById('hodSearchInput').value;
+            const resultsDiv = document.getElementById('hodSearchResults');
+            const targetEmpId = document.getElementById('selectedEmpId').value;
+
+            if (query.length < 2) {
+                alert("Please enter at least 2 characters to search.");
+                return;
+            }
+
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<div style="padding: 16px; text-align: center;">Searching...</div>';
+
+            try {
+                const res = await fetch(`/admin/employees?q=${encodeURIComponent(query)}&limit=10`);
+                const json = await res.json();
+
+                if (json.success && json.data.length > 0) {
+                    resultsDiv.innerHTML = json.data.map(hod => {
+                        if (hod.employeeId === targetEmpId) return ''; // Skip self
+
+                        return `
+                        <div class="hod-result-item" onclick="selectHod('${hod.employeeId}', '${hod.name}')">
+                            <div>
+                                <div style="font-weight: 600;">${hod.name}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">${hod.employeeId} • ${hod.department || 'No Dept'} • ${hod.email || 'No Email'}</div>
+                            </div>
+                            <button type="button" class="btn btn-secondary" style="padding: 4px 12px; font-size: 0.75rem;">Select</button>
+                        </div>
+                    `;
+                    }).join('') || '<div style="padding: 16px; text-align: center;">No valid distinct matches found.</div>';
+                } else {
+                    resultsDiv.innerHTML = '<div style="padding: 16px; text-align: center;">No matches found.</div>';
+                }
+            } catch (err) {
+                resultsDiv.innerHTML = '<div style="padding: 16px; text-align: center; color: red;">Error searching</div>';
+            }
+        }
+
+        function selectHod(hodId, hodName) {
+            document.getElementById('selectedHodId').value = hodId;
+            document.getElementById('confirmHodName').innerText = `${hodName} (${hodId})`;
+            document.getElementById('assignForm').style.display = 'block';
+        }
+
+        async function submitAssignment(e) {
+            e.preventDefault();
+            const empId = document.getElementById('selectedEmpId').value;
+            const hodId = document.getElementById('selectedHodId').value;
+            const btn = document.getElementById('btnConfirmAssign');
+
+            btn.disabled = true;
+            btn.innerText = 'Assigning...';
+
+            try {
+                const res = await fetch('/admin/assign-hod', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ employeeId: empId, hodId: hodId })
+                });
+                const json = await res.json();
+
+                if (json.success) {
+                    alert(json.message);
+                    closeModal();
+                    loadEmployees(); // Reload table
+                } else {
+                    alert(`Error: ${json.error}`);
+                }
+            } catch (err) {
+                alert('Network error while assigning HOD');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Confirm Assignment';
+            }
+        }
+
+        async function removeHod(empId, empName) {
+            if (!confirm(`Are you sure you want to remove the HOD assignment from ${empName}?`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/admin/remove-hod', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ employeeId: empId })
+                });
+                const json = await res.json();
+
+                if (json.success) {
+                    alert(json.message);
+                    loadEmployees();
+                } else {
+                    alert(`Error: ${json.error}`);
+                }
+            } catch (err) {
+                alert('Network error while removing HOD');
+            }
+        }
+
+        let currentViewedEmployee = null;
+        let isEditMode = false;
+
+        async function viewEmployeeDetails(empId) {
+            document.getElementById('detailsContent').innerHTML = 'Loading details...';
+            document.getElementById('detailsModal').classList.add('active');
+            document.getElementById('editEmployeeId').value = empId;
+
+            // Reset to view mode
+            isEditMode = false;
+            document.getElementById('btnEditToggle').innerText = 'Edit';
+            document.getElementById('editActions').style.display = 'none';
+            document.getElementById('viewActions').style.display = 'block';
+
+            try {
+                const res = await fetch(`/admin/employee/${empId}`);
+                const json = await res.json();
+                if (json.success) {
+                    currentViewedEmployee = json.data;
+                    renderDetailsContent(false);
+                } else {
+                    document.getElementById('detailsContent').innerHTML = `<div style="color: red;">Error: ${json.error}</div>`;
+                }
+            } catch (err) {
+                document.getElementById('detailsContent').innerHTML = `<div style="color: red;">Network error while fetching details.</div>`;
+            }
+        }
+
+        function toggleEditMode() {
+            if (!currentViewedEmployee) return;
+            isEditMode = !isEditMode;
+
+            document.getElementById('btnEditToggle').innerText = isEditMode ? 'Cancel Edit' : 'Edit';
+            document.getElementById('editActions').style.display = isEditMode ? 'flex' : 'none';
+            document.getElementById('viewActions').style.display = isEditMode ? 'none' : 'block';
+
+            renderDetailsContent(isEditMode);
+        }
+
+        function renderDetailsContent(editMode) {
+            const emp = currentViewedEmployee;
+
+            // Critical un-editable fields for system safety
+            const readonlyKeys = ['employeeId', 'createdAt', 'updatedAt'];
+
+            // Group fields logically
+            const groups = [
+                {
+                    title: "Basic Information",
+                    keys: ['employeeId', 'name', 'fatherName', 'email', 'mobile', 'gender', 'dateOfBirth', 'cnic', 'bloodGroup']
+                },
+                {
+                    title: "Employment Details",
+                    keys: ['designation', 'mainDept', 'status', 'joiningDate', 'location', 'unit', 'employeeType', 'assignmentCategory', 'employmentCategory', 'payroll']
+                },
+                {
+                    title: "Organization Structure",
+                    keys: ['managerName', 'managerId', 'managerDesignation', 'managerEmail', 'hodId', 'orgElementName', 'assignmentNumber']
+                },
+                {
+                    title: "System & Other",
+                    keys: ['personId', 'extension', 'rfid', 'erpUser', 'pposDateStart', 'lastResignedDate', 'actualTerminationDate', 'createdAt', 'updatedAt']
+                }
+            ];
+
+            let htmlArr = [];
+
+            // Add a cool header avatar/banner (just simple styling)
+            htmlArr.push(`
+                <div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; margin-bottom: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+                    <div style="width: 56px; height: 56px; border-radius: 50%; background: #0078D4; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 600;">
+                        ${(emp.name || '?').charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.25rem; color: #0f172a;">${emp.name || 'Unknown'}</h3>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">${emp.designation || 'No Designation'} • ${emp.mainDept || 'No Department'}</div>
+                    </div>
+                </div>
+            `);
+
+            groups.forEach(group => {
+                // Determine if group has any true values (skip empty groups in view mode)
+                let visibleKeys = group.keys.filter(k => (emp[k] !== null && emp[k] !== undefined && emp[k] !== '') || editMode);
+
+                if (visibleKeys.length > 0) {
+                    htmlArr.push(`<div style="grid-column: 1 / -1; font-weight: 700; color: #334155; margin-top: 16px; margin-bottom: 8px; font-size: 1.05rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px;">${group.title}</div>`);
+
+                    visibleKeys.forEach(key => {
+                        const isReadOnly = readonlyKeys.includes(key);
+                        const val = emp[key] === null ? '' : emp[key];
+
+                        // User-friendly label formatting (camelCase to Title Case)
+                        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, function (str) { return str.toUpperCase(); });
+
+                        let fieldContent = `<div style="margin-top: 4px; color: #0f172a; font-weight: 500; min-height: 20px;">${val || '-'}</div>`;
+
+                        if (editMode) {
+                            fieldContent = `
+                            <div style="margin-top: 4px;">
+                                <input type="text" name="${key}" value="${val}" ${isReadOnly ? 'readonly title="This field cannot be edited."' : ''} 
+                                    style="width: 100%; padding: 8px 12px; border: 1px solid ${isReadOnly ? '#e2e8f0' : '#cbd5e1'}; border-radius: 6px; background: ${isReadOnly ? '#f8fafc' : 'white'}; font-family: inherit; box-sizing: border-box;"
+                                    placeholder="Enter ${label.toLowerCase()}">
+                            </div>`;
+                        }
+
+                        htmlArr.push(`
+                            <div style="margin-bottom: 12px; padding: 12px; background: #faf9f8; border-radius: 8px; border: 1px solid transparent; ${editMode && !isReadOnly ? 'border-color: #cbd5e1; background: #fff;' : ''}">
+                                <div style="font-weight: 600; color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">${label}</div>
+                                ${fieldContent}
+                            </div>
+                        `);
+                    });
+                }
+            });
+
+            document.getElementById('detailsContent').innerHTML = htmlArr.join('');
+        }
+
+        async function saveEmployeeDetails(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnSaveDetails');
+            const empId = document.getElementById('editEmployeeId').value;
+
+            // Gather form data into an object
+            const formData = new FormData(document.getElementById('editEmployeeForm'));
+            const payload = {};
+            formData.forEach((value, key) => {
+                if (key !== 'employeeId') { // don't override ID
+                    payload[key] = value || null;
+                }
+            });
+
+            btn.disabled = true;
+            btn.innerText = 'Saving...';
+
+            try {
+                const res = await fetch(`/admin/employee/${empId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const json = await res.json();
+
+                if (json.success) {
+                    alert('Employee updated successfully.');
+                    closeDetailsModal();
+                    loadEmployees(); // Refresh list to reflect changes
+                } else {
+                    alert(`Error: ${json.error}`);
+                }
+            } catch (err) {
+                alert('Network error while saving employee details');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Save Changes';
+            }
+        }
+
+        function closeDetailsModal() {
+            document.getElementById('detailsModal').classList.remove('active');
+        }
+    </script>
+
+    <%- include('../partials/footer') %>

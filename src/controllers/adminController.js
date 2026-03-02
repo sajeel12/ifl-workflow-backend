@@ -1,0 +1,270 @@
+import Employee from '../models/Employee.js';
+import SyncLog from '../models/SyncLog.js';
+import oracleSyncService from '../services/oracleSyncService.js';
+import { Op } from 'sequelize';
+import cronService from '../services/cronService.js';
+
+// State to remember current config (would usually be in DB)
+let currentCronConfig = {
+    enabled: false,
+    expression: '0 2 * * *' // Default Daily at 2 AM
+};
+
+class AdminController {
+    /**
+     * View: Render the HOD Panel EJS Template
+     */
+    renderHodPanel(req, res) {
+        res.render('pages/admin_hod_panel', { activeTab: 'hod' });
+    }
+
+    /**
+     * View: Render the System Settings / Sync Panel EJS Template
+     */
+    async renderSettingsPanel(req, res) {
+        try {
+            // Fetch the last 10 sync logs
+            const syncLogs = await SyncLog.findAll({
+                limit: 10,
+                order: [['createdAt', 'DESC']]
+            });
+            res.render('pages/admin_settings_panel', {
+                activeTab: 'settings',
+                syncLogs,
+                config: currentCronConfig
+            });
+        } catch (error) {
+            console.error('Error fetching sync logs:', error);
+            res.render('pages/admin_settings_panel', {
+                activeTab: 'settings',
+                syncLogs: [],
+                config: currentCronConfig
+            });
+        }
+    }
+
+    /**
+     * API: Search/List Employees
+     */
+    async getEmployeeDetails(req, res) {
+        try {
+            const { id } = req.params;
+            const employee = await Employee.findByPk(id);
+            if (!employee) {
+                return res.status(404).json({ success: false, error: 'Employee not found' });
+            }
+
+            let hodName = null;
+            if (employee.hodId) {
+                const hod = await Employee.findByPk(employee.hodId, { attributes: ['name'] });
+                if (hod) hodName = hod.name;
+            }
+
+            // Return full data
+            res.json({ success: true, data: { ...employee.toJSON(), hodName } });
+        } catch (error) {
+            console.error('Error fetching employee details:', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch employee details' });
+        }
+    }
+
+    /**
+     * API: Update Employee Details
+     */
+    async updateEmployeeDetails(req, res) {
+        try {
+            const { id } = req.params;
+            const updateData = req.body;
+
+            const employee = await Employee.findByPk(id);
+            if (!employee) {
+                return res.status(404).json({ success: false, error: 'Employee not found' });
+            }
+
+            // Prevent changing the employeeId or security constraints
+            delete updateData.employeeId;
+            delete updateData.createdAt;
+            delete updateData.updatedAt;
+
+            await employee.update(updateData);
+
+            res.json({ success: true, message: 'Employee updated successfully', data: employee });
+        } catch (error) {
+            console.error('Error updating employee:', error);
+            res.status(500).json({ success: false, error: 'Failed to update employee details' });
+        }
+    }
+
+    /**
+     * API: Search/List Employees
+     */
+    async searchEmployees(req, res) {
+        try {
+            const { q, page = 1, limit = 10 } = req.query;
+            const limitInt = parseInt(limit, 10);
+            const pageInt = parseInt(page, 10);
+            const offset = (pageInt - 1) * limitInt;
+
+            const whereClause = {};
+            if (q) {
+                const searchStr = `%${q}%`;
+                whereClause[Op.or] = [
+                    { employeeId: { [Op.like]: searchStr } },
+                    { name: { [Op.like]: searchStr } },
+                    { designation: { [Op.like]: searchStr } },
+                    { mainDept: { [Op.like]: searchStr } },
+                    { email: { [Op.like]: searchStr } }
+                ];
+            }
+
+            const { count, rows: employees } = await Employee.findAndCountAll({
+                where: whereClause,
+                limit: limitInt,
+                offset: offset,
+                order: [['name', 'ASC']],
+                attributes: ['employeeId', 'name', 'designation', 'mainDept', 'hodId', 'email']
+            });
+
+            const results = [];
+            for (let emp of employees) {
+                let hodName = null;
+                if (emp.hodId) {
+                    const hod = await Employee.findByPk(emp.hodId, { attributes: ['name'] });
+                    if (hod) hodName = hod.name;
+                }
+
+                results.push({
+                    employeeId: emp.employeeId,
+                    name: emp.name,
+                    designation: emp.designation,
+                    department: emp.mainDept,
+                    email: emp.email,
+                    hodId: emp.hodId,
+                    hodName: hodName
+                });
+            }
+
+            res.json({
+                success: true,
+                data: results,
+                pagination: {
+                    total: count,
+                    page: pageInt,
+                    limit: limitInt,
+                    totalPages: Math.ceil(count / limitInt)
+                }
+            });
+        } catch (error) {
+            console.error('Error searching employees:', error);
+            res.status(500).json({ success: false, error: 'Failed to search employees' });
+        }
+    }
+
+    /**
+     * API: Assign an HOD to an Employee
+     */
+    async assignHod(req, res) {
+        try {
+            const { employeeId, hodId } = req.body;
+
+            if (!employeeId || !hodId) {
+                return res.status(400).json({ success: false, error: 'Missing employeeId or hodId' });
+            }
+
+            // Prevent self-assignment
+            if (employeeId === hodId) {
+                return res.status(400).json({ success: false, error: 'An employee cannot be their own HOD' });
+            }
+
+            // Verify both exist
+            const employee = await Employee.findByPk(employeeId);
+            const hod = await Employee.findByPk(hodId);
+
+            if (!employee) return res.status(404).json({ success: false, error: `Employee ${employeeId} not found` });
+            if (!hod) return res.status(404).json({ success: false, error: `HOD ${hodId} not found` });
+
+            // Assign
+            employee.hodId = hodId;
+            await employee.save();
+
+            res.json({ success: true, message: `Successfully assigned ${hod.name} as HOD for ${employee.name}` });
+        } catch (error) {
+            console.error('Error assigning HOD:', error);
+            res.status(500).json({ success: false, error: 'Failed to assign HOD' });
+        }
+    }
+
+    /**
+     * API: Remove an HOD Assignment
+     */
+    async removeHod(req, res) {
+        try {
+            const { employeeId } = req.body;
+
+            if (!employeeId) {
+                return res.status(400).json({ success: false, error: 'Employee ID is required' });
+            }
+
+            const emp = await Employee.findByPk(employeeId);
+            if (!emp) {
+                return res.status(404).json({ success: false, error: 'Employee not found' });
+            }
+
+            emp.hodId = null;
+            await emp.save();
+
+            res.json({ success: true, message: `HOD assignment removed successfully for ${emp.name}` });
+
+        } catch (error) {
+            console.error('Remove HOD Error:', error);
+            res.status(500).json({ success: false, error: 'Failed to remove HOD' });
+        }
+    }
+
+    /**
+     * API: Trigger Manual HRMS Sync
+     */
+    async triggerManualSync(req, res) {
+        try {
+            oracleSyncService.runSync('MANUAL').catch(err => {
+                console.error('Async sync error:', err);
+            });
+
+            res.json({ success: true, message: 'Sync started successfully. Check logs for updates.' });
+        } catch (error) {
+            console.error('Trigger Sync Error:', error);
+            res.status(500).json({ success: false, error: 'Failed to start sync' });
+        }
+    }
+
+    /**
+     * API: Update Cron Schedule Configuration
+     */
+    async updateSyncConfig(req, res) {
+        try {
+            const { enabled, expression } = req.body;
+
+            currentCronConfig.enabled = enabled;
+            if (expression) {
+                currentCronConfig.expression = expression;
+            }
+
+            if (currentCronConfig.enabled) {
+                cronService.scheduleHrmsSync(currentCronConfig.expression);
+            } else {
+                cronService.stopHrmsSync();
+            }
+
+            res.json({
+                success: true,
+                message: enabled ? 'Automated Sync Scheduled' : 'Automated Sync Disabled',
+                config: currentCronConfig
+            });
+        } catch (error) {
+            console.error('Update Config Error:', error);
+            res.status(500).json({ success: false, error: 'Failed to update schedule config' });
+        }
+    }
+}
+
+export default new AdminController();
