@@ -7,11 +7,19 @@ import 'dotenv/config';
 // Initialize Thick Mode if ORACLE_CLIENT_DIR is provided
 try {
     if (process.env.ORACLE_CLIENT_DIR) {
-        oracledb.initOracleClient({ libDir: process.env.ORACLE_CLIENT_DIR });
-        logger.info(`[OracleSync] Oracle Thick Mode initialized using client at: ${process.env.ORACLE_CLIENT_DIR}`);
+        // Prevent re-initialization on watch-mode restarts
+        if (!oracledb.oracleClientVersionString) {
+            oracledb.initOracleClient({ libDir: process.env.ORACLE_CLIENT_DIR });
+            logger.info(`[OracleSync] Oracle Thick Mode initialized using client at: ${process.env.ORACLE_CLIENT_DIR}`);
+        } else {
+            logger.info(`[OracleSync] Oracle Thick Mode already initialized.`);
+        }
     }
 } catch (err) {
-    logger.error(`[OracleSync] Failed to initialize Oracle Thick Mode:`, err);
+    if (err.message && !err.message.includes('NJS-043')) {
+        // NJS-043 means already initialized
+        logger.error(`[OracleSync] Failed to initialize Oracle Thick Mode:`, err);
+    }
 }
 
 class OracleSyncService {
