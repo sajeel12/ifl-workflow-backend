@@ -16,9 +16,6 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         type: DataTypes.STRING,
         allowNull: true
     },
-    hrSubmittedAt: { type: DataTypes.DATE },
-    itSubmittedAt: { type: DataTypes.DATE },
-    dciDecidedAt: { type: DataTypes.DATE },
 
     // Section 1: Requestor Information (HR)
     employeeId: { type: DataTypes.STRING },

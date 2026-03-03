@@ -4,6 +4,16 @@ import SyncLog from '../models/SyncLog.js';
 import logger from '../utils/logger.js';
 import 'dotenv/config';
 
+// Initialize Thick Mode if ORACLE_CLIENT_DIR is provided
+try {
+    if (process.env.ORACLE_CLIENT_DIR) {
+        oracledb.initOracleClient({ libDir: process.env.ORACLE_CLIENT_DIR });
+        logger.info(`[OracleSync] Oracle Thick Mode initialized using client at: ${process.env.ORACLE_CLIENT_DIR}`);
+    }
+} catch (err) {
+    logger.error(`[OracleSync] Failed to initialize Oracle Thick Mode:`, err);
+}
+
 class OracleSyncService {
     async runSync(syncType = 'MANUAL') {
         const logEntry = await SyncLog.create({ syncType });

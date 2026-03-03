@@ -62,7 +62,7 @@ async function startServer() {
             logger.info(`Server running on port ${PORT}`);
         });
     } catch (err) {
-        logger.error(`Failed to start server: ${err.message}`);
+        logger.error(`Failed to start server: ${err.message}`, { error: err, stack: err.stack });
         process.exit(1);
     }
 }
