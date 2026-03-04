@@ -2,6 +2,7 @@ import Employee from '../models/Employee.js';
 import SyncLog from '../models/SyncLog.js';
 import oracleSyncService from '../services/oracleSyncService.js';
 import { Op } from 'sequelize';
+import sequelize from '../config/database.js';
 import cronService from '../services/cronService.js';
 
 // State to remember current config (would usually be in DB)
@@ -263,6 +264,100 @@ class AdminController {
         } catch (error) {
             console.error('Update Config Error:', error);
             res.status(500).json({ success: false, error: 'Failed to update schedule config' });
+        }
+    }
+
+    /**
+     * API: Get List of Departments with Employee Counts
+     */
+    async getDepartments(req, res) {
+        try {
+            // Fetch grouped departments and counts
+            const deptStats = await Employee.findAll({
+                attributes: [
+                    'mainDept',
+                    [sequelize.fn('COUNT', sequelize.col('employeeId')), 'employeeCount']
+                ],
+                group: ['mainDept'],
+                order: [['mainDept', 'ASC']],
+                raw: true // Required for complex aggregations in Sequelize to avoid model parsing errors
+            });
+
+            const results = [];
+            for (let stat of deptStats) {
+                // When raw: true is used, access properties directly instead of getDataValue
+                const deptName = stat.mainDept;
+                const count = stat.employeeCount;
+
+                // Skip null/empty departments if you want, or just label them
+                const displayDept = deptName || 'Unassigned Department';
+
+                // Find if there is a dominant HOD for this department
+                // For simplicity, let's just grab the HOD of the first employee in this dept
+                // A better approach would be to check if ALL employees share the same HOD.
+                let currentHodName = 'Mixed/None';
+                let currentHodId = null;
+
+                const sampleEmp = await Employee.findOne({
+                    where: { mainDept: deptName, hodId: { [Op.not]: null } }
+                });
+
+                if (sampleEmp) {
+                    const hod = await Employee.findByPk(sampleEmp.hodId, { attributes: ['name'] });
+                    if (hod) {
+                        currentHodName = hod.name;
+                        currentHodId = sampleEmp.hodId;
+                    }
+                }
+
+                results.push({
+                    departmentName: displayDept,
+                    originalDeptName: deptName,
+                    employeeCount: count,
+                    currentHodName,
+                    currentHodId
+                });
+            }
+
+            res.json({ success: true, data: results });
+        } catch (error) {
+            console.error('Error fetching departments:', error.message, error.stack);
+            res.status(500).json({ success: false, error: 'Failed to fetch departments', details: error.message });
+        }
+    }
+
+    /**
+     * API: Assign an HOD to all employees in a specific department
+     */
+    async assignDepartmentHod(req, res) {
+        try {
+            const { departmentName, hodId } = req.body;
+
+            if (departmentName === undefined || !hodId) {
+                return res.status(400).json({ success: false, error: 'Missing departmentName or hodId' });
+            }
+
+            // Verify HOD exists
+            const hod = await Employee.findByPk(hodId);
+            if (!hod) return res.status(404).json({ success: false, error: `HOD ${hodId} not found` });
+
+            // Handle the "Unassigned Department" case where originalDeptName might be null
+            const whereClause = departmentName === null ? { mainDept: null } : { mainDept: departmentName };
+
+            // Perform Bulk Update
+            const [updatedRows] = await Employee.update(
+                { hodId: hodId },
+                { where: whereClause }
+            );
+
+            res.json({
+                success: true,
+                message: `Successfully assigned ${hod.name} as HOD for ${updatedRows} employees in ${departmentName || 'Unassigned Department'}.`
+            });
+
+        } catch (error) {
+            console.error('Error assigning Department HOD:', error);
+            res.status(500).json({ success: false, error: 'Failed to assign HOD to department' });
         }
     }
 }

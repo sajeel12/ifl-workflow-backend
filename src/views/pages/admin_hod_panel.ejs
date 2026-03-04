@@ -244,44 +244,80 @@
                 <div class="admin-card">
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                        <h2 style="margin:0;">Employee Directory</h2>
+                        <h2 style="margin:0;">HOD Assignment</h2>
                         <div id="stats" style="color: var(--text-muted); font-size: 0.875rem;">Loading...</div>
                     </div>
 
-                    <div class="search-bar">
-                        <input type="text" id="searchInput"
-                            placeholder="Search employees by name, ID, department, or email..."
-                            onkeyup="if(event.key === 'Enter') loadEmployees()">
-                        <button class="btn btn-primary" onclick="loadEmployees()">Search</button>
+                    <!-- Tabs -->
+                    <div style="display: flex; border-bottom: 1px solid #e2e8f0; margin-bottom: 24px;">
+                        <button id="tab-individual" class="tab-btn active" onclick="switchTab('individual')"
+                            style="padding: 12px 24px; background: none; border: none; font-weight: 600; color: #0078D4; border-bottom: 2px solid #0078D4; cursor: pointer;">
+                            Individual Employees
+                        </button>
+                        <button id="tab-department" class="tab-btn" onclick="switchTab('department')"
+                            style="padding: 12px 24px; background: none; border: none; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer;">
+                            By Department (Bulk)
+                        </button>
                     </div>
 
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Name</th>
-                                    <th>Department</th>
-                                    <th>Designation</th>
-                                    <th>Email</th>
-                                    <th>HOD Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="employeeTableBody">
-                                <tr>
-                                    <td colspan="6" style="text-align: center;">Loading employees...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div class="pagination-container">
-                        <div id="paginationInfo" style="font-size: 0.875rem; color: #64748b;">
-                            Showing 0 to 0 of 0 employees
+                    <!-- Individual View -->
+                    <div id="view-individual">
+                        <div class="search-bar">
+                            <input type="text" id="searchInput"
+                                placeholder="Search employees by name, ID, department, or email..."
+                                onkeyup="if(event.key === 'Enter') loadEmployees()">
+                            <button class="btn btn-primary" onclick="loadEmployees()">Search</button>
                         </div>
-                        <div class="pagination-buttons" id="paginationButtons">
-                            <!-- Buttons will be injected here -->
+
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Department</th>
+                                        <th>Designation</th>
+                                        <th>Email</th>
+                                        <th>HOD Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="employeeTableBody">
+                                    <tr>
+                                        <td colspan="6" style="text-align: center;">Loading employees...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="pagination-container">
+                            <div id="paginationInfo" style="font-size: 0.875rem; color: #64748b;">
+                                Showing 0 to 0 of 0 employees
+                            </div>
+                            <div class="pagination-buttons" id="paginationButtons">
+                                <!-- Buttons will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Department View -->
+                    <div id="view-department" style="display: none;">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Department Name</th>
+                                        <th>Total Employees</th>
+                                        <th>Dominant HOD</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="departmentTableBody">
+                                    <tr>
+                                        <td colspan="4" style="text-align: center;">Loading departments...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -377,6 +413,9 @@
         };
         let currentSearchQuery = '';
 
+        let isDepartmentView = false;
+        let currentDepartments = [];
+
         document.addEventListener('DOMContentLoaded', () => {
             loadEmployees();
 
@@ -391,6 +430,30 @@
             }, 300));
         });
 
+        function switchTab(tabName) {
+            isDepartmentView = tabName === 'department';
+
+            // Tab styling
+            document.getElementById('tab-individual').className = isDepartmentView ? 'tab-btn' : 'tab-btn active';
+            document.getElementById('tab-department').className = isDepartmentView ? 'tab-btn active' : 'tab-btn';
+
+            const activeStyle = 'padding: 12px 24px; background: none; border: none; font-weight: 600; color: #0078D4; border-bottom: 2px solid #0078D4; cursor: pointer;';
+            const inactiveStyle = 'padding: 12px 24px; background: none; border: none; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer;';
+
+            document.getElementById('tab-individual').style = isDepartmentView ? inactiveStyle : activeStyle;
+            document.getElementById('tab-department').style = isDepartmentView ? activeStyle : inactiveStyle;
+
+            // View toggling
+            document.getElementById('view-individual').style.display = isDepartmentView ? 'none' : 'block';
+            document.getElementById('view-department').style.display = isDepartmentView ? 'block' : 'none';
+
+            if (isDepartmentView) {
+                loadDepartments();
+            } else {
+                loadEmployees(pagination.page);
+            }
+        }
+
         // Debounce Helper
         function debounce(func, wait) {
             let timeout;
@@ -402,6 +465,60 @@
                 clearTimeout(timeout);
                 timeout = setTimeout(later, wait);
             };
+        }
+
+        async function loadDepartments() {
+            const tbody = document.getElementById('departmentTableBody');
+            const stats = document.getElementById('stats');
+
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Loading departments...</td></tr>';
+
+            try {
+                const res = await fetch('/admin/departments');
+                const json = await res.json();
+
+                if (json.success) {
+                    currentDepartments = json.data;
+                    stats.innerText = `Total: ${json.data.length} departments`;
+                    renderDepartmentTable(json.data);
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">Error: ${json.error}</td></tr>`;
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">Network Error</td></tr>`;
+            }
+        }
+
+        function renderDepartmentTable(departments) {
+            const tbody = document.getElementById('departmentTableBody');
+
+            if (departments.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 32px; color: #64748b;">No departments found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = departments.map(d => {
+                const statusBadge = d.currentHodId
+                    ? `<span class="badge assigned" title="${d.currentHodId}">${d.currentHodName}</span>`
+                    : `<span class="badge unassigned">${d.currentHodName}</span>`;
+
+                // Keep original string safe for HTML injection
+                const safeDeptName = (d.originalDeptName || '').replace(/'/g, "\\'");
+
+                return `
+                <tr>
+                    <td><strong>${d.departmentName}</strong></td>
+                    <td>${d.employeeCount} employees</td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.75rem;" 
+                            onclick="openAssignModal(null, '${safeDeptName}', '${d.departmentName}')">
+                            Assign Department HOD
+                        </button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
         }
 
         async function loadEmployees(page = 1) {
@@ -501,13 +618,23 @@
         }
 
         // Modal Logic
-        function openAssignModal(empId) {
-            const emp = currentEmployees.find(e => e.employeeId === empId);
-            if (!emp) return;
+        let assignmentContext = { type: 'individual', targetId: null, targetName: '' };
 
-            document.getElementById('selectedEmpId').value = emp.employeeId;
-            document.getElementById('targetEmployeeName').innerText = emp.name;
-            document.getElementById('targetEmployeeInfo').innerText = `${emp.employeeId} • ${emp.department || 'No Dept'}`;
+        function openAssignModal(empId, deptOriginal = null, deptDisplay = null) {
+            if (empId) {
+                assignmentContext = { type: 'individual', targetId: empId };
+                const emp = currentEmployees.find(e => e.employeeId === empId);
+                if (!emp) return;
+
+                document.getElementById('selectedEmpId').value = emp.employeeId;
+                document.getElementById('targetEmployeeName').innerText = emp.name;
+                document.getElementById('targetEmployeeInfo').innerText = `${emp.employeeId} • ${emp.department || 'No Dept'}`;
+            } else {
+                assignmentContext = { type: 'department', targetId: deptOriginal, targetName: deptDisplay };
+                document.getElementById('selectedEmpId').value = deptOriginal; // We'll hijack this field
+                document.getElementById('targetEmployeeName').innerText = `Department: ${deptDisplay}`;
+                document.getElementById('targetEmployeeInfo').innerText = `Apply to all employees in this group`;
+            }
 
             // Reset Search
             document.getElementById('hodSearchInput').value = '';
@@ -568,25 +695,39 @@
 
         async function submitAssignment(e) {
             e.preventDefault();
-            const empId = document.getElementById('selectedEmpId').value;
+            const targetVal = document.getElementById('selectedEmpId').value;
             const hodId = document.getElementById('selectedHodId').value;
             const btn = document.getElementById('btnConfirmAssign');
 
             btn.disabled = true;
             btn.innerText = 'Assigning...';
 
+            let endpoint = '/admin/assign-hod';
+            let payload = { employeeId: targetVal, hodId: hodId };
+
+            if (assignmentContext.type === 'department') {
+                endpoint = '/admin/assign-department-hod';
+                // Because of how empty strings/nulls represent "Unassigned Department"
+                payload = { departmentName: targetVal === "null" || targetVal === '' ? null : targetVal, hodId: hodId };
+            }
+
             try {
-                const res = await fetch('/admin/assign-hod', {
+                const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ employeeId: empId, hodId: hodId })
+                    body: JSON.stringify(payload)
                 });
                 const json = await res.json();
 
                 if (json.success) {
                     alert(json.message);
                     closeModal();
-                    loadEmployees(); // Reload table
+
+                    if (assignmentContext.type === 'department') {
+                        loadDepartments();
+                    } else {
+                        loadEmployees(pagination.page); // Reload table
+                    }
                 } else {
                     alert(`Error: ${json.error}`);
                 }
