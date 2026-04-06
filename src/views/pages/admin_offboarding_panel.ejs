@@ -1,0 +1,473 @@
+<%- include('../partials/header') %>
+    <link rel="stylesheet" href="/css/modern.css">
+    <style>
+        body {
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+        }
+
+        /* Admin Panel Specific Styles */
+        .admin-wrapper {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            background: #faf9f8;
+        }
+
+        .admin-sidebar {
+            width: 260px;
+            background: #ffffff;
+            border-right: 1px solid #e2e8f0;
+            padding: 24px 0;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+
+        .admin-main {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+        }
+
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .admin-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: 6px;
+            color: #64748b;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            color: #0078D4;
+            background: #f0f6ff;
+        }
+
+        .tab-btn:hover:not(.active) {
+            background: #f1f5f9;
+        }
+
+        /* Forms Elements */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        .form-control {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            margin-top: 16px;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            font-weight: 600;
+            color: var(--text-muted);
+            background: var(--bg-body);
+        }
+
+        /* Status Pills */
+        .status-pill {
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .status-pending { background: #fef08a; color: #854d0e; }
+        .status-completed { background: #bbf7d0; color: #166534; }
+    </style>
+
+    <header class="app-header"
+        style="flex-shrink: 0; z-index: 1000; background: #0078D4; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1); color: white;">
+        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
+            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
+            <div class="app-title">
+                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">IFL Admin Portal</h1>
+                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">System Management</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="admin-wrapper">
+        <!-- Left Sidebar -->
+        <aside class="admin-sidebar">
+            <div style="padding: 0 24px 16px; font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
+                Administration</div>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                <li>
+                    <a href="/admin/hod-panel"
+                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
+                        <span style="margin-right: 12px; font-size: 1.2rem;">👥</span> HOD Assignment
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/settings"
+                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
+                        <span style="margin-right: 12px; font-size: 1.2rem;">🔄</span> HRMS Sync
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/offboarding"
+                        style="display: flex; align-items: center; padding: 12px 24px; color: #0078D4; background: #f0f6ff; font-weight: 600; text-decoration: none; border-right: 3px solid #0078D4;">
+                        <span style="margin-right: 12px; font-size: 1.2rem;">🚪</span> Offboarding
+                    </a>
+                </li>
+                <li>
+                    <a href="#"
+                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
+                        <span style="margin-right: 12px; font-size: 1.2rem;">📊</span> Audit Logs
+                    </a>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="admin-main">
+            <div class="admin-container">
+                <div class="admin-card">
+                    <h2 style="margin-top:0;">Employee Offboarding Workflow</h2>
+                    <p style="color:var(--text-muted);">Manage requests to revoke AD and Physical Access for departing employees.</p>
+
+                    <div class="tabs">
+                        <button class="tab-btn active" onclick="switchTab('initiate')">Initiate Request</button>
+                        <button class="tab-btn" onclick="switchTab('manager')">Manager Approval</button>
+                        <button class="tab-btn" onclick="switchTab('system')">System Team Tasks</button>
+                        <button class="tab-btn" onclick="switchTab('history')">History</button>
+                    </div>
+
+                    <div id="tab-initiate" class="tab-content">
+                        <h3>Initiate Offboarding</h3>
+                        <div class="form-group" style="max-width: 400px;">
+                            <label class="form-label">Employee ID</label>
+                            <input type="text" id="initEmployeeId" class="form-control" placeholder="Enter Employee ID (e.g. 1001)">
+                        </div>
+                        <button class="btn btn-primary" onclick="initiateOffboarding()">Submit Request</button>
+                        <div id="initiateMessage" style="margin-top: 12px;"></div>
+                    </div>
+
+                    <div id="tab-manager" class="tab-content" style="display:none;">
+                        <h3>Pending Manager Approval</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Req ID</th>
+                                    <th>Employee</th>
+                                    <th>Initiated By</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="managerTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="tab-system" class="tab-content" style="display:none;">
+                        <h3>Pending System Team Tasks</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Req ID</th>
+                                    <th>Employee</th>
+                                    <th>Department</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="systemTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="tab-history" class="tab-content" style="display:none;">
+                        <h3>All Offboarding Requests</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Req ID</th>
+                                    <th>Employee</th>
+                                    <th>Assigned IT Agent</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for Manager Approval -->
+    <div id="managerApprovalModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;">
+        <div class="admin-card" style="width: 500px; margin: 0; position: relative;">
+            <h3 style="margin-top: 0;">Approve Offboarding</h3>
+            <input type="hidden" id="modalManagerReqId">
+            <div class="form-group">
+                <label class="form-label">Assign to System Team Agent</label>
+                <select id="modalAgentSelect" class="form-control">
+                    <!-- Standard specific IT people for now -->
+                    <option value="">-- Select Agent --</option>
+                    <option value="IT_AGENT_1">John Doe (IT Agent 1)</option>
+                    <option value="IT_AGENT_2">Jane Smith (IT Agent 2)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Remarks</label>
+                <textarea id="modalManagerRemarks" class="form-control" rows="3"></textarea>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="document.getElementById('managerApprovalModal').style.display='none'">Cancel</button>
+                <button class="btn btn-primary" onclick="submitManagerApproval()">Approve & Assign</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for System Team Tasks -->
+    <div id="systemTaskModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;">
+        <div class="admin-card" style="width: 500px; margin: 0; position: relative;">
+            <h3 style="margin-top: 0;">Complete IT Tasks</h3>
+            <p>Revoke access for Employee: <strong id="modalSysEmpName"></strong></p>
+            <input type="hidden" id="modalSystemReqId">
+            
+            <div class="form-group" style="margin-top: 24px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="modalAdRevoked" style="width: 18px; height: 18px;">
+                    <span style="font-weight: 500;">AD Account Revoked (Email, Portals, Network, Printing)</span>
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="modalPhysRevoked" style="width: 18px; height: 18px;">
+                    <span style="font-weight: 500;">Physical Access Revoked (SmartXS, Doors)</span>
+                </label>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+                <label class="form-label">Notes (Optional)</label>
+                <textarea id="modalSysNotes" class="form-control" rows="2"></textarea>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                <button class="btn btn-secondary" onclick="document.getElementById('systemTaskModal').style.display='none'">Cancel</button>
+                <button class="btn btn-primary" onclick="submitSystemTask()">Save Progress & Complete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabId).style.display = 'block';
+
+            if (tabId === 'manager') loadManagerRequests();
+            if (tabId === 'system') loadSystemRequests();
+            if (tabId === 'history') loadHistoryRequests();
+        }
+
+        async function initiateOffboarding() {
+            const empId = document.getElementById('initEmployeeId').value;
+            const msgEl = document.getElementById('initiateMessage');
+            if (!empId) return;
+
+            try {
+                const res = await fetch('/api/offboarding/initiate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ employeeId: empId })
+                });
+                const data = await res.json();
+                if(data.success) {
+                    msgEl.style.color = 'green';
+                    msgEl.innerText = data.message;
+                    document.getElementById('initEmployeeId').value = '';
+                } else {
+                    msgEl.style.color = 'red';
+                    msgEl.innerText = data.error;
+                }
+            } catch(e) {
+                msgEl.style.color = 'red';
+                msgEl.innerText = 'Network error.';
+            }
+        }
+
+        async function loadManagerRequests() {
+            const tbody = document.getElementById('managerTableBody');
+            tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+            try {
+                const res = await fetch('/api/offboarding/pending-manager');
+                const data = await res.json();
+                if (!data.success || data.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4">No pending approvals.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.data.map(req => `
+                    <tr>
+                        <td>#${req.id}</td>
+                        <td>${req.fullName} (${req.employeeId})</td>
+                        <td>${req.initiatedBy}</td>
+                        <td><button class="btn btn-secondary" onclick="openManagerModal('${req.id}')" style="padding: 4px 12px;">Approve</button></td>
+                    </tr>
+                `).join('');
+            } catch(e) { console.error(e); }
+        }
+
+        function openManagerModal(id) {
+            document.getElementById('modalManagerReqId').value = id;
+            document.getElementById('managerApprovalModal').style.display = 'flex';
+        }
+
+        async function submitManagerApproval() {
+            const reqId = document.getElementById('modalManagerReqId').value;
+            const agentId = document.getElementById('modalAgentSelect').value;
+            const remarks = document.getElementById('modalManagerRemarks').value;
+
+            if(!agentId) { alert('Please select an agent'); return; }
+
+            try {
+                const res = await fetch('/api/offboarding/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ requestId: reqId, assignedSystemAgentId: agentId, managerRemarks: remarks })
+                });
+                const data = await res.json();
+                if(data.success) {
+                    document.getElementById('managerApprovalModal').style.display = 'none';
+                    loadManagerRequests();
+                } else {
+                    alert(data.error);
+                }
+            } catch(e) { alert('Network Error'); }
+        }
+
+        // --- System Team Methods ---
+        async function loadSystemRequests() {
+            const tbody = document.getElementById('systemTableBody');
+            tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+            try {
+                const res = await fetch('/api/offboarding/pending-system');
+                const data = await res.json();
+                if (!data.success || data.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4">No pending IT tasks.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.data.map(req => `
+                    <tr>
+                        <td>#${req.id}</td>
+                        <td>${req.fullName} (${req.employeeId})</td>
+                        <td>${req.department}</td>
+                        <td><button class="btn btn-primary" onclick="openSystemModal('${req.id}', '${req.fullName}', ${req.adRevoked}, ${req.physicalAccessRevoked})" style="padding: 4px 12px;">Tasks</button></td>
+                    </tr>
+                `).join('');
+            } catch(e) { console.error(e); }
+        }
+        
+        function openSystemModal(id, name, ad, phys) {
+            document.getElementById('modalSystemReqId').value = id;
+            document.getElementById('modalSysEmpName').innerText = name;
+            document.getElementById('modalAdRevoked').checked = ad;
+            document.getElementById('modalPhysRevoked').checked = phys;
+            document.getElementById('systemTaskModal').style.display = 'flex';
+        }
+
+        async function submitSystemTask() {
+            const reqId = document.getElementById('modalSystemReqId').value;
+            const adCheck = document.getElementById('modalAdRevoked').checked;
+            const physCheck = document.getElementById('modalPhysRevoked').checked;
+            const notes = document.getElementById('modalSysNotes').value;
+
+            try {
+                const res = await fetch('/api/offboarding/complete-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ requestId: reqId, adRevoked: adCheck, physicalAccessRevoked: physCheck, checklistNotes: notes })
+                });
+                const data = await res.json();
+                if(data.success) {
+                    document.getElementById('systemTaskModal').style.display = 'none';
+                    loadSystemRequests();
+                } else {
+                    alert(data.error);
+                }
+            } catch(e) { alert('Network Error'); }
+        }
+
+        // --- History Methods ---
+        async function loadHistoryRequests() {
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+            try {
+                const res = await fetch('/api/offboarding/all');
+                const data = await res.json();
+                if (!data.success || data.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4">No history found.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.data.map(req => `
+                    <tr>
+                        <td><a href="/api/offboarding/status/${req.id}" target="_blank" style="color: #0078D4; text-decoration: underline; font-weight: 600;">#${req.id}</a></td>
+                        <td>${req.fullName} (${req.employeeId})</td>
+                        <td>${req.assignedSystemAgentId || 'Unassigned'}</td>
+                        <td><span class="status-pill status-${req.status === 'Completed' ? 'completed' : 'pending'}">${req.status === 'Completed' ? 'Completed' : 'Pending'}</span></td>
+                    </tr>
+                `).join('');
+            } catch(e) { console.error(e); }
+        }
+
+        // On Load setup
+        document.addEventListener('DOMContentLoaded', () => {
+            // Optional: Auto-load a tab if needed, but Initiate is default.
+        });
+    </script>
+</body>
+</html>

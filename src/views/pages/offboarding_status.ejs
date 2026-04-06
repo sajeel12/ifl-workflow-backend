@@ -1,0 +1,208 @@
+<%- include('../partials/header', { title: 'Offboarding Status' }) %>
+    <link rel="stylesheet" href="/css/modern.css">
+    <style>
+        .timeline-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .field-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .field-value {
+            font-size: 16px;
+            font-weight: 500;
+            color: #0f172a;
+        }
+
+        .checklist-container {
+            margin-top: 32px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 24px;
+        }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+        }
+
+        .check-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .check-icon.done {
+            background-color: #10b981;
+        }
+
+        .check-icon.pending {
+            background-color: #cbd5e1;
+        }
+    </style>
+
+    <header class="app-header">
+        <div class="brand-section">
+            <div class="app-title">
+                <h1>Employee Offboarding Portal</h1>
+                <p style="margin: 0; color: #64748b; font-size: 0.9rem;">Status Tracking</p>
+            </div>
+        </div>
+        <div class="status-section">
+            <div class="status-badge" style="background: <%= request.status === 'Completed' ? '#10b981' : '#f59e0b' %>; color: white; padding: 6px 16px; border-radius: 99px; font-weight: 600;">
+                REQ #<%= request.id %> | <%= request.status %>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-container" style="max-width: 1000px; margin: 40px auto; padding: 0 20px;">
+        
+        <!-- Timeline Steps -->
+        <div class="steps-container" style="margin-bottom: 40px;">
+            <div class="steps">
+                <% steps.forEach((s, i) => { %>
+                    <div class="step-item <%= s.status %>">
+                        <div class="step-circle"><%= i + 1 %></div>
+                        <div class="step-label"><%= s.label %></div>
+                    </div>
+                <% }); %>
+            </div>
+        </div>
+
+            <div class="timeline-card">
+                <h2 style="margin-top: 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; color: #0f172a;">Offboarding Details</h2>
+                
+                <div class="info-grid">
+                    <div>
+                        <div class="field-label">Employee ID</div>
+                        <div class="field-value"><%= request.employeeId %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Full Name</div>
+                        <div class="field-value"><%= request.fullName %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Department</div>
+                        <div class="field-value"><%= request.department || 'N/A' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Initiated By</div>
+                        <div class="field-value"><%= request.initiatedBy %></div>
+                    </div>
+                </div>
+
+                <!-- Form Section based on Role -->
+                <% if (role === 'SystemManager') { %>
+                    <div class="checklist-container" style="background:#f0f9ff; padding:24px; border-radius:8px; border:1px solid #bae6fd;">
+                        <h3 style="margin-top:0; color:#0369a1;">Manager Approval Task</h3>
+                        <p style="color:#0ea5e9;">Please select an IT agent to assign this offboarding task to.</p>
+                        <form action="/api/offboarding/handle?token=<%= token %>" method="POST">
+                            <div class="form-group" style="margin-bottom: 16px;">
+                                <label class="field-label">Assign to System Team Agent</label>
+                                <select name="assignedSystemAgentId" required style="width:100%; padding:8px; border-radius:4px; border:1px solid #cbd5e1; font-size:1rem;">
+                                    <option value="">-- Select Agent --</option>
+                                    <option value="IT_AGENT_1">John Doe (IT Agent 1)</option>
+                                    <option value="IT_AGENT_2">Jane Smith (IT Agent 2)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 24px;">
+                                <label class="field-label">Manager Remarks (Optional)</label>
+                                <textarea name="managerRemarks" rows="3" style="width:100%; padding:8px; border-radius:4px; border:1px solid #cbd5e1; font-size:1rem;"></textarea>
+                            </div>
+                            <button type="submit" name="action" value="Reject" class="btn btn-primary" style="background:#ef4444; color:white; border:none; padding:10px 20px; border-radius:4px; cursor:pointer; font-weight:600; margin-right: 12px;">Reject</button>
+                            <button type="submit" name="action" value="Approve" class="btn btn-primary" style="background:#0284c7; color:white; border:none; padding:10px 20px; border-radius:4px; cursor:pointer; font-weight:600;">Approve & Assign Agent</button>
+                        </form>
+                    </div>
+
+                <% } else if (role === 'SystemTeam' || request.status === 'Completed') { %>
+                    <div class="checklist-container">
+                        <h3 style="margin-top: 0; color: #334155;">System Team Checklist</h3>
+                        <p style="color: #64748b; margin-bottom: 24px;">The following privileges must be revoked to finalize the offboarding process.</p>
+                        
+                        <% if (role === 'SystemTeam') { %>
+                            <form action="/api/offboarding/handle?token=<%= token %>" method="POST">
+                                <div class="check-item">
+                                    <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-size:1.1rem;">
+                                        <input type="checkbox" name="adRevoked" value="on" <%= request.adRevoked ? 'checked' : '' %> style="width:20px; height:20px;">
+                                        <span>Active Directory Account Revoked (Email, Portals, Windows, Printers)</span>
+                                    </label>
+                                </div>
+                                <div class="check-item">
+                                    <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-size:1.1rem;">
+                                        <input type="checkbox" name="physicalAccessRevoked" value="on" <%= request.physicalAccessRevoked ? 'checked' : '' %> style="width:20px; height:20px;">
+                                        <span>Physical Access Revoked (SmartXS Machine, Control Doors)</span>
+                                    </label>
+                                </div>
+                                <div class="form-group" style="margin-top: 24px;">
+                                    <label class="field-label">System Team Notes (Optional)</label>
+                                    <textarea name="checklistNotes" rows="2" style="width:100%; padding:8px; border-radius:4px; border:1px solid #cbd5e1; font-size:1rem;"><%= request.checklistNotes || '' %></textarea>
+                                </div>
+                                <div style="margin-top:24px;">
+                                    <button type="submit" name="action" value="completeTask" class="btn btn-primary" style="background:#10b981; color:white; border:none; padding:10px 20px; border-radius:4px; cursor:pointer; font-weight:600;">Save Progress & Complete Checklist</button>
+                                </div>
+                            </form>
+                        <% } else { %>
+                            <!-- Readonly display for history -->
+                            <div class="check-item">
+                                <div class="check-icon <%= request.adRevoked ? 'done' : 'pending' %>">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                                <span>Active Directory Account Revoked (Email, Portals, Windows, Printers)</span>
+                            </div>
+
+                            <div class="check-item">
+                                <div class="check-icon <%= request.physicalAccessRevoked ? 'done' : 'pending' %>">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                                <span>Physical Access Revoked (SmartXS Machine, Control Doors)</span>
+                            </div>
+                            
+                            <% if (request.checklistNotes) { %>
+                                <div style="margin-top: 24px; padding: 16px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;">
+                                    <div class="field-label" style="color: #d97706;">System Team Notes</div>
+                                    <div class="field-value" style="font-size: 0.95rem;"><%= request.checklistNotes %></div>
+                                </div>
+                            <% } %>
+                        <% } %>
+                    </div>
+                <% } %>
+
+                <% if (request.status === 'Completed') { %>
+                    <div style="margin-top: 32px; padding: 16px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; text-align: center;">
+                        <h3 style="color: #065f46; margin: 0 0 8px 0;">🎉 Offboarding Completed Successfully</h3>
+                        <p style="color: #047857; margin: 0;">Completed on <%= request.completedAt ? new Date(request.completedAt).toLocaleString() : 'N/A' %></p>
+                    </div>
+                <% } %>
+            </div>
+
+    </div>
+</body>
+</html>

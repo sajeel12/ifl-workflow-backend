@@ -3,6 +3,7 @@ import sequelize from './src/config/database.js';
 import logger from './src/utils/logger.js';
 import Employee from './src/models/Employee.js';
 import OnboardingRequest from './src/models/OnboardingRequest.js';
+import OffboardingRequest from './src/models/OffboardingRequest.js';
 import TimelineEvent from './src/models/TimelineEvent.js';
 import SyncLog from './src/models/SyncLog.js';
 

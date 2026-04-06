@@ -1,0 +1,37 @@
+<%- include('../partials/header', { title: 'Initiate Offboarding' }) %>
+    <link rel="stylesheet" href="/css/modern.css">
+
+    <header class="app-header">
+        <div class="brand-section">
+            <div class="app-title">
+                <h1>Employee Offboarding Form</h1>
+                <p style="margin: 0; color: #64748b; font-size: 0.9rem;">Start the access termination process</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-container" style="max-width: 600px; margin: 60px auto; padding: 0 20px;">
+        <div style="background: var(--bg-card); border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); padding: 40px;">
+            <h2 style="margin-top:0; margin-bottom: 24px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px;">Initiate Request</h2>
+            
+            <p style="color: #475569; margin-bottom: 24px;">Please provide the destination Employee ID to begin the technical offboarding process.</p>
+            
+            <form action="/api/offboarding/initiate" method="POST">
+                <div style="margin-bottom: 24px;">
+                    <label style="display:block; font-weight:600; color:#334155; margin-bottom:8px;">Employee ID</label>
+                    <input type="text" name="employeeId" required value="1001" placeholder="Enter Employee ID (e.g. 1001)" 
+                           style="width:100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 1rem;">
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 1.1rem; background: #0078D4; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                    Initiate Workflow
+                </button>
+            </form>
+            
+            <div style="text-align: center; margin-top: 24px; font-size: 0.9rem;">
+                <a href="/admin/offboarding" style="color: #64748b; text-decoration: none;">&larr; Back to Admin Dashboard</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

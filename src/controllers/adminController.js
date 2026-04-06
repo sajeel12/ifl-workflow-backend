@@ -20,6 +20,13 @@ class AdminController {
     }
 
     /**
+     * View: Render the Offboarding Panel EJS Template
+     */
+    renderOffboardingPanel(req, res) {
+        res.render('pages/admin_offboarding_panel', { activeTab: 'offboarding' });
+    }
+
+    /**
      * View: Render the System Settings / Sync Panel EJS Template
      */
     async renderSettingsPanel(req, res) {

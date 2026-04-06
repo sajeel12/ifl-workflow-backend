@@ -6,6 +6,7 @@ import * as approvalController from '../controllers/approvalController.js';
 import * as workflowTestController from '../controllers/workflowTestController.js';
 import { ssoMiddleware } from '../middleware/ssoMiddleware.js';
 import * as authController from '../controllers/authController.js';
+import * as offboardingController from '../controllers/offboardingController.js';
 
 
 router.post('/test/access-request', workflowTestController.createTestAccessRequest);
@@ -65,5 +66,16 @@ router.get('/ad-debug/:username', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// --- Offboarding Routes ---
+router.get('/offboarding/initiate', offboardingController.initiate);
+router.post('/offboarding/initiate', offboardingController.initiate);
+router.get('/offboarding/pending-manager', offboardingController.getPendingManager);
+router.get('/offboarding/pending-system', offboardingController.getPendingSystem);
+router.get('/offboarding/all', offboardingController.getAll);
+
+// Token-based Handle Routes
+router.get('/offboarding/handle', (req, res) => offboardingController.handleRequest(req, res));
+router.post('/offboarding/handle', (req, res) => offboardingController.handleRequest(req, res));
 
 export default router;

@@ -6,6 +6,7 @@ const router = express.Router();
 // Render Views
 router.get('/hod-panel', adminController.renderHodPanel);
 router.get('/settings', adminController.renderSettingsPanel);
+router.get('/offboarding', adminController.renderOffboardingPanel);
 
 // API endpoints internally for the admin section
 router.get('/employees', adminController.searchEmployees);
