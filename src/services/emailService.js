@@ -1,19 +1,26 @@
 import nodemailer from 'nodemailer';
 import logger from '../utils/logger.js';
 
-const transporter = nodemailer.createTransport({
+// Build transporter options
+const transporterOptions = {
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '25', 10),
     secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-    },
     tls: {
-        ciphers: 'SSLv3', // Often helps with Outlook/Office365
+        ciphers: 'SSLv3',
         rejectUnauthorized: false
     }
-});
+};
+
+// Only add auth section if a username is provided (Anonymous Relay if empty)
+if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    transporterOptions.auth = {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+    };
+}
+
+const transporter = nodemailer.createTransport(transporterOptions);
 
 
 export const sendApprovalEmail = async (toEmail, subject, requestDetails, approvalLink, requesterName, requesterEmail) => {
