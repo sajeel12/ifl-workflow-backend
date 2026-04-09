@@ -80,11 +80,13 @@
         .form-group {
             margin-bottom: 1rem;
         }
+
         .form-label {
             display: block;
             margin-bottom: 0.5rem;
             font-weight: 500;
         }
+
         .form-control {
             width: 100%;
             padding: 0.5rem;
@@ -99,10 +101,13 @@
             text-align: left;
             margin-top: 16px;
         }
-        th, td {
+
+        th,
+        td {
             padding: 12px;
             border-bottom: 1px solid var(--border-color);
         }
+
         th {
             font-weight: 600;
             color: var(--text-muted);
@@ -117,8 +122,16 @@
             font-weight: 600;
             display: inline-block;
         }
-        .status-pending { background: #fef08a; color: #854d0e; }
-        .status-completed { background: #bbf7d0; color: #166534; }
+
+        .status-pending {
+            background: #fef08a;
+            color: #854d0e;
+        }
+
+        .status-completed {
+            background: #bbf7d0;
+            color: #166534;
+        }
     </style>
 
     <header class="app-header"
@@ -135,7 +148,8 @@
     <div class="admin-wrapper">
         <!-- Left Sidebar -->
         <aside class="admin-sidebar">
-            <div style="padding: 0 24px 16px; font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
+            <div
+                style="padding: 0 24px 16px; font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
                 Administration</div>
             <ul style="list-style: none; padding: 0; margin: 0;">
                 <li>
@@ -156,12 +170,12 @@
                         <span style="margin-right: 12px; font-size: 1.2rem;">🚪</span> Offboarding
                     </a>
                 </li>
-                <li>
+                <!-- <li>
                     <a href="#"
                         style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
                         <span style="margin-right: 12px; font-size: 1.2rem;">📊</span> Audit Logs
                     </a>
-                </li>
+                </li> -->
             </ul>
         </aside>
 
@@ -170,7 +184,8 @@
             <div class="admin-container">
                 <div class="admin-card">
                     <h2 style="margin-top:0;">Employee Offboarding Workflow</h2>
-                    <p style="color:var(--text-muted);">Manage requests to revoke AD and Physical Access for departing employees.</p>
+                    <p style="color:var(--text-muted);">Manage requests to revoke AD and Physical Access for departing
+                        employees.</p>
 
                     <div class="tabs">
                         <button class="tab-btn active" onclick="switchTab('initiate')">Initiate Request</button>
@@ -183,7 +198,8 @@
                         <h3>Initiate Offboarding</h3>
                         <div class="form-group" style="max-width: 400px;">
                             <label class="form-label">Employee ID</label>
-                            <input type="text" id="initEmployeeId" class="form-control" placeholder="Enter Employee ID (e.g. 1001)">
+                            <input type="text" id="initEmployeeId" class="form-control"
+                                placeholder="Enter Employee ID (e.g. 1001)">
                         </div>
                         <button class="btn btn-primary" onclick="initiateOffboarding()">Submit Request</button>
                         <div id="initiateMessage" style="margin-top: 12px;"></div>
@@ -245,7 +261,8 @@
     </div>
 
     <!-- Modal for Manager Approval -->
-    <div id="managerApprovalModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;">
+    <div id="managerApprovalModal"
+        style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;">
         <div class="admin-card" style="width: 500px; margin: 0; position: relative;">
             <h3 style="margin-top: 0;">Approve Offboarding</h3>
             <input type="hidden" id="modalManagerReqId">
@@ -263,26 +280,28 @@
                 <textarea id="modalManagerRemarks" class="form-control" rows="3"></textarea>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" onclick="document.getElementById('managerApprovalModal').style.display='none'">Cancel</button>
+                <button class="btn btn-secondary"
+                    onclick="document.getElementById('managerApprovalModal').style.display='none'">Cancel</button>
                 <button class="btn btn-primary" onclick="submitManagerApproval()">Approve & Assign</button>
             </div>
         </div>
     </div>
 
     <!-- Modal for System Team Tasks -->
-    <div id="systemTaskModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;">
+    <div id="systemTaskModal"
+        style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;">
         <div class="admin-card" style="width: 500px; margin: 0; position: relative;">
             <h3 style="margin-top: 0;">Complete IT Tasks</h3>
             <p>Revoke access for Employee: <strong id="modalSysEmpName"></strong></p>
             <input type="hidden" id="modalSystemReqId">
-            
+
             <div class="form-group" style="margin-top: 24px;">
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                     <input type="checkbox" id="modalAdRevoked" style="width: 18px; height: 18px;">
                     <span style="font-weight: 500;">AD Account Revoked (Email, Portals, Network, Printing)</span>
                 </label>
             </div>
-            
+
             <div class="form-group">
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                     <input type="checkbox" id="modalPhysRevoked" style="width: 18px; height: 18px;">
@@ -296,7 +315,8 @@
             </div>
 
             <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
-                <button class="btn btn-secondary" onclick="document.getElementById('systemTaskModal').style.display='none'">Cancel</button>
+                <button class="btn btn-secondary"
+                    onclick="document.getElementById('systemTaskModal').style.display='none'">Cancel</button>
                 <button class="btn btn-primary" onclick="submitSystemTask()">Save Progress & Complete</button>
             </div>
         </div>
@@ -306,7 +326,7 @@
         function switchTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-            
+
             event.target.classList.add('active');
             document.getElementById('tab-' + tabId).style.display = 'block';
 
@@ -327,7 +347,7 @@
                     body: JSON.stringify({ employeeId: empId })
                 });
                 const data = await res.json();
-                if(data.success) {
+                if (data.success) {
                     msgEl.style.color = 'green';
                     msgEl.innerText = data.message;
                     document.getElementById('initEmployeeId').value = '';
@@ -335,7 +355,7 @@
                     msgEl.style.color = 'red';
                     msgEl.innerText = data.error;
                 }
-            } catch(e) {
+            } catch (e) {
                 msgEl.style.color = 'red';
                 msgEl.innerText = 'Network error.';
             }
@@ -359,7 +379,7 @@
                         <td><button class="btn btn-secondary" onclick="openManagerModal('${req.id}')" style="padding: 4px 12px;">Approve</button></td>
                     </tr>
                 `).join('');
-            } catch(e) { console.error(e); }
+            } catch (e) { console.error(e); }
         }
 
         function openManagerModal(id) {
@@ -372,7 +392,7 @@
             const agentId = document.getElementById('modalAgentSelect').value;
             const remarks = document.getElementById('modalManagerRemarks').value;
 
-            if(!agentId) { alert('Please select an agent'); return; }
+            if (!agentId) { alert('Please select an agent'); return; }
 
             try {
                 const res = await fetch('/api/offboarding/approve', {
@@ -381,13 +401,13 @@
                     body: JSON.stringify({ requestId: reqId, assignedSystemAgentId: agentId, managerRemarks: remarks })
                 });
                 const data = await res.json();
-                if(data.success) {
+                if (data.success) {
                     document.getElementById('managerApprovalModal').style.display = 'none';
                     loadManagerRequests();
                 } else {
                     alert(data.error);
                 }
-            } catch(e) { alert('Network Error'); }
+            } catch (e) { alert('Network Error'); }
         }
 
         // --- System Team Methods ---
@@ -409,9 +429,9 @@
                         <td><button class="btn btn-primary" onclick="openSystemModal('${req.id}', '${req.fullName}', ${req.adRevoked}, ${req.physicalAccessRevoked})" style="padding: 4px 12px;">Tasks</button></td>
                     </tr>
                 `).join('');
-            } catch(e) { console.error(e); }
+            } catch (e) { console.error(e); }
         }
-        
+
         function openSystemModal(id, name, ad, phys) {
             document.getElementById('modalSystemReqId').value = id;
             document.getElementById('modalSysEmpName').innerText = name;
@@ -433,13 +453,13 @@
                     body: JSON.stringify({ requestId: reqId, adRevoked: adCheck, physicalAccessRevoked: physCheck, checklistNotes: notes })
                 });
                 const data = await res.json();
-                if(data.success) {
+                if (data.success) {
                     document.getElementById('systemTaskModal').style.display = 'none';
                     loadSystemRequests();
                 } else {
                     alert(data.error);
                 }
-            } catch(e) { alert('Network Error'); }
+            } catch (e) { alert('Network Error'); }
         }
 
         // --- History Methods ---
@@ -455,13 +475,13 @@
                 }
                 tbody.innerHTML = data.data.map(req => `
                     <tr>
-                        <td><a href="/api/offboarding/status/${req.id}" target="_blank" style="color: #0078D4; text-decoration: underline; font-weight: 600;">#${req.id}</a></td>
+                        <td>#${req.id}</td>
                         <td>${req.fullName} (${req.employeeId})</td>
                         <td>${req.assignedSystemAgentId || 'Unassigned'}</td>
                         <td><span class="status-pill status-${req.status === 'Completed' ? 'completed' : 'pending'}">${req.status === 'Completed' ? 'Completed' : 'Pending'}</span></td>
                     </tr>
                 `).join('');
-            } catch(e) { console.error(e); }
+            } catch (e) { console.error(e); }
         }
 
         // On Load setup
@@ -469,5 +489,6 @@
             // Optional: Auto-load a tab if needed, but Initiate is default.
         });
     </script>
-</body>
-</html>
+    </body>
+
+    </html>
