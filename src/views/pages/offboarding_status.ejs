@@ -69,15 +69,16 @@
         }
     </style>
 
-    <header class="app-header">
-        <div class="brand-section">
+    <header class="app-header" style="background: #0078D4; color: white; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1);">
+        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
+            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
             <div class="app-title">
-                <h1>Employee Offboarding Portal</h1>
-                <p style="margin: 0; color: #64748b; font-size: 0.9rem;">Status Tracking</p>
+                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Employee Offboarding Portal</h1>
+                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">Status Tracking</p>
             </div>
         </div>
         <div class="status-section">
-            <div class="status-badge" style="background: <%= request.status === 'Completed' ? '#10b981' : '#f59e0b' %>; color: white; padding: 6px 16px; border-radius: 99px; font-weight: 600;">
+            <div class="status-badge" style="background: rgba(255,255,255,0.2); color: white; padding: 6px 16px; border: 1px solid rgba(255,255,255,0.3); border-radius: 99px; font-weight: 600;">
                 REQ #<%= request.id %> | <%= request.status %>
             </div>
         </div>
