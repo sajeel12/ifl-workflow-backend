@@ -109,7 +109,8 @@ export const handleITHODApproval = async (token, action) => {
         });
         await logTimelineEvent(request.id, 'IT HOD Approved', 'ITHOD', null);
         await generateAndStorePDF(request);
-        await sendStageEmail(DCI_IMPLEMENTER_EMAIL, request, newToken, 'DCI_IMPLEMENTATION');
+        const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER');
+        await sendStageEmail(implementerEmail, request, newToken, 'DCI_IMPLEMENTATION');
 
         return request;
     } catch (err) {
