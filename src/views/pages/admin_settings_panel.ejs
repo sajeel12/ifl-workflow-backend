@@ -1,266 +1,100 @@
-<%- include('../partials/header') %>
-    <link rel="stylesheet" href="/css/modern.css">
-    <style>
-        body {
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            margin: 0;
-        }
+<%- include('../partials/admin_shell_top', { activeTab: 'settings' }) %>
 
-        /* Admin Panel Specific Styles */
-        .admin-container {
-            max-width: 1200px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
-
-        .admin-card {
-            background: var(--bg-card);
-            border-radius: 12px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            padding: 32px;
-            margin-bottom: 24px;
-        }
-
-        .table-container {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-        }
-
-        th,
-        td {
-            padding: 16px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        th {
-            background-color: #f8fafc;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            font-size: 0.85rem;
-        }
-
-        .badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            background: #e0e7ff;
-            color: #3730a3;
-        }
-
-        .badge.completed {
-            background: #dcfce7;
-            color: #166534;
-        }
-
-        .badge.failed {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .badge.in_progress {
-            background: #fef3c7;
-            color: #92400e;
-        }
-    </style>
-
-    <header class="app-header"
-        style="flex-shrink: 0; z-index: 1000; background: #0078D4; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1); color: white;">
-        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
-            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
-            <div class="app-title">
-                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">IFL Admin Portal</h1>
-                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">System Management</p>
-            </div>
-        </div>
-    </header>
-
-    <div class="portal-wrapper" style="display: flex; flex: 1; min-height: 0; overflow: hidden; background: #faf9f8;">
-        <!-- Left Sidebar -->
-        <aside class="sidebar"
-            style="width: 260px; background: #ffffff; border-right: 1px solid #e2e8f0; padding: 24px 0; flex-shrink: 0; overflow-y: auto;">
-            <div
-                style="padding: 0 24px 16px; font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
-                Administration</div>
-            <ul style="list-style: none; padding: 0; margin: 0;">
-                <li>
-                    <a href="/admin/hod-panel"
-                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
-                        <span style="margin-right: 12px; font-size: 1.2rem;">👥</span> HOD Assignment
-                    </a>
-                </li>
-                <li>
-                    <a href="/admin/settings"
-                        style="display: flex; align-items: center; padding: 12px 24px; color: #0078D4; background: #f0f6ff; font-weight: 600; text-decoration: none; border-right: 3px solid #0078D4;">
-                        <span style="margin-right: 12px; font-size: 1.2rem;">🔄</span> HRMS Sync
-                    </a>
-                </li>
-                <li>
-                    <a href="/admin/offboarding"
-                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
-                        <span style="margin-right: 12px; font-size: 1.2rem;">🚪</span> Offboarding
-                    </a>
-                </li>
-                <!-- <li>
-                    <a href="#"
-                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
-                        <span style="margin-right: 12px; font-size: 1.2rem;">📊</span> Audit Logs
-                    </a>
-                </li> -->
-            </ul>
-        </aside>
-
-        <!-- Main Content Area -->
-        <main class="portal-main" style="flex: 1; padding: 32px; overflow-y: auto;">
-            <div class="admin-container" style="margin: 0 auto; max-width: 1200px; padding: 0;">
-
-                <div class="admin-card">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
-                        <div>
-                            <h2 style="margin:0;">HRMS Database Synchronization</h2>
-                            <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 4px;">
-                                Pull the latest employee details from Oracle HRMS (IFL_EMP_INFO_WF_SERVICE).
-                            </p>
-                        </div>
-                        <button class="btn btn-primary" id="syncBtn" onclick="triggerSync()">Force Sync Now</button>
-                    </div>
-
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 24px; margin-top: 24px;">
-                        <h3 style="margin-top: 0; margin-bottom: 16px;">Automated Schedule</h3>
-
-                        <%- include('../partials/cron_builder', { config: config }) %>
-
-                            <div style="margin-top: 16px;">
-                                <button class="btn btn-secondary" onclick="updateConfig()" id="btnSaveConfig">Save
-                                    Configuration</button>
-                            </div>
-                    </div>
-                </div>
-
-                <div class="admin-card">
-                    <h3 style="margin-top: 0; margin-bottom: 24px;">Sync History</h3>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Type</th>
-                                    <th>Status</th>
-                                    <th>Processed</th>
-                                    <th>Started</th>
-                                    <th>Completed</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <% if (syncLogs && syncLogs.length> 0) { %>
-                                    <% syncLogs.forEach(log=> { %>
-                                        <tr>
-                                            <td>#<%= log.id %>
-                                            </td>
-                                            <td>
-                                                <%= log.syncType %>
-                                            </td>
-                                            <td>
-                                                <span class="badge <%= log.syncStatus.toLowerCase() %>">
-                                                    <%= log.syncStatus %>
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <%= log.recordsProcessed %>
-                                            </td>
-                                            <td>
-                                                <%= new Date(log.startedAt).toLocaleString() %>
-                                            </td>
-                                            <td>
-                                                <%= log.completedAt ? new Date(log.completedAt).toLocaleString() : '-'
-                                                    %>
-                                            </td>
-                                        </tr>
-                                        <% }) %>
-                                            <% } else { %>
-                                                <tr>
-                                                    <td colspan="6"
-                                                        style="text-align: center; color: var(--text-muted);">No sync
-                                                        history available.</td>
-                                                </tr>
-                                                <% } %>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-            </div>
-        </main>
+  <!-- Page header -->
+  <div class="a-page-hd a-page-hd--row">
+    <div>
+      <h1 class="a-page-hd__title">HRMS Synchronization</h1>
+      <p class="a-page-hd__sub">Pull the latest employee data from Oracle HRMS (IFL_EMP_INFO_WF_SERVICE).</p>
     </div>
+    <button class="btn btn-primary" id="syncBtn" onclick="triggerSync()">↺ Force Sync Now</button>
+  </div>
 
-    <script>
-        // The enableSchedule checkbox logic is now inside cron_builder.ejs
+  <!-- Sync config card -->
+  <div class="a-card">
+    <div class="a-card__hd">
+      <div>
+        <h2 class="a-card__title">Automated Schedule</h2>
+        <p class="a-card__desc">Configure when HRMS sync runs automatically.</p>
+      </div>
+    </div>
+    <div class="a-card__body">
+      <%- include('../partials/cron_builder', { config: config }) %>
+      <div style="margin-top:20px;">
+        <button class="btn btn-primary" onclick="updateConfig()" id="btnSaveConfig">Save Schedule</button>
+      </div>
+    </div>
+  </div>
 
-        async function updateConfig() {
-            const btn = document.getElementById('btnSaveConfig');
-            const enabled = document.getElementById('enableSchedule').checked;
-            const expression = document.getElementById('cronExpression').value;
+  <!-- Sync history card -->
+  <div class="a-card">
+    <div class="a-card__hd">
+      <h2 class="a-card__title">Sync History</h2>
+      <span class="a-chip"><%= syncLogs ? syncLogs.length : 0 %> records</span>
+    </div>
+    <div class="a-card__body" style="padding:0;">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Processed</th>
+              <th>Started</th>
+              <th>Completed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (syncLogs && syncLogs.length > 0) { %>
+              <% syncLogs.forEach(log => { %>
+                <tr>
+                  <td style="color:var(--a-text-muted);">#<%= log.id %></td>
+                  <td><strong><%= log.syncType %></strong></td>
+                  <td><span class="badge <%= log.syncStatus.toLowerCase() %>"><%= log.syncStatus %></span></td>
+                  <td><%= log.recordsProcessed %></td>
+                  <td style="color:var(--a-text-muted);font-size:.82rem;"><%= new Date(log.startedAt).toLocaleString() %></td>
+                  <td style="color:var(--a-text-muted);font-size:.82rem;"><%= log.completedAt ? new Date(log.completedAt).toLocaleString() : '—' %></td>
+                </tr>
+              <% }); %>
+            <% } else { %>
+              <tr>
+                <td colspan="6" style="text-align:center;padding:40px;color:var(--a-text-muted);">No sync history available.</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-            btn.disabled = true;
-            btn.innerText = 'Saving...';
+<%- include('../partials/admin_shell_bottom') %>
 
-            try {
-                const res = await fetch('/admin/update-sync-config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled, expression })
-                });
-                const json = await res.json();
+<script>
+  async function updateConfig() {
+    const btn = document.getElementById('btnSaveConfig');
+    const enabled = document.getElementById('enableSchedule').checked;
+    const expression = document.getElementById('cronExpression').value;
+    btn.disabled = true; btn.innerText = 'Saving…';
+    try {
+      const res = await fetch('/admin/update-sync-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, expression })
+      });
+      const json = await res.json();
+      json.success ? alert(json.message) : alert(`Error: ${json.error}`);
+    } catch { alert('Network error while updating config'); }
+    finally { btn.disabled = false; btn.innerText = 'Save Schedule'; }
+  }
 
-                if (json.success) {
-                    alert(json.message);
-                } else {
-                    alert(`Error: ${json.error}`);
-                }
-            } catch (err) {
-                alert('Network error while updating config');
-            } finally {
-                btn.disabled = false;
-                btn.innerText = 'Save Settings';
-            }
-        }
-
-        async function triggerSync() {
-            const btn = document.getElementById('syncBtn');
-            btn.disabled = true;
-            btn.innerText = 'Syncing...';
-
-            try {
-                const res = await fetch('/admin/sync-now', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                const json = await res.json();
-
-                if (json.success) {
-                    alert(json.message);
-                    window.location.reload();
-                } else {
-                    alert(`Error: ${json.error}`);
-                    btn.disabled = false;
-                    btn.innerText = 'Sync Now';
-                }
-            } catch (err) {
-                alert('Network error while requesting sync');
-                btn.disabled = false;
-                btn.innerText = 'Sync Now';
-            }
-        }
-    </script>
-
-    <%- include('../partials/footer') %>
+  async function triggerSync() {
+    const btn = document.getElementById('syncBtn');
+    btn.disabled = true; btn.innerText = '↺ Syncing…';
+    try {
+      const res = await fetch('/admin/sync-now', { method:'POST', headers:{'Content-Type':'application/json'} });
+      const json = await res.json();
+      if (json.success) { alert(json.message); window.location.reload(); }
+      else { alert(`Error: ${json.error}`); btn.disabled = false; btn.innerText = '↺ Force Sync Now'; }
+    } catch { alert('Network error'); btn.disabled = false; btn.innerText = '↺ Force Sync Now'; }
+  }
+</script>

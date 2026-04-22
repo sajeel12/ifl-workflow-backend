@@ -121,7 +121,7 @@ const renderForm = async (req, res, token) => {
             employeeId: '1001',
             department: 'IT Dept',
             designation: 'Software Engineer',
-            projectUnit: 'Head Office',
+            location: 'Head Office',
             joiningDate: '2023-01-01',
             officeExtension: '1234',
             requestMode: 'New',

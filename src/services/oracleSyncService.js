@@ -52,29 +52,104 @@ class OracleSyncService {
                 const result = await connection.execute(sql, [], { outFormat: oracledb.OUT_FORMAT_OBJECT });
                 rows = result.rows || [];
                 logger.info(`[OracleSync] Fetched ${rows.length} records from Oracle.`);
+                // DEBUG: Print all column names and first record to identify field names
+                if (rows.length > 0) {
+                    console.log('[OracleSync DEBUG] Available columns:', Object.keys(rows[0]));
+                    console.log('[OracleSync DEBUG] First record sample:', JSON.stringify(rows[0], null, 2));
+                }
+                
+                // SPECIFIC DEBUG FOR 128793
+                const targetEmployee = rows.find(r => (r.EMPLOYEEID && r.EMPLOYEEID.toString() === '128793') || (r.EMPLOYEE_ID && r.EMPLOYEE_ID.toString() === '128793'));
+                if (targetEmployee) {
+                    console.log('\n=============================================');
+                    console.log('[OracleSync] RAW ORACLE RECORD FOR 128793:');
+                    console.log(JSON.stringify(targetEmployee, null, 2));
+                    console.log('=============================================\n');
+                } else {
+                    console.log('[OracleSync DEBUG] Employee 128793 NOT FOUND in Oracle sync results.');
+                }
             }
 
             const employeesToUpsert = rows.map(row => ({
-                employeeId: row.EMPLOYEEID?.toString() || row.EMPLOYEE_ID?.toString(),
-                name: row.NAME || row.EMPLOYEE_NAME,
-                designation: row.DESIGNATION,
-                mainDept: row.DEPARTMENT || row.MAIN_DEPT,
-                email: row.EMAIL || row.EMAIL_ADDRESS,
-                locationId: row.LOCATIONID || row.LOCATION,
-                managerId: row.MANAGERID || row.MANAGER_ID,
-                managerName: row.MANAGER || row.MANAGER_NAME
+                // --- Identity ---
+                employeeId:          row.EMPLOYEEID?.toString(),
+                personId:            row.PERSON_ID?.toString(),
+                assignmentNumber:    row.ASSIGNMENT_NUMBER,
+                rfid:                row.RFID,
+                erpUser:             row.ERP_USER,
+
+                // --- Personal ---
+                name:                row.NAME,
+                fatherName:          row.FATHERNAME,
+                dateOfBirth:         row.DATEOFBIRTH,
+                gender:              row.GENDER,
+                bloodGroup:          row.BLOODGROUP,
+                cnic:                row.CNIC,
+
+                // --- Job ---
+                designation:         row.DESIGNATIONID,   // Oracle uses DESIGNATIONID
+                mainDept:            row.MAIN_DEPT,
+                orgElementName:      row.ORGELEMENTNAME,
+                unit:                row.UNIT,
+                location:            row.LOCATIONID,
+                joiningDate:         row.JOININGDATE,
+                payroll:             row.PAYROLL,
+                assignmentCategory:  row.ASSIGNMENT_CATEGORY,
+                employeeCategory:    row.EMPLOYEE_CATEGORY,
+                employmentCategory:  row.EMPLOYMENT_CATEGORY,
+                employeeType:        row.EMPLOYEE_TYPE,
+
+                // --- Contact ---
+                email:               row.EMAIL_ADDRESS,
+                mobile:              row.MOBILE,
+                extension:           row.EXTENSION,
+
+                // --- Manager ---
+                managerId:           row.MANAGER_EMP_ID?.toString() || row.MANAGER_ID?.toString(),
+                managerName:         row.MANAGER,
+                managerDesignation:  row.MANAGER_DESIGNATION,
+                managerEmail:        row.MANAGER_EMAIL_ADDRESS,
+
+                // --- Dates ---
+                pposDateStart:           row.PPOS_DATE_START,
+                lastResignedDate:        row.LAST_RESIGNED_DATE,
+                actualTerminationDate:   row.ACTUAL_TERMINATION_DATE,
             })).filter(e => e.employeeId);
 
             // Perform Bulk Create / Upsert
             await Employee.bulkCreate(employeesToUpsert, {
                 updateOnDuplicate: [
+                    'personId',
                     'name',
+                    'fatherName',
+                    'dateOfBirth',
+                    'gender',
+                    'cnic',
+                    'bloodGroup',
+                    'email',
+                    'mobile',
+                    'extension',
                     'designation',
                     'mainDept',
-                    'email',
-                    'locationId',
+                    'orgElementName',
+                    'location',
+                    'unit',
+                    'joiningDate',
+                    'assignmentCategory',
+                    'employeeCategory',
+                    'employmentCategory',
+                    'employeeType',
+                    'assignmentNumber',
+                    'payroll',
+                    'rfid',
+                    'erpUser',
+                    'pposDateStart',
+                    'lastResignedDate',
+                    'actualTerminationDate',
                     'managerId',
-                    'managerName'
+                    'managerName',
+                    'managerDesignation',
+                    'managerEmail'
                 ]
             });
 

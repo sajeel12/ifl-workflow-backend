@@ -1,90 +1,74 @@
 import logger from '../utils/logger.js';
-import ADService from './adService.js';
 import HRMSService from './hrmsService.js';
+import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 
 const RecipientService = {
     /**
      * Resolve the final email address for a given role/context.
-     * Applies Test Mode redirection if enabled.
-     * 
-     * @param {string} roleKey - 'HOD', 'IT_OPS', 'DCI_MANAGER', etc.
-     * @param {object} context - { employeeId, department, etc. }
-     * @returns {Promise<string>}
+     * Reads approver emails from DB (admin-configurable), with env-var fallback.
+     * Applies Test Mode redirection if EMAIL_MODE=DEV.
+     *
+     * @param {string} roleKey - 'HOD' | 'IT_OPS' | 'DCI_TEAM' | 'OPS_TEAM' | 'DCI_MANAGER' | 'IT_HOD' | 'DCI_IMPLEMENTER'
+     * @param {object} context - { employeeId, department, ... }
+     * @returns {Promise<string|null>}
      */
     get: async (roleKey, context = {}) => {
         let recipientEmail = null;
         let source = 'UNKNOWN';
 
         try {
-            // 1. Resolve Logical Email
-            switch (roleKey) {
-                case 'IT_OPS':
-                    recipientEmail = await ADService.getGroupEmail('IT_Operations_DL');
-                    source = 'AD_Group';
-                    break;
-                case 'DCI_TEAM':
-                    recipientEmail = await ADService.getGroupEmail('DCI_Team_DL');
-                    source = 'AD_Group';
-                    break;
-                case 'OPS_TEAM':
-                    recipientEmail = await ADService.getGroupEmail('OPS_Support_DL');
-                    source = 'AD_Group';
-                    break;
+            if (roleKey === 'HOD') {
+                // HOD is per-employee — resolved dynamically via HRMS
+                const manager = await HRMSService.getManager(context.employeeId);
+                if (manager && manager.email) {
+                    recipientEmail = manager.email;
+                    source = 'HRMS';
+                } else {
+                    // Fallback: check if admin configured a HOD_FALLBACK
+                    const cfg = await WorkflowApproverConfig.findOne({ where: { roleKey: 'HOD_FALLBACK', isActive: true } });
+                    recipientEmail = cfg?.approverEmail || process.env.EMAIL_HOD_FALLBACK || null;
+                    source = cfg ? 'DB_Fallback' : 'ENV_Fallback';
+                }
+            } else {
+                // All other roles: read from admin-configured DB record
+                const cfg = await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
 
-                case 'HOD':
-                    // Connect to HRMS Service
-                    const manager = await HRMSService.getManager(context.employeeId);
-                    if (manager && manager.email) {
-                        recipientEmail = manager.email;
-                        source = 'HRMS_API';
-                    } else {
-                        // Fallback if no manager found in HRMS
-                        recipientEmail = 'hod.substitute@ifl.com';
-                        source = 'HRMS_Fallback';
+                if (cfg && cfg.approverEmail) {
+                    recipientEmail = cfg.approverEmail;
+                    source = 'DB';
+                } else {
+                    // Env-var fallback map
+                    const envFallbacks = {
+                        IT_OPS:          process.env.EMAIL_IT_OPS,
+                        DCI_TEAM:        process.env.EMAIL_DCI_TEAM,
+                        OPS_TEAM:        process.env.EMAIL_OPS_TEAM,
+                        DCI_MANAGER:     process.env.EMAIL_DCI_MANAGER,
+                        IT_HOD:          process.env.EMAIL_IT_HOD,
+                        DCI_IMPLEMENTER: process.env.EMAIL_DCI_IMPLEMENTER,
+                    };
+                    recipientEmail = envFallbacks[roleKey] || null;
+                    source = recipientEmail ? 'ENV' : 'NONE';
+
+                    if (!recipientEmail) {
+                        logger.warn(`[RecipientService] No email configured for role "${roleKey}". Set it in Admin > Workflow Approvers.`);
+                        return null;
                     }
-                    break;
-
-                case 'DCI_MANAGER':
-                    // Could be from DB Config or specific user
-                    recipientEmail = process.env.EMAIL_DCI_MANAGER || 'dci.manager@ifl.com';
-                    source = 'ENV';
-                    break;
-
-                case 'IT_HOD':
-                    recipientEmail = process.env.EMAIL_IT_HOD || 'it.hod@ifl.com';
-                    source = 'ENV';
-                    break;
-
-                case 'DCI_IMPLEMENTER':
-                    recipientEmail = 'dzi.implementer@ifl.com'; // Or pool of admins
-                    source = 'Hardcoded';
-                    break;
-
-                default:
-                    logger.warn(`[RecipientService] Unknown Role Key: ${roleKey}`);
-                    return null;
+                }
             }
 
-            // 2. Test Mode Interception
-            // Default to 'DEV' if not specified
+            // Test Mode interception
             const emailMode = process.env.EMAIL_MODE || 'DEV';
-
             if (emailMode === 'DEV') {
                 const safeEmail = process.env.TEST_RECIPIENT_EMAIL || 'developer@local.test';
-
-                logger.info(`[RecipientService] [TEST MODE] Redirecting ${roleKey} email.`);
-                logger.info(`   > Intended: ${recipientEmail} (${source})`);
-                logger.info(`   > Actual:   ${safeEmail}`);
-
+                logger.info(`[RecipientService] [TEST MODE] ${roleKey}: intended=${recipientEmail} (${source}) → actual=${safeEmail}`);
                 return safeEmail;
             }
 
-            logger.info(`[RecipientService] Resolved ${roleKey} to ${recipientEmail} from ${source}`);
+            logger.info(`[RecipientService] Resolved ${roleKey} → ${recipientEmail} (${source})`);
             return recipientEmail;
 
         } catch (err) {
             logger.error(`[RecipientService] Error resolving ${roleKey}: ${err.message}`);
-            // Fallback to safety
             return process.env.TEST_RECIPIENT_EMAIL || 'fallback@local.test';
         }
     }

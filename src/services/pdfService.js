@@ -36,7 +36,7 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         drawField('Department', request.department);
         drawField('Designation', request.designation);
         drawField('HOD', request.hod);
-        drawField('Project/Unit', request.projectUnit);
+        drawField('Location', request.location || request.projectUnit);
         drawField('Extension', request.officeExtension);
         drawField('Mobile', request.mobilePhone);
 

@@ -28,7 +28,7 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     mobilePhone: { type: DataTypes.STRING },
     requestMode: { type: DataTypes.STRING },
     hod: { type: DataTypes.STRING }, // Head of Department
-    projectUnit: { type: DataTypes.STRING },
+    location: { type: DataTypes.STRING },
 
     // Section 2: Services Required (HR)
     intranetAccess: { type: DataTypes.BOOLEAN, defaultValue: false },

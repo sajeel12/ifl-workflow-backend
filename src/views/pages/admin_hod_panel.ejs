@@ -1,935 +1,656 @@
-<%- include('../partials/header') %>
-    <link rel="stylesheet" href="/css/modern.css">
-    <style>
-        body {
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            margin: 0;
-        }
+<%- include('../partials/admin_shell_top', { activeTab: 'hod' }) %>
 
-        /* Admin Panel Specific Styles */
-        .admin-container {
-            max-width: 1200px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
+  <!-- Page header -->
+  <div class="a-page-hd a-page-hd--row">
+    <div>
+      <h1 class="a-page-hd__title">HOD Assignment</h1>
+      <p class="a-page-hd__sub">Manage Head of Department assignments for individual employees or entire departments.</p>
+    </div>
+    <span class="a-chip" id="stats">Loading…</span>
+  </div>
 
-        .admin-card {
-            background: var(--bg-card);
-            border-radius: 12px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            padding: 32px;
-        }
-
-        .search-bar {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-
-        .search-bar input {
-            flex: 1;
-            padding: 12px 16px;
-            font-size: 1rem;
-        }
-
-        .table-container {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-        }
-
-        th,
-        td {
-            padding: 16px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        th {
-            background-color: #f8fafc;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            font-size: 0.85rem;
-        }
-
-        .badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            background: #e0e7ff;
-            color: #3730a3;
-        }
-
-        .badge.assigned {
-            background: #dcfce7;
-            color: #166534;
-        }
-
-        .badge.unassigned {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        /* Modal Styles */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s;
-        }
-
-        .modal-overlay.active {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .modal {
-            background: white;
-            padding: 32px;
-            border-radius: 12px;
-            width: 100%;
-            max-width: 600px;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 16px;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            font-size: 1.25rem;
-            color: var(--text-main);
-        }
-
-        .close-btn {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            color: var(--text-muted);
-            cursor: pointer;
-        }
-
-        .hod-search-results {
-            max-height: 300px;
-            overflow-y: auto;
-            margin-top: 16px;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            display: none;
-        }
-
-        .hod-result-item {
-            padding: 12px 16px;
-            border-bottom: 1px solid #f1f5f9;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .hod-result-item:hover {
-            background-color: #f8fafc;
-        }
-
-        .pagination-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid #e2e8f0;
-        }
-
-        .pagination-buttons {
-            display: flex;
-            gap: 8px;
-        }
-
-        .page-btn {
-            padding: 8px 12px;
-            border: 1px solid #e2e8f0;
-            background: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            color: #475569;
-            transition: all 0.2s;
-        }
-
-        .page-btn:hover:not(:disabled) {
-            background-color: #f1f5f9;
-            border-color: #cbd5e1;
-        }
-
-        .page-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .page-btn.active {
-            background-color: #0078D4;
-            color: white;
-            border-color: #0078D4;
-        }
-    </style>
-
-    <header class="app-header"
-        style="flex-shrink: 0; z-index: 1000; background: #0078D4; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1); color: white;">
-        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
-            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
-            <div class="app-title">
-                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">IFL Admin Portal</h1>
-                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">System Management</p>
-            </div>
-        </div>
-    </header>
-
-    <div class="portal-wrapper" style="display: flex; flex: 1; min-height: 0; overflow: hidden; background: #faf9f8;">
-        <!-- Left Sidebar -->
-        <aside class="sidebar"
-            style="width: 260px; background: #ffffff; border-right: 1px solid #e2e8f0; padding: 24px 0; flex-shrink: 0; overflow-y: auto;">
-            <div
-                style="padding: 0 24px 16px; font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
-                Administration</div>
-            <ul style="list-style: none; padding: 0; margin: 0;">
-                <li>
-                    <a href="/admin/hod-panel"
-                        style="display: flex; align-items: center; padding: 12px 24px; color: #0078D4; background: #f0f6ff; font-weight: 600; text-decoration: none; border-right: 3px solid #0078D4;">
-                        <span style="margin-right: 12px; font-size: 1.2rem;">👥</span> HOD Assignment
-                    </a>
-                </li>
-                <li>
-                    <a href="/admin/settings"
-                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
-                        <span style="margin-right: 12px; font-size: 1.2rem;">🔄</span> HRMS Sync
-                    </a>
-                </li>
-                <li>
-                    <a href="/admin/offboarding"
-                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
-                        <span style="margin-right: 12px; font-size: 1.2rem;">🚪</span> Offboarding
-                    </a>
-                </li>
-                <!-- <li>
-                    <a href="#"
-                        style="display: flex; align-items: center; padding: 12px 24px; color: #475569; text-decoration: none; font-weight: 500;">
-                        <span style="margin-right: 12px; font-size: 1.2rem;">📊</span> Audit Logs
-                    </a>
-                </li> -->
-            </ul>
-        </aside>
-
-        <!-- Main Content Area -->
-        <main class="portal-main" style="flex: 1; padding: 32px; overflow-y: auto;">
-            <div class="admin-container" style="margin: 0 auto; max-width: 1200px; padding: 0;">
-                <div class="admin-card">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                        <h2 style="margin:0;">HOD Assignment</h2>
-                        <div id="stats" style="color: var(--text-muted); font-size: 0.875rem;">Loading...</div>
-                    </div>
-
-                    <!-- Tabs -->
-                    <div style="display: flex; border-bottom: 1px solid #e2e8f0; margin-bottom: 24px;">
-                        <button id="tab-individual" class="tab-btn active" onclick="switchTab('individual')"
-                            style="padding: 12px 24px; background: none; border: none; font-weight: 600; color: #0078D4; border-bottom: 2px solid #0078D4; cursor: pointer;">
-                            Individual Employees
-                        </button>
-                        <button id="tab-department" class="tab-btn" onclick="switchTab('department')"
-                            style="padding: 12px 24px; background: none; border: none; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer;">
-                            By Department (Bulk)
-                        </button>
-                    </div>
-
-                    <!-- Individual View -->
-                    <div id="view-individual">
-                        <div class="search-bar">
-                            <input type="text" id="searchInput"
-                                placeholder="Search employees by name, ID, department, or email..."
-                                onkeyup="if(event.key === 'Enter') loadEmployees()">
-                            <button class="btn btn-primary" onclick="loadEmployees()">Search</button>
-                        </div>
-
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Name</th>
-                                        <th>Department</th>
-                                        <th>Designation</th>
-                                        <th>Email</th>
-                                        <th>HOD Status</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="employeeTableBody">
-                                    <tr>
-                                        <td colspan="6" style="text-align: center;">Loading employees...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div class="pagination-container">
-                            <div id="paginationInfo" style="font-size: 0.875rem; color: #64748b;">
-                                Showing 0 to 0 of 0 employees
-                            </div>
-                            <div class="pagination-buttons" id="paginationButtons">
-                                <!-- Buttons will be injected here -->
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Department View -->
-                    <div id="view-department" style="display: none;">
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Department Name</th>
-                                        <th>Total Employees</th>
-                                        <th>Dominant HOD</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="departmentTableBody">
-                                    <tr>
-                                        <td colspan="4" style="text-align: center;">Loading departments...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
+  <!-- Main card -->
+  <div class="a-card">
+    <div class="a-card__hd">
+      <div class="a-tabs" style="border:none;margin:0;flex:1;">
+        <button id="tab-individual" class="a-tab a-tab--active" onclick="switchTab('individual')">Individual Employees</button>
+        <button id="tab-department" class="a-tab" onclick="switchTab('department')">By Department (Bulk)</button>
+      </div>
     </div>
 
-    <!-- Assign HOD Modal -->
-    <div class="modal-overlay" id="assignModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2>Assign HOD</h2>
-                <button class="close-btn" onclick="closeModal()">×</button>
-            </div>
+    <div class="a-card__body">
 
-            <div style="margin-bottom: 20px; background: #f8fafc; padding: 16px; border-radius: 6px;">
-                <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 4px;">Target Employee</div>
-                <div style="font-weight: 600; font-size: 1.1rem;" id="targetEmployeeName">Fatima Ali</div>
-                <div style="font-size: 0.875rem; color: var(--text-muted);" id="targetEmployeeInfo">1001 • IT Dept</div>
-            </div>
-
-            <div class="form-group">
-                <label>Search for HOD (Name, ID, Email)</label>
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" id="hodSearchInput" placeholder="e.g. Usman Tariq or usman@ifl.com"
-                        onkeyup="if(event.key === 'Enter') searchHod()">
-                    <button class="btn btn-secondary" onclick="searchHod()">Find</button>
-                </div>
-            </div>
-
-            <div class="hod-search-results" id="hodSearchResults">
-                <!-- Results injected here -->
-            </div>
-
-            <form id="assignForm" onsubmit="submitAssignment(event)"
-                style="display: none; margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 20px;">
-                <input type="hidden" id="selectedEmpId">
-                <input type="hidden" id="selectedHodId">
-
-                <div style="margin-bottom: 16px;">
-                    <strong>Selected HOD: </strong>
-                    <span id="confirmHodName" style="color: var(--primary);">None</span>
-                </div>
-
-                <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="btnConfirmAssign">Confirm Assignment</button>
-                </div>
-            </form>
+      <!-- ── Individual View ── -->
+      <div id="view-individual">
+        <div class="a-search">
+          <!-- Main search: no wrapper div needed, FloatSuggest handles positioning -->
+          <input type="text" id="searchInput" class="a-input"
+                 placeholder="Search employees by name, ID, department or email…"
+                 autocomplete="off"
+                 oninput="onMainSearch(this.value)"
+                 onkeydown="onMainKey(event)"
+                 onfocus="if(this.value.trim().length>=2) _mainSuggestFetch(this.value.trim())">
+          <button class="btn btn-secondary" onclick="clearMainSearch()">Clear</button>
+          <button class="btn btn-primary"   onclick="loadEmployees(1)">Search</button>
         </div>
-    </div>
 
-    <!-- View Details Modal -->
-    <div class="modal-overlay" id="detailsModal">
-        <div class="modal" style="max-width: 700px;">
-            <div class="modal-header">
-                <h2>Employee Details</h2>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-primary" id="btnEditToggle" onclick="toggleEditMode()"
-                        style="font-size: 0.8rem; padding: 6px 12px;">Edit</button>
-                    <button class="close-btn" onclick="closeDetailsModal()">×</button>
-                </div>
-            </div>
-
-            <form id="editEmployeeForm" onsubmit="saveEmployeeDetails(event)">
-                <input type="hidden" id="editEmployeeId">
-                <div id="detailsContent"
-                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 0.9rem;">
-                    <!-- Loading text or details table will be injected here -->
-                </div>
-
-                <div id="editActions"
-                    style="margin-top: 24px; text-align: right; display: none; gap: 12px; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" onclick="closeDetailsModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="btnSaveDetails">Save Changes</button>
-                </div>
-            </form>
-
-            <div id="viewActions" style="margin-top: 24px; text-align: right;">
-                <button class="btn btn-secondary" onclick="closeDetailsModal()">Close</button>
-            </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Email</th><th>HOD Status</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="employeeTableBody">
+              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--a-text-muted);">Loading employees…</td></tr>
+            </tbody>
+          </table>
         </div>
+
+        <div class="pagination-container">
+          <div id="paginationInfo">Showing 0 of 0 employees</div>
+          <div class="pagination-buttons" id="paginationButtons"></div>
+        </div>
+      </div>
+
+      <!-- ── Department View ── -->
+      <div id="view-department" style="display:none;">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr><th>Department</th><th>Total Employees</th><th>Current HOD</th><th>Action</th></tr>
+            </thead>
+            <tbody id="departmentTableBody">
+              <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--a-text-muted);">Loading departments…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
-
-    <script>
-        // State Management
-        let currentEmployees = [];
-        let pagination = {
-            page: 1,
-            limit: 10,
-            total: 0,
-            totalPages: 0
-        };
-        let currentSearchQuery = '';
-
-        let isDepartmentView = false;
-        let currentDepartments = [];
-
-        document.addEventListener('DOMContentLoaded', () => {
-            loadEmployees();
-
-            // Optimized Debounced Search
-            const searchInput = document.getElementById('searchInput');
-            searchInput.addEventListener('input', debounce(() => {
-                const query = searchInput.value.trim();
-                if (query !== currentSearchQuery) {
-                    currentSearchQuery = query;
-                    loadEmployees(1); // Reset to page 1 on search
-                }
-            }, 300));
-        });
-
-        function switchTab(tabName) {
-            isDepartmentView = tabName === 'department';
-
-            // Tab styling
-            document.getElementById('tab-individual').className = isDepartmentView ? 'tab-btn' : 'tab-btn active';
-            document.getElementById('tab-department').className = isDepartmentView ? 'tab-btn active' : 'tab-btn';
-
-            const activeStyle = 'padding: 12px 24px; background: none; border: none; font-weight: 600; color: #0078D4; border-bottom: 2px solid #0078D4; cursor: pointer;';
-            const inactiveStyle = 'padding: 12px 24px; background: none; border: none; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer;';
-
-            document.getElementById('tab-individual').style = isDepartmentView ? inactiveStyle : activeStyle;
-            document.getElementById('tab-department').style = isDepartmentView ? activeStyle : inactiveStyle;
-
-            // View toggling
-            document.getElementById('view-individual').style.display = isDepartmentView ? 'none' : 'block';
-            document.getElementById('view-department').style.display = isDepartmentView ? 'block' : 'none';
-
-            if (isDepartmentView) {
-                loadDepartments();
-            } else {
-                loadEmployees(pagination.page);
-            }
-        }
-
-        // Debounce Helper
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-
-        async function loadDepartments() {
-            const tbody = document.getElementById('departmentTableBody');
-            const stats = document.getElementById('stats');
-
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Loading departments...</td></tr>';
-
-            try {
-                const res = await fetch('/admin/departments');
-                const json = await res.json();
-
-                if (json.success) {
-                    currentDepartments = json.data;
-                    stats.innerText = `Total: ${json.data.length} departments`;
-                    renderDepartmentTable(json.data);
-                } else {
-                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">Error: ${json.error}</td></tr>`;
-                }
-            } catch (err) {
-                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">Network Error</td></tr>`;
-            }
-        }
-
-        function renderDepartmentTable(departments) {
-            const tbody = document.getElementById('departmentTableBody');
-
-            if (departments.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 32px; color: #64748b;">No departments found.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = departments.map(d => {
-                const statusBadge = d.currentHodId
-                    ? `<span class="badge assigned" title="${d.currentHodId}">${d.currentHodName}</span>`
-                    : `<span class="badge unassigned">${d.currentHodName}</span>`;
-
-                // Keep original string safe for HTML injection
-                const safeDeptName = (d.originalDeptName || '').replace(/'/g, "\\'");
-
-                return `
-                <tr>
-                    <td><strong>${d.departmentName}</strong></td>
-                    <td>${d.employeeCount} employees</td>
-                    <td>${statusBadge}</td>
-                    <td>
-                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.75rem;" 
-                            onclick="openAssignModal(null, '${safeDeptName}', '${d.departmentName}')">
-                            Assign Department HOD
-                        </button>
-                    </td>
-                </tr>
-                `;
-            }).join('');
-        }
-
-        async function loadEmployees(page = 1) {
-            const query = document.getElementById('searchInput').value;
-            const tbody = document.getElementById('employeeTableBody');
-            const stats = document.getElementById('stats');
-
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Searching...</td></tr>';
-
-            try {
-                const url = `/admin/employees?q=${encodeURIComponent(query)}&page=${page}&limit=${pagination.limit}`;
-                const res = await fetch(url);
-                const json = await res.json();
-
-                if (json.success) {
-                    currentEmployees = json.data;
-                    pagination = json.pagination;
-                    renderTable(json.data);
-                    renderPagination();
-                } else {
-                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: red;">Error: ${json.error}</td></tr>`;
-                }
-            } catch (err) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: red;">Network Error</td></tr>`;
-            }
-        }
-
-        function renderTable(employees) {
-            const tbody = document.getElementById('employeeTableBody');
-
-            if (employees.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 32px; color: #64748b;">No employees found matching your search.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = employees.map(emp => {
-                const statusBadge = emp.hodId
-                    ? `<span class="badge assigned" title="${emp.hodId}">${emp.hodName || emp.hodId}</span>`
-                    : `<span class="badge unassigned">Unassigned</span>`;
-
-                const actionBtn = emp.hodId
-                    ? `<button class="btn" style="padding: 6px 12px; font-size: 0.75rem; background: #fef2f2; color: #ef4444; border: 1px solid #fecaca;" onclick="removeHod('${emp.employeeId}', '${emp.name}')">Remove</button>
-                       <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="openAssignModal('${emp.employeeId}')">Update</button>
-                       <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="viewEmployeeDetails('${emp.employeeId}')">View</button>`
-                    : `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="openAssignModal('${emp.employeeId}')">Assign HOD</button>
-                       <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;" onclick="viewEmployeeDetails('${emp.employeeId}')">View</button>`;
-
-                return `
-                <tr>
-                    <td><strong>${emp.employeeId}</strong></td>
-                    <td>${emp.name}</td>
-                    <td>${emp.department || '-'}</td>
-                    <td>${emp.designation || '-'}</td>
-                    <td>${emp.email || '-'}</td>
-                    <td>${statusBadge}</td>
-                    <td style="display: flex; gap: 8px;">${actionBtn}</td>
-                </tr>
-            `;
-            }).join('');
-        }
-
-        function renderPagination() {
-            const info = document.getElementById('paginationInfo');
-            const btns = document.getElementById('paginationButtons');
-            const stats = document.getElementById('stats');
-
-            const start = (pagination.page - 1) * pagination.limit + 1;
-            const end = Math.min(pagination.page * pagination.limit, pagination.total);
-
-            if (pagination.total === 0) {
-                info.innerText = 'No records found';
-                stats.innerText = 'Showing 0 employees';
-                btns.innerHTML = '';
-                return;
-            }
-
-            info.innerText = `Showing ${start} to ${end} of ${pagination.total} employees`;
-            stats.innerText = `Total: ${pagination.total} employees`;
-
-            let html = '';
-
-            // Previous Button
-            html += `<button class="page-btn" ${pagination.page === 1 ? 'disabled' : ''} onclick="loadEmployees(${pagination.page - 1})">Previous</button>`;
-
-            // Page Numbers (Smart Pagination)
-            const startPage = Math.max(1, pagination.page - 2);
-            const endPage = Math.min(pagination.totalPages, startPage + 4);
-
-            for (let i = startPage; i <= endPage; i++) {
-                html += `<button class="page-btn ${i === pagination.page ? 'active' : ''}" onclick="loadEmployees(${i})">${i}</button>`;
-            }
-
-            // Next Button
-            html += `<button class="page-btn" ${pagination.page === pagination.totalPages ? 'disabled' : ''} onclick="loadEmployees(${pagination.page + 1})">Next</button>`;
-
-            btns.innerHTML = html;
-        }
-
-        // Modal Logic
-        let assignmentContext = { type: 'individual', targetId: null, targetName: '' };
-
-        function openAssignModal(empId, deptOriginal = null, deptDisplay = null) {
-            if (empId) {
-                assignmentContext = { type: 'individual', targetId: empId };
-                const emp = currentEmployees.find(e => e.employeeId === empId);
-                if (!emp) return;
-
-                document.getElementById('selectedEmpId').value = emp.employeeId;
-                document.getElementById('targetEmployeeName').innerText = emp.name;
-                document.getElementById('targetEmployeeInfo').innerText = `${emp.employeeId} • ${emp.department || 'No Dept'}`;
-            } else {
-                assignmentContext = { type: 'department', targetId: deptOriginal, targetName: deptDisplay };
-                document.getElementById('selectedEmpId').value = deptOriginal; // We'll hijack this field
-                document.getElementById('targetEmployeeName').innerText = `Department: ${deptDisplay}`;
-                document.getElementById('targetEmployeeInfo').innerText = `Apply to all employees in this group`;
-            }
-
-            // Reset Search
-            document.getElementById('hodSearchInput').value = '';
-            document.getElementById('hodSearchResults').style.display = 'none';
-            document.getElementById('assignForm').style.display = 'none';
-
-            document.getElementById('assignModal').classList.add('active');
-        }
-
-        function closeModal() {
-            document.getElementById('assignModal').classList.remove('active');
-        }
-
-        async function searchHod() {
-            const query = document.getElementById('hodSearchInput').value;
-            const resultsDiv = document.getElementById('hodSearchResults');
-            const targetEmpId = document.getElementById('selectedEmpId').value;
-
-            if (query.length < 2) {
-                alert("Please enter at least 2 characters to search.");
-                return;
-            }
-
-            resultsDiv.style.display = 'block';
-            resultsDiv.innerHTML = '<div style="padding: 16px; text-align: center;">Searching...</div>';
-
-            try {
-                const res = await fetch(`/admin/employees?q=${encodeURIComponent(query)}&limit=10`);
-                const json = await res.json();
-
-                if (json.success && json.data.length > 0) {
-                    resultsDiv.innerHTML = json.data.map(hod => {
-                        if (hod.employeeId === targetEmpId) return ''; // Skip self
-
-                        return `
-                        <div class="hod-result-item" onclick="selectHod('${hod.employeeId}', '${hod.name}')">
-                            <div>
-                                <div style="font-weight: 600;">${hod.name}</div>
-                                <div style="font-size: 0.75rem; color: var(--text-muted);">${hod.employeeId} • ${hod.department || 'No Dept'} • ${hod.email || 'No Email'}</div>
-                            </div>
-                            <button type="button" class="btn btn-secondary" style="padding: 4px 12px; font-size: 0.75rem;">Select</button>
-                        </div>
-                    `;
-                    }).join('') || '<div style="padding: 16px; text-align: center;">No valid distinct matches found.</div>';
-                } else {
-                    resultsDiv.innerHTML = '<div style="padding: 16px; text-align: center;">No matches found.</div>';
-                }
-            } catch (err) {
-                resultsDiv.innerHTML = '<div style="padding: 16px; text-align: center; color: red;">Error searching</div>';
-            }
-        }
-
-        function selectHod(hodId, hodName) {
-            document.getElementById('selectedHodId').value = hodId;
-            document.getElementById('confirmHodName').innerText = `${hodName} (${hodId})`;
-            document.getElementById('assignForm').style.display = 'block';
-        }
-
-        async function submitAssignment(e) {
-            e.preventDefault();
-            const targetVal = document.getElementById('selectedEmpId').value;
-            const hodId = document.getElementById('selectedHodId').value;
-            const btn = document.getElementById('btnConfirmAssign');
-
-            btn.disabled = true;
-            btn.innerText = 'Assigning...';
-
-            let endpoint = '/admin/assign-hod';
-            let payload = { employeeId: targetVal, hodId: hodId };
-
-            if (assignmentContext.type === 'department') {
-                endpoint = '/admin/assign-department-hod';
-                // Because of how empty strings/nulls represent "Unassigned Department"
-                payload = { departmentName: targetVal === "null" || targetVal === '' ? null : targetVal, hodId: hodId };
-            }
-
-            try {
-                const res = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const json = await res.json();
-
-                if (json.success) {
-                    alert(json.message);
-                    closeModal();
-
-                    if (assignmentContext.type === 'department') {
-                        loadDepartments();
-                    } else {
-                        loadEmployees(pagination.page); // Reload table
-                    }
-                } else {
-                    alert(`Error: ${json.error}`);
-                }
-            } catch (err) {
-                alert('Network error while assigning HOD');
-            } finally {
-                btn.disabled = false;
-                btn.innerText = 'Confirm Assignment';
-            }
-        }
-
-        async function removeHod(empId, empName) {
-            if (!confirm(`Are you sure you want to remove the HOD assignment from ${empName}?`)) {
-                return;
-            }
-
-            try {
-                const res = await fetch('/admin/remove-hod', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ employeeId: empId })
-                });
-                const json = await res.json();
-
-                if (json.success) {
-                    alert(json.message);
-                    loadEmployees();
-                } else {
-                    alert(`Error: ${json.error}`);
-                }
-            } catch (err) {
-                alert('Network error while removing HOD');
-            }
-        }
-
-        let currentViewedEmployee = null;
-        let isEditMode = false;
-
-        async function viewEmployeeDetails(empId) {
-            document.getElementById('detailsContent').innerHTML = 'Loading details...';
-            document.getElementById('detailsModal').classList.add('active');
-            document.getElementById('editEmployeeId').value = empId;
-
-            // Reset to view mode
-            isEditMode = false;
-            document.getElementById('btnEditToggle').innerText = 'Edit';
-            document.getElementById('editActions').style.display = 'none';
-            document.getElementById('viewActions').style.display = 'block';
-
-            try {
-                const res = await fetch(`/admin/employee/${empId}`);
-                const json = await res.json();
-                if (json.success) {
-                    currentViewedEmployee = json.data;
-                    renderDetailsContent(false);
-                } else {
-                    document.getElementById('detailsContent').innerHTML = `<div style="color: red;">Error: ${json.error}</div>`;
-                }
-            } catch (err) {
-                document.getElementById('detailsContent').innerHTML = `<div style="color: red;">Network error while fetching details.</div>`;
-            }
-        }
-
-        function toggleEditMode() {
-            if (!currentViewedEmployee) return;
-            isEditMode = !isEditMode;
-
-            document.getElementById('btnEditToggle').innerText = isEditMode ? 'Cancel Edit' : 'Edit';
-            document.getElementById('editActions').style.display = isEditMode ? 'flex' : 'none';
-            document.getElementById('viewActions').style.display = isEditMode ? 'none' : 'block';
-
-            renderDetailsContent(isEditMode);
-        }
-
-        function renderDetailsContent(editMode) {
-            const emp = currentViewedEmployee;
-
-            // Critical un-editable fields for system safety
-            const readonlyKeys = ['employeeId', 'createdAt', 'updatedAt'];
-
-            // Group fields logically
-            const groups = [
-                {
-                    title: "Basic Information",
-                    keys: ['employeeId', 'name', 'fatherName', 'email', 'mobile', 'gender', 'dateOfBirth', 'cnic', 'bloodGroup']
-                },
-                {
-                    title: "Employment Details",
-                    keys: ['designation', 'mainDept', 'status', 'joiningDate', 'location', 'unit', 'employeeType', 'assignmentCategory', 'employmentCategory', 'payroll']
-                },
-                {
-                    title: "Organization Structure",
-                    keys: ['managerName', 'managerId', 'managerDesignation', 'managerEmail', 'hodId', 'orgElementName', 'assignmentNumber']
-                },
-                {
-                    title: "System & Other",
-                    keys: ['personId', 'extension', 'rfid', 'erpUser', 'pposDateStart', 'lastResignedDate', 'actualTerminationDate', 'createdAt', 'updatedAt']
-                }
-            ];
-
-            let htmlArr = [];
-
-            // Add a cool header avatar/banner (just simple styling)
-            htmlArr.push(`
-                <div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; margin-bottom: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
-                    <div style="width: 56px; height: 56px; border-radius: 50%; background: #0078D4; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 600;">
-                        ${(emp.name || '?').charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                        <h3 style="margin: 0; font-size: 1.25rem; color: #0f172a;">${emp.name || 'Unknown'}</h3>
-                        <div style="font-size: 0.875rem; color: var(--text-muted);">${emp.designation || 'No Designation'} • ${emp.mainDept || 'No Department'}</div>
-                    </div>
-                </div>
-            `);
-
-            groups.forEach(group => {
-                // Determine if group has any true values (skip empty groups in view mode)
-                let visibleKeys = group.keys.filter(k => (emp[k] !== null && emp[k] !== undefined && emp[k] !== '') || editMode);
-
-                if (visibleKeys.length > 0) {
-                    htmlArr.push(`<div style="grid-column: 1 / -1; font-weight: 700; color: #334155; margin-top: 16px; margin-bottom: 8px; font-size: 1.05rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px;">${group.title}</div>`);
-
-                    visibleKeys.forEach(key => {
-                        const isReadOnly = readonlyKeys.includes(key);
-                        const val = emp[key] === null ? '' : emp[key];
-
-                        // User-friendly label formatting (camelCase to Title Case)
-                        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, function (str) { return str.toUpperCase(); });
-
-                        let fieldContent = `<div style="margin-top: 4px; color: #0f172a; font-weight: 500; min-height: 20px;">${val || '-'}</div>`;
-
-                        if (editMode) {
-                            fieldContent = `
-                            <div style="margin-top: 4px;">
-                                <input type="text" name="${key}" value="${val}" ${isReadOnly ? 'readonly title="This field cannot be edited."' : ''} 
-                                    style="width: 100%; padding: 8px 12px; border: 1px solid ${isReadOnly ? '#e2e8f0' : '#cbd5e1'}; border-radius: 6px; background: ${isReadOnly ? '#f8fafc' : 'white'}; font-family: inherit; box-sizing: border-box;"
-                                    placeholder="Enter ${label.toLowerCase()}">
-                            </div>`;
-                        }
-
-                        htmlArr.push(`
-                            <div style="margin-bottom: 12px; padding: 12px; background: #faf9f8; border-radius: 8px; border: 1px solid transparent; ${editMode && !isReadOnly ? 'border-color: #cbd5e1; background: #fff;' : ''}">
-                                <div style="font-weight: 600; color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">${label}</div>
-                                ${fieldContent}
-                            </div>
-                        `);
-                    });
-                }
-            });
-
-            document.getElementById('detailsContent').innerHTML = htmlArr.join('');
-        }
-
-        async function saveEmployeeDetails(e) {
-            e.preventDefault();
-            const btn = document.getElementById('btnSaveDetails');
-            const empId = document.getElementById('editEmployeeId').value;
-
-            // Gather form data into an object
-            const formData = new FormData(document.getElementById('editEmployeeForm'));
-            const payload = {};
-            formData.forEach((value, key) => {
-                if (key !== 'employeeId') { // don't override ID
-                    payload[key] = value || null;
-                }
-            });
-
-            btn.disabled = true;
-            btn.innerText = 'Saving...';
-
-            try {
-                const res = await fetch(`/admin/employee/${empId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const json = await res.json();
-
-                if (json.success) {
-                    alert('Employee updated successfully.');
-                    closeDetailsModal();
-                    loadEmployees(); // Refresh list to reflect changes
-                } else {
-                    alert(`Error: ${json.error}`);
-                }
-            } catch (err) {
-                alert('Network error while saving employee details');
-            } finally {
-                btn.disabled = false;
-                btn.innerText = 'Save Changes';
-            }
-        }
-
-        function closeDetailsModal() {
-            document.getElementById('detailsModal').classList.remove('active');
-        }
-    </script>
-
-    <%- include('../partials/footer') %>
+  </div>
+
+<!-- ── Assign HOD Modal ── -->
+<div class="modal-overlay" id="assignModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Assign HOD</h2>
+      <button class="close-btn" onclick="closeModal()">×</button>
+    </div>
+    <div style="padding:24px;">
+      <div class="a-selected-box" style="margin-bottom:20px;">
+        <div style="font-size:.72rem;font-weight:700;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Assigning HOD for</div>
+        <div style="font-weight:700;font-size:1rem;" id="targetEmployeeName"></div>
+        <div style="font-size:.8rem;color:var(--a-text-muted);" id="targetEmployeeInfo"></div>
+      </div>
+
+      <div class="a-field">
+        <label class="a-label">Search for HOD</label>
+        <!-- No wrapper div — FloatSuggest appends to body, positions via getBoundingClientRect -->
+        <input type="text" id="hodSearchInput" class="a-input"
+               placeholder="Type name, ID or email…"
+               autocomplete="off"
+               oninput="onHodSearch(this.value)"
+               onkeydown="onHodKey(event)">
+      </div>
+
+      <!-- Selected HOD confirmation card -->
+      <div id="selectedHodCard"
+           style="display:none;margin-top:14px;padding:12px 14px;background:var(--a-brand-light);border:1px solid var(--a-brand-mid);border-radius:var(--a-radius-sm);align-items:center;gap:12px;">
+        <div class="a-avatar" id="selectedHodAvatar" style="width:36px;height:36px;font-size:.9rem;flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:.9rem;" id="selectedHodName"></div>
+          <div style="font-size:.78rem;color:var(--a-brand);" id="selectedHodMeta"></div>
+        </div>
+        <button type="button" onclick="clearHodSelection()"
+                style="background:none;border:none;color:var(--a-text-muted);cursor:pointer;font-size:1.1rem;line-height:1;flex-shrink:0;">×</button>
+      </div>
+
+      <form id="assignForm" onsubmit="submitAssignment(event)"
+            style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--a-border);">
+        <input type="hidden" id="selectedEmpId">
+        <input type="hidden" id="selectedHodId">
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnConfirmAssign">Confirm Assignment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Employee Details Modal ── -->
+<div class="modal-overlay" id="detailsModal">
+  <div class="modal a-modal--lg" style="max-width:720px;">
+    <div class="modal-header">
+      <h2>Employee Details</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-primary" id="btnEditToggle" onclick="toggleEditMode()" style="font-size:.8rem;padding:6px 14px;">Edit</button>
+        <button class="close-btn" onclick="closeDetailsModal()">×</button>
+      </div>
+    </div>
+    <div style="padding:24px;">
+      <form id="editEmployeeForm" onsubmit="saveEmployeeDetails(event)">
+        <input type="hidden" id="editEmployeeId">
+        <div id="detailsContent" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:.9rem;">Loading…</div>
+        <div id="editActions" style="margin-top:20px;display:none;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeDetailsModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSaveDetails">Save Changes</button>
+        </div>
+      </form>
+      <div id="viewActions" style="margin-top:20px;text-align:right;">
+        <button class="btn btn-secondary" onclick="closeDetailsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/admin_shell_bottom') %>
+
+<script>
+/* ================================================================
+   FLOAT SUGGEST — single fixed overlay appended to <body>
+   Escapes any modal / overflow clipping
+================================================================ */
+const FloatSuggest = (() => {
+  let el, activeInput = null, focusIdx = -1, items = [];
+
+  function init() {
+    el = document.createElement('div');
+    el.className = 'a-float-suggest';
+    document.body.appendChild(el);
+
+    document.addEventListener('mousedown', e => {
+      if (el.contains(e.target) || e.target === activeInput) return;
+      close();
+    });
+
+    // Reposition on any scroll in any ancestor
+    window.addEventListener('scroll', reposition, { passive: true, capture: true });
+    window.addEventListener('resize', reposition, { passive: true });
+  }
+
+  function show(inputEl, html, onItemClick) {
+    activeInput = inputEl;
+    el.innerHTML = html;
+    focusIdx = -1;
+    items = [...el.querySelectorAll('.a-suggest-item')];
+    items.forEach((item, i) => {
+      item.addEventListener('mousedown', e => { e.preventDefault(); onItemClick(item, i); });
+    });
+    el.classList.add('open');
+    reposition();
+  }
+
+  function close() {
+    el.classList.remove('open');
+    el.innerHTML = '';
+    activeInput = null;
+    focusIdx = -1;
+    items = [];
+  }
+
+  function isOpen() { return el && el.classList.contains('open'); }
+
+  function navigate(dir) {
+    if (!items.length) return false;
+    focusIdx = Math.max(-1, Math.min(items.length - 1, focusIdx + dir));
+    items.forEach((it, i) => it.classList.toggle('a-suggest-item--focused', i === focusIdx));
+    if (focusIdx >= 0) items[focusIdx].scrollIntoView({ block: 'nearest' });
+    return true;
+  }
+
+  function selectFocused() {
+    if (focusIdx >= 0 && items[focusIdx]) { items[focusIdx].dispatchEvent(new MouseEvent('mousedown')); return true; }
+    return false;
+  }
+
+  function reposition() {
+    if (!activeInput || !isOpen()) return;
+    const r = activeInput.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+
+    el.style.left  = r.left + 'px';
+    el.style.width = Math.max(r.width, 260) + 'px';
+
+    if (spaceBelow >= 150) {
+      el.style.top    = (r.bottom + 5) + 'px';
+      el.style.bottom = 'auto';
+      el.style.maxHeight = Math.min(320, spaceBelow - 12) + 'px';
+    } else {
+      const spaceAbove = r.top;
+      el.style.bottom = (window.innerHeight - r.top + 5) + 'px';
+      el.style.top    = 'auto';
+      el.style.maxHeight = Math.min(320, spaceAbove - 12) + 'px';
+    }
+  }
+
+  return { init, show, close, isOpen, navigate, selectFocused };
+})();
+
+/* ================================================================
+   HELPERS
+================================================================ */
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function highlight(text, q) {
+  if (!q || !text) return text || '';
+  const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(text).replace(new RegExp(`(${esc})`, 'gi'), '<mark>$1</mark>');
+}
+
+function suggestLoading() {
+  return '<div class="a-suggest-loading"><div class="a-spinner"></div>Searching…</div>';
+}
+
+function suggestEmpty(q) {
+  return `<div class="a-suggest-empty">No results for "<strong>${q}</strong>"</div>`;
+}
+
+function empHTML(emp, q, badgeHTML) {
+  return `
+    <div class="a-suggest-item">
+      <div class="a-suggest-item__avatar">${(emp.name||'?').charAt(0).toUpperCase()}</div>
+      <div class="a-suggest-item__body">
+        <div class="a-suggest-item__name">${highlight(emp.name, q)}</div>
+        <div class="a-suggest-item__meta">
+          <strong>${emp.employeeId}</strong>
+          ${emp.department ? ' · ' + highlight(emp.department, q) : ''}
+          ${emp.designation ? ' · ' + emp.designation : ''}
+          ${emp.email ? ' · ' + highlight(emp.email, q) : ''}
+        </div>
+      </div>
+      ${badgeHTML || ''}
+    </div>`;
+}
+
+/* ================================================================
+   STATE
+================================================================ */
+let currentEmployees = [];
+let pagination = { page: 1, limit: 10, total: 0, totalPages: 0 };
+let isDepartmentView = false;
+let currentDepartments = [];
+let assignmentContext = { type: 'individual', targetId: null };
+let currentViewedEmployee = null;
+let isEditMode = false;
+let _hodExcludeId = null;
+
+/* ================================================================
+   INIT
+================================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  FloatSuggest.init();
+  loadEmployees();
+});
+
+/* ================================================================
+   TABS
+================================================================ */
+function switchTab(name) {
+  isDepartmentView = name === 'department';
+  document.getElementById('tab-individual').className = isDepartmentView ? 'a-tab' : 'a-tab a-tab--active';
+  document.getElementById('tab-department').className = isDepartmentView ? 'a-tab a-tab--active' : 'a-tab';
+  document.getElementById('view-individual').style.display = isDepartmentView ? 'none' : 'block';
+  document.getElementById('view-department').style.display = isDepartmentView ? 'block' : 'none';
+  isDepartmentView ? loadDepartments() : loadEmployees(pagination.page);
+}
+
+/* ================================================================
+   MAIN SEARCH BAR SUGGESTIONS
+================================================================ */
+async function _mainSuggestFetch(q) {
+  const inp = document.getElementById('searchInput');
+  if (q.length < 2) { FloatSuggest.close(); return; }
+
+  FloatSuggest.show(inp, suggestLoading(), () => {});
+  try {
+    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
+    const json = await res.json();
+    if (!json.success || !json.data.length) {
+      FloatSuggest.show(inp, suggestEmpty(q), () => {});
+      return;
+    }
+    const html = json.data.map(emp => {
+      const hod = emp.hodId
+        ? `<span class="a-suggest-item__badge" style="background:var(--a-green-bg);color:var(--a-green);">HOD ✓</span>`
+        : `<span class="a-suggest-item__badge" style="background:var(--a-red-bg);color:var(--a-red);">No HOD</span>`;
+      return empHTML(emp, q, hod);
+    }).join('');
+
+    FloatSuggest.show(inp, html, (item, i) => {
+      const emp = json.data[i];
+      inp.value = emp.name;
+      FloatSuggest.close();
+      loadEmployees(1);
+    });
+  } catch {
+    FloatSuggest.show(inp, '<div class="a-suggest-empty" style="color:var(--a-red);">Error fetching results</div>', () => {});
+  }
+}
+
+const _mainSuggestDebounced = debounce(_mainSuggestFetch, 280);
+const _mainTableDebounced   = debounce(() => loadEmployees(1), 450);
+
+function onMainSearch(val) {
+  _mainSuggestDebounced(val.trim());
+  _mainTableDebounced();
+}
+
+function onMainKey(e) {
+  if (e.key === 'ArrowDown') { e.preventDefault(); FloatSuggest.navigate(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); FloatSuggest.navigate(-1); }
+  else if (e.key === 'Enter') {
+    if (!FloatSuggest.selectFocused()) { FloatSuggest.close(); loadEmployees(1); }
+  }
+  else if (e.key === 'Escape') FloatSuggest.close();
+}
+
+function clearMainSearch() {
+  document.getElementById('searchInput').value = '';
+  FloatSuggest.close();
+  loadEmployees(1);
+}
+
+/* ================================================================
+   HOD MODAL SEARCH SUGGESTIONS
+================================================================ */
+async function _hodSuggestFetch(q) {
+  const inp = document.getElementById('hodSearchInput');
+  if (q.length < 2) { FloatSuggest.close(); return; }
+
+  FloatSuggest.show(inp, suggestLoading(), () => {});
+  try {
+    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=10`);
+    const json = await res.json();
+    const results = (json.data || []).filter(e => e.employeeId !== _hodExcludeId);
+
+    if (!results.length) {
+      FloatSuggest.show(inp, suggestEmpty(q), () => {});
+      return;
+    }
+
+    const badge = `<span class="a-suggest-item__badge" style="background:var(--a-brand-light);color:var(--a-brand);">Select</span>`;
+    const html  = results.map(emp => empHTML(emp, q, badge)).join('');
+
+    FloatSuggest.show(inp, html, (item, i) => {
+      const emp = results[i];
+      selectHod(emp.employeeId, emp.name, emp.designation || '', emp.department || '', emp.email || '');
+    });
+  } catch {
+    FloatSuggest.show(inp, '<div class="a-suggest-empty" style="color:var(--a-red);">Error</div>', () => {});
+  }
+}
+
+const _hodSuggestDebounced = debounce(_hodSuggestFetch, 280);
+
+function onHodSearch(val) {
+  clearHodSelection(false);
+  _hodSuggestDebounced(val.trim());
+}
+
+function onHodKey(e) {
+  if (e.key === 'ArrowDown') { e.preventDefault(); FloatSuggest.navigate(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); FloatSuggest.navigate(-1); }
+  else if (e.key === 'Enter') { e.preventDefault(); FloatSuggest.selectFocused(); }
+  else if (e.key === 'Escape') FloatSuggest.close();
+}
+
+function selectHod(hodId, hodName, designation, dept, email) {
+  document.getElementById('selectedHodId').value = hodId;
+  document.getElementById('hodSearchInput').value = hodName;
+
+  document.getElementById('selectedHodAvatar').textContent = hodName.charAt(0).toUpperCase();
+  document.getElementById('selectedHodName').textContent   = hodName;
+  document.getElementById('selectedHodMeta').textContent   =
+    [hodId, dept, designation, email].filter(Boolean).join(' · ');
+  document.getElementById('selectedHodCard').style.display = 'flex';
+  document.getElementById('assignForm').style.display      = 'block';
+
+  FloatSuggest.close();
+}
+
+function clearHodSelection(clearInput = true) {
+  document.getElementById('selectedHodId').value           = '';
+  document.getElementById('selectedHodCard').style.display = 'none';
+  document.getElementById('assignForm').style.display      = 'none';
+  if (clearInput) document.getElementById('hodSearchInput').value = '';
+}
+
+/* ================================================================
+   DEPARTMENTS
+================================================================ */
+async function loadDepartments() {
+  const tbody = document.getElementById('departmentTableBody');
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--a-text-muted);">Loading…</td></tr>';
+  try {
+    const json = await fetch('/admin/departments').then(r => r.json());
+    if (json.success) {
+      currentDepartments = json.data;
+      document.getElementById('stats').innerText = `${json.data.length} departments`;
+      renderDepartmentTable(json.data);
+    } else tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--a-red);">${json.error}</td></tr>`;
+  } catch { tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--a-red);">Network Error</td></tr>`; }
+}
+
+function renderDepartmentTable(departments) {
+  const tbody = document.getElementById('departmentTableBody');
+  if (!departments.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--a-text-muted);">No departments found.</td></tr>'; return; }
+  tbody.innerHTML = departments.map(d => {
+    const badge = d.currentHodId
+      ? `<span class="badge assigned" title="${d.currentHodId}">${d.currentHodName}</span>`
+      : `<span class="badge unassigned">${d.currentHodName}</span>`;
+    const safe = (d.originalDeptName || '').replace(/'/g, "\\'");
+    return `<tr>
+      <td><strong>${d.departmentName}</strong></td>
+      <td>${d.employeeCount} employees</td>
+      <td>${badge}</td>
+      <td><button class="btn btn-primary" style="padding:5px 12px;font-size:.8rem;" onclick="openAssignModal(null,'${safe}','${d.departmentName}')">Assign HOD</button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ================================================================
+   EMPLOYEES TABLE
+================================================================ */
+async function loadEmployees(page = 1) {
+  const query = document.getElementById('searchInput').value;
+  const tbody = document.getElementById('employeeTableBody');
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--a-text-muted);">Searching…</td></tr>';
+  try {
+    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(query)}&page=${page}&limit=${pagination.limit}`);
+    const json = await res.json();
+    if (json.success) {
+      currentEmployees = json.data;
+      pagination = json.pagination;
+      renderTable(json.data, query);
+      renderPagination();
+    } else tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--a-red);">${json.error}</td></tr>`;
+  } catch { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--a-red);">Network Error</td></tr>`; }
+}
+
+function renderTable(employees, q = '') {
+  const tbody = document.getElementById('employeeTableBody');
+  if (!employees.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--a-text-muted);">No employees found.</td></tr>'; return; }
+  tbody.innerHTML = employees.map(emp => {
+    const badge = emp.hodId
+      ? `<span class="badge assigned" title="${emp.hodId}">${emp.hodName || emp.hodId}</span>`
+      : `<span class="badge unassigned">Unassigned</span>`;
+    const actions = emp.hodId
+      ? `<button class="btn btn-secondary" style="padding:5px 10px;font-size:.78rem;background:var(--a-red-bg);color:var(--a-red);border-color:#fca5a5;" onclick="removeHod('${emp.employeeId}','${emp.name}')">Remove</button>
+         <button class="btn btn-secondary" style="padding:5px 10px;font-size:.78rem;" onclick="openAssignModal('${emp.employeeId}')">Update</button>
+         <button class="btn btn-secondary" style="padding:5px 10px;font-size:.78rem;" onclick="viewEmployeeDetails('${emp.employeeId}')">View</button>`
+      : `<button class="btn btn-primary" style="padding:5px 10px;font-size:.78rem;" onclick="openAssignModal('${emp.employeeId}')">Assign HOD</button>
+         <button class="btn btn-secondary" style="padding:5px 10px;font-size:.78rem;" onclick="viewEmployeeDetails('${emp.employeeId}')">View</button>`;
+    return `<tr>
+      <td><strong>${emp.employeeId}</strong></td>
+      <td>${highlight(emp.name, q)}</td>
+      <td>${highlight(emp.department || '—', q)}</td>
+      <td>${emp.designation || '—'}</td>
+      <td style="color:var(--a-text-muted);">${highlight(emp.email || '—', q)}</td>
+      <td>${badge}</td>
+      <td><div style="display:flex;gap:5px;flex-wrap:wrap;">${actions}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPagination() {
+  const info  = document.getElementById('paginationInfo');
+  const btns  = document.getElementById('paginationButtons');
+  const start = (pagination.page - 1) * pagination.limit + 1;
+  const end   = Math.min(pagination.page * pagination.limit, pagination.total);
+  if (!pagination.total) { info.innerText = 'No records found'; document.getElementById('stats').innerText = '0 employees'; btns.innerHTML = ''; return; }
+  info.innerText = `Showing ${start}–${end} of ${pagination.total} employees`;
+  document.getElementById('stats').innerText = `${pagination.total} employees`;
+  let html = `<button class="page-btn" ${pagination.page===1?'disabled':''} onclick="loadEmployees(${pagination.page-1})">← Prev</button>`;
+  const s = Math.max(1, pagination.page - 2), e = Math.min(pagination.totalPages, s + 4);
+  for (let i = s; i <= e; i++) html += `<button class="page-btn ${i===pagination.page?'active':''}" onclick="loadEmployees(${i})">${i}</button>`;
+  html += `<button class="page-btn" ${pagination.page===pagination.totalPages?'disabled':''} onclick="loadEmployees(${pagination.page+1})">Next →</button>`;
+  btns.innerHTML = html;
+}
+
+/* ================================================================
+   ASSIGN HOD MODAL
+================================================================ */
+function openAssignModal(empId, deptOriginal = null, deptDisplay = null) {
+  clearHodSelection(true);
+  FloatSuggest.close();
+
+  if (empId) {
+    assignmentContext = { type: 'individual', targetId: empId };
+    const emp = currentEmployees.find(e => e.employeeId === empId);
+    if (!emp) return;
+    _hodExcludeId = emp.employeeId;
+    document.getElementById('selectedEmpId').value = emp.employeeId;
+    document.getElementById('targetEmployeeName').innerText = emp.name;
+    document.getElementById('targetEmployeeInfo').innerText = `${emp.employeeId} · ${emp.department || 'No Dept'} · ${emp.designation || ''}`;
+  } else {
+    assignmentContext = { type: 'department', targetId: deptOriginal };
+    _hodExcludeId = null;
+    document.getElementById('selectedEmpId').value = deptOriginal;
+    document.getElementById('targetEmployeeName').innerText = `Department: ${deptDisplay}`;
+    document.getElementById('targetEmployeeInfo').innerText = 'Applies to all employees in this group';
+  }
+
+  document.getElementById('assignModal').classList.add('active');
+  setTimeout(() => document.getElementById('hodSearchInput').focus(), 80);
+}
+
+function closeModal() {
+  document.getElementById('assignModal').classList.remove('active');
+  FloatSuggest.close();
+}
+
+async function submitAssignment(e) {
+  e.preventDefault();
+  const targetVal = document.getElementById('selectedEmpId').value;
+  const hodId     = document.getElementById('selectedHodId').value;
+  if (!hodId) { alert('Please select an HOD from the suggestions.'); return; }
+  const btn = document.getElementById('btnConfirmAssign');
+  btn.disabled = true; btn.innerText = 'Assigning…';
+  const endpoint = assignmentContext.type === 'department' ? '/admin/assign-department-hod' : '/admin/assign-hod';
+  const payload  = assignmentContext.type === 'department'
+    ? { departmentName: (!targetVal || targetVal === 'null') ? null : targetVal, hodId }
+    : { employeeId: targetVal, hodId };
+  try {
+    const res  = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (json.success) { closeModal(); assignmentContext.type === 'department' ? loadDepartments() : loadEmployees(pagination.page); }
+    else alert(`Error: ${json.error}`);
+  } catch { alert('Network error'); }
+  finally { btn.disabled = false; btn.innerText = 'Confirm Assignment'; }
+}
+
+async function removeHod(empId, empName) {
+  if (!confirm(`Remove HOD assignment from ${empName}?`)) return;
+  try {
+    const res  = await fetch('/admin/remove-hod', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ employeeId: empId }) });
+    const json = await res.json();
+    json.success ? loadEmployees() : alert(`Error: ${json.error}`);
+  } catch { alert('Network error'); }
+}
+
+/* ================================================================
+   EMPLOYEE DETAILS MODAL
+================================================================ */
+async function viewEmployeeDetails(empId) {
+  document.getElementById('detailsContent').innerHTML = 'Loading details…';
+  document.getElementById('detailsModal').classList.add('active');
+  document.getElementById('editEmployeeId').value = empId;
+  isEditMode = false;
+  document.getElementById('btnEditToggle').innerText = 'Edit';
+  document.getElementById('editActions').style.display = 'none';
+  document.getElementById('viewActions').style.display = 'block';
+  try {
+    const res  = await fetch(`/admin/employee/${empId}`);
+    const json = await res.json();
+    json.success ? (currentViewedEmployee = json.data, renderDetailsContent(false))
+      : (document.getElementById('detailsContent').innerHTML = `<div style="color:var(--a-red);">${json.error}</div>`);
+  } catch { document.getElementById('detailsContent').innerHTML = '<div style="color:var(--a-red);">Network error.</div>'; }
+}
+
+function toggleEditMode() {
+  if (!currentViewedEmployee) return;
+  isEditMode = !isEditMode;
+  document.getElementById('btnEditToggle').innerText = isEditMode ? 'Cancel' : 'Edit';
+  document.getElementById('editActions').style.display = isEditMode ? 'flex' : 'none';
+  document.getElementById('viewActions').style.display = isEditMode ? 'none' : 'block';
+  renderDetailsContent(isEditMode);
+}
+
+function renderDetailsContent(editMode) {
+  const emp = currentViewedEmployee;
+  const readonlyKeys = ['employeeId','createdAt','updatedAt'];
+  const groups = [
+    { title:'Basic Information',      keys:['employeeId','name','fatherName','email','mobile','gender','dateOfBirth','cnic','bloodGroup'] },
+    { title:'Employment Details',     keys:['designation','mainDept','status','joiningDate','location','unit','employeeType','assignmentCategory','employmentCategory','payroll'] },
+    { title:'Organization Structure', keys:['managerName','managerId','managerDesignation','managerEmail','hodId','orgElementName','assignmentNumber'] },
+    { title:'System & Other',         keys:['personId','extension','rfid','erpUser','pposDateStart','lastResignedDate','actualTerminationDate','createdAt','updatedAt'] }
+  ];
+  let html = [];
+  html.push(`
+    <div style="grid-column:1/-1;display:flex;align-items:center;gap:14px;margin-bottom:8px;padding-bottom:16px;border-bottom:1px solid var(--a-border);">
+      <div class="a-avatar">${(emp.name||'?').charAt(0).toUpperCase()}</div>
+      <div><div style="font-size:1.1rem;font-weight:700;">${emp.name||'Unknown'}</div>
+      <div style="font-size:.8rem;color:var(--a-text-muted);">${emp.designation||'No Designation'} · ${emp.mainDept||'No Department'}</div></div>
+    </div>`);
+  groups.forEach(g => {
+    const visible = g.keys.filter(k => (emp[k] != null && emp[k] !== '') || editMode);
+    if (!visible.length) return;
+    html.push(`<div style="grid-column:1/-1;font-size:.7rem;font-weight:700;color:var(--a-text-faint);text-transform:uppercase;letter-spacing:.08em;margin-top:10px;margin-bottom:4px;">${g.title}</div>`);
+    visible.forEach(key => {
+      const isRO = readonlyKeys.includes(key);
+      const val  = emp[key] ?? '';
+      const label = key.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase());
+      const field = editMode
+        ? `<div style="margin-top:4px;"><input type="text" name="${key}" value="${val}" ${isRO?'readonly':''} style="width:100%;padding:7px 10px;border:1px solid ${isRO?'var(--a-border)':'var(--a-border-dark)'};border-radius:var(--a-radius-sm);background:${isRO?'var(--a-surface-2)':'#fff'};font-family:var(--a-font);box-sizing:border-box;"></div>`
+        : `<div style="margin-top:3px;font-weight:500;min-height:18px;">${val||'—'}</div>`;
+      html.push(`<div style="padding:10px 12px;background:${editMode&&!isRO?'#fff':'var(--a-surface-2)'};border-radius:var(--a-radius-sm);border:1px solid ${editMode&&!isRO?'var(--a-border-dark)':'transparent'};">
+        <div style="font-size:.68rem;font-weight:700;color:var(--a-text-faint);text-transform:uppercase;letter-spacing:.05em;">${label}</div>
+        ${field}</div>`);
+    });
+  });
+  document.getElementById('detailsContent').innerHTML = html.join('');
+}
+
+async function saveEmployeeDetails(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btnSaveDetails');
+  const empId = document.getElementById('editEmployeeId').value;
+  const formData = new FormData(document.getElementById('editEmployeeForm'));
+  const payload = {};
+  formData.forEach((v, k) => { if (k !== 'employeeId') payload[k] = v || null; });
+  btn.disabled = true; btn.innerText = 'Saving…';
+  try {
+    const res  = await fetch(`/admin/employee/${empId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    const json = await res.json();
+    json.success ? (closeDetailsModal(), loadEmployees()) : alert(`Error: ${json.error}`);
+  } catch { alert('Network error'); }
+  finally { btn.disabled = false; btn.innerText = 'Save Changes'; }
+}
+
+function closeDetailsModal() { document.getElementById('detailsModal').classList.remove('active'); }
+</script>

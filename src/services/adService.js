@@ -60,9 +60,9 @@ const ADService = {
 
         // Mock Data
         const mockGroups = {
-            'IT_Operations_DL': 'it.ops@ifl.com',
-            'DCI_Team_DL': 'dti.support@ifl.com',
-            'OPS_Support_DL': 'ops.support@ifl.com'
+            'IT_Operations_DL': 'asif.ashfaq@igc.com.pk',
+            'DCI_Team_DL': 'dti.support@igc.com.pk',
+            'OPS_Support_DL': 'ops.support@igc.com.pk'
         };
 
         const email = mockGroups[groupName];

@@ -53,6 +53,7 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
         const baseUrl = process.env.APP_URL;
         const actionLink = `${baseUrl}/api/approvals/handle?token=${level1Token}`;
 
+
         await sendApprovalEmail(
             managerEmail,
             `Action Required: Access Request #${requestId}`,
@@ -61,6 +62,8 @@ export const startAccessRequestWorkflow = async (requestId, employeeId, managerE
             requesterName,
             requesterEmail || (requester ? requester.email : 'Unknown Email')
         );
+
+        logger.info(`${actionLink} <<------------------- this is action link `)
 
         await AccessRequest.update(
             { status: 'Pending', workflowStage: 'Level1-ManagerApproval' },
@@ -151,6 +154,8 @@ export const handleApprovalAction = async (token, action, comment) => {
                     requesterName,
                     requester ? requester.email : 'Unknown Email'
                 );
+                logger.info(`${actionLink} <<------------------- this is action link `)
+
 
                 req.status = 'Pending';
                 req.workflowStage = 'Level2-DeptHeadApproval';

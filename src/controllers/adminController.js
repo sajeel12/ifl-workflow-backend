@@ -1,5 +1,6 @@
 import Employee from '../models/Employee.js';
 import SyncLog from '../models/SyncLog.js';
+import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import oracleSyncService from '../services/oracleSyncService.js';
 import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
@@ -330,6 +331,58 @@ class AdminController {
         } catch (error) {
             console.error('Error fetching departments:', error.message, error.stack);
             res.status(500).json({ success: false, error: 'Failed to fetch departments', details: error.message });
+        }
+    }
+
+    /**
+     * View: Render Workflow Approvers Panel
+     */
+    async renderWorkflowApproversPanel(req, res) {
+        try {
+            const approvers = await WorkflowApproverConfig.findAll({ order: [['id', 'ASC']] });
+            res.render('pages/admin_workflow_approvers', { activeTab: 'approvers', approvers });
+        } catch (error) {
+            console.error('Error loading approvers panel:', error);
+            res.status(500).send('Failed to load approvers panel');
+        }
+    }
+
+    /**
+     * API: List all workflow approver configs
+     */
+    async getWorkflowApprovers(req, res) {
+        try {
+            const approvers = await WorkflowApproverConfig.findAll({ order: [['id', 'ASC']] });
+            res.json({ success: true, data: approvers });
+        } catch (error) {
+            console.error('Error fetching approvers:', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch approver configs' });
+        }
+    }
+
+    /**
+     * API: Update a single workflow approver config
+     */
+    async updateWorkflowApprover(req, res) {
+        try {
+            const { id } = req.params;
+            const { approverEmail, approverName, isActive } = req.body;
+
+            const config = await WorkflowApproverConfig.findByPk(id);
+            if (!config) {
+                return res.status(404).json({ success: false, error: 'Approver config not found' });
+            }
+
+            await config.update({
+                approverEmail: approverEmail?.trim() || null,
+                approverName:  approverName?.trim()  || null,
+                isActive:      isActive !== undefined ? Boolean(isActive) : config.isActive
+            });
+
+            res.json({ success: true, message: `Approver "${config.label}" updated successfully`, data: config });
+        } catch (error) {
+            console.error('Error updating approver config:', error);
+            res.status(500).json({ success: false, error: 'Failed to update approver config' });
         }
     }
 

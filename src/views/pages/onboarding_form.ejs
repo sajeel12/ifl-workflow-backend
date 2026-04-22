@@ -87,15 +87,18 @@
                                     value="<%= val('department') %>" <%=hrDisabled %>></div>
                             <div class="form-group"><label>Designation</label><input type="text" name="designation"
                                     value="<%= val('designation') %>" <%=hrDisabled %>></div>
-                            <div class="form-group"><label>Project / Unit</label><input type="text" name="projectUnit"
-                                    value="<%= val('projectUnit') %>" <%=hrDisabled %>></div>
+                            <div class="form-group"><label>Location</label><input type="text" name="location"
+                                    value="<%= val('location') %>" <%=hrDisabled %>></div>
                         </div>
                         <div class="grid-3">
                             <div class="form-group"><label>HOD Name</label><input type="text" name="hod"
                                     value="<%= val('hod') %>" <%=hrDisabled %>></div>
-                            <div class="form-group"><label>Joining Date</label><input type="date" name="joiningDate"
-                                    value="<%= val('joiningDate') ? new Date(val('joiningDate')).toISOString().split('T')[0] : '' %>"
-                                    <%=hrDisabled %>></div>
+                            <div class="form-group">
+                                <label>Joining Date</label>
+                                <input type="date" name="joiningDate"
+                                    value="<%= (function(){ if(!val('joiningDate')) return ''; const d = new Date(val('joiningDate')); return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]; })() %>"
+                                    <%=hrDisabled %>>
+                            </div>
                             <div class="form-group"><label>Office Extension</label><input type="text"
                                     name="officeExtension" value="<%= val('officeExtension') %>" <%=hrDisabled %>></div>
                         </div>
@@ -344,11 +347,18 @@
                         setVal('fullName', data.fullName);
                         setVal('department', data.department);
                         setVal('designation', data.designation);
-                        setVal('projectUnit', data.projectUnit);
-                        setVal('joiningDate', data.joiningDate);
+                        setVal('location', data.location || data.projectUnit); // Using the new location field
+                        setVal('hod', data.hod);
+                        setVal('mobile', data.mobile);
                         setVal('officeExtension', data.officeExtension);
 
-                    } catch (err) {
+                        // Safely parse Joining Date to YYYY-MM-DD format for HTML5 date input
+                        if (data.joiningDate) {
+                            const d = new Date(data.joiningDate);
+                            if (!isNaN(d.getTime())) {
+                                setVal('joiningDate', d.toISOString().split('T')[0]);
+                            }
+                        }
                         alert(err.message);
                     } finally {
                         btn.textContent = originalText;

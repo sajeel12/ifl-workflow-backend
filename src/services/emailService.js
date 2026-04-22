@@ -6,6 +6,7 @@ const transporterOptions = {
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '25', 10),
     secure: process.env.SMTP_SECURE === 'true',
+    ignoreTLS: true, // Forces plaintext connection, skipping STARTTLS (common fix for internal Exchange relays)
     tls: {
         ciphers: 'SSLv3',
         rejectUnauthorized: false
@@ -70,51 +71,78 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
 
     const htmlBody = `
     <!DOCTYPE html>
-    <html>
+    <html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
     <head>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f2f1; margin: 0; padding: 0; }
-            .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-            .header { background-color: #0078D4; padding: 20px; text-align: center; }
-            .header h1 { color: #ffffff; margin: 0; font-size: 20px; font-weight: 600; }
-            .content { padding: 30px; color: #323130; }
-            .info-box { background-color: #f8f9fa; border-left: 4px solid #0078D4; padding: 15px; margin-bottom: 20px; }
-            .label { font-weight: 600; color: #605e5c; font-size: 13px; text-transform: uppercase; }
-            .value { font-size: 16px; font-weight: 500; color: #201f1e; margin-bottom: 10px; display: block; }
-            .email-text { font-size: 14px; color: #605e5c; font-weight: 400; }
-            .button { display: inline-block; padding: 12px 24px; background-color: #0078D4; color: white; text-decoration: none; border-radius: 4px; font-weight: 600; margin-top: 10px; }
-            .button:hover { background-color: #005a9e; }
-            .footer { background-color: #f3f2f1; padding: 15px; text-align: center; color: #605e5c; font-size: 12px; }
-        </style>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <!--[if mso]>
+        <xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+        <![endif]-->
     </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Ibrahim Fibres Limited</h1>
-            </div>
-            <div class="content">
-                <h2 style="color: #0078D4; margin-top: 0;">${subject}</h2>
-                
-                <div class="info-box">
-                    <span class="label">REQUESTER</span>
-                    <span class="value">
-                        ${requesterName || 'Unknown'} 
-                        <br/>
-                        <span class="email-text">(${requesterEmail || 'No Email'})</span>
-                    </span>
-                    
-                    <span class="label">DETAILS</span>
-                    <p style="margin-top: 5px; line-height: 1.5;">${requestDetails}</p>
-                </div>
+    <body style="margin:0;padding:0;background-color:#f3f2f1;font-family:Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f2f1;">
+            <tr>
+                <td align="center" style="padding:20px 10px;">
+                    <!-- Outer container -->
+                    <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e1dfdd;">
+                        <!-- Header -->
+                        <tr>
+                            <td bgcolor="#0078D4" style="background-color:#0078D4;padding:20px;text-align:center;">
+                                <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:600;font-family:Arial,sans-serif;">Ibrahim Fibres Limited</h1>
+                            </td>
+                        </tr>
+                        <!-- Content -->
+                        <tr>
+                            <td style="padding:30px;color:#323130;font-family:Arial,sans-serif;">
+                                <h2 style="color:#0078D4;margin-top:0;margin-bottom:20px;font-family:Arial,sans-serif;font-size:18px;">${subject}</h2>
 
-                <div style="text-align: center;">
-                    <a href="${approvalLink}" class="button">Review & Approve/Reject</a>
-                </div>
-            </div>
-            <div class="footer">
-                <p>This is an automated notification from the IFL Workflow System.</p>
-            </div>
-        </div>
+                                <!-- Info box -->
+                                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8f9fa;border-left:4px solid #0078D4;margin-bottom:20px;">
+                                    <tr>
+                                        <td style="padding:15px;">
+                                            <p style="margin:0 0 4px 0;font-weight:600;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;text-transform:uppercase;">REQUESTER</p>
+                                            <p style="margin:0 0 12px 0;font-size:15px;font-weight:600;color:#201f1e;font-family:Arial,sans-serif;">${requesterName || 'Unknown'}</p>
+                                            <p style="margin:0 0 12px 0;font-size:13px;color:#605e5c;font-family:Arial,sans-serif;">${requesterEmail || 'No Email'}</p>
+
+                                            <p style="margin:0 0 4px 0;font-weight:600;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;text-transform:uppercase;">DETAILS</p>
+                                            <p style="margin:0;font-size:14px;line-height:1.5;color:#323130;font-family:Arial,sans-serif;">${requestDetails}</p>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <!-- Button (VML for Outlook, fallback for others) -->
+                                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                    <tr>
+                                        <td align="center" style="padding-top:10px;">
+                                            <!--[if mso]>
+                                            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
+                                                href="${approvalLink}"
+                                                style="height:44px;v-text-anchor:middle;width:240px;"
+                                                arcsize="6%"
+                                                stroke="f"
+                                                fillcolor="#0078D4">
+                                                <w:anchorlock/>
+                                                <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">Review &amp; Approve/Reject</center>
+                                            </v:roundrect>
+                                            <![endif]-->
+                                            <!--[if !mso]><!-->
+                                            <a href="${approvalLink}" style="background-color:#0078D4;color:#ffffff;display:inline-block;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;line-height:44px;text-align:center;text-decoration:none;width:240px;-webkit-text-size-adjust:none;">Review &amp; Approve/Reject</a>
+                                            <!--<![endif]-->
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                        <!-- Footer -->
+                        <tr>
+                            <td bgcolor="#f3f2f1" style="background-color:#f3f2f1;padding:15px;text-align:center;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;">
+                                <p style="margin:0;">This is an automated notification from the IFL Workflow System.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
         <script type="application/adaptivecard+json">
             ${JSON.stringify(adaptiveCardPayload)}
         </script>
@@ -167,75 +195,134 @@ export const sendRequesterNotification = async (toEmail, subject, message, reque
 
     const htmlBody = `
     <!DOCTYPE html>
-    <html>
+    <html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
     <head>
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f2f1; margin: 0; padding: 0; }
-            .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-            .header { background-color: #0078D4; padding: 20px; text-align: center; }
-            .header h1 { color: #ffffff; margin: 0; font-size: 20px; font-weight: 600; }
-            .content { padding: 30px; color: #323130; }
-            .status-banner { background-color: ${statusColor}; color: white; padding: 10px 15px; border-radius: 4px; margin-bottom: 20px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-            .info-box { background-color: #f8f9fa; border: 1px solid #e1dfdd; padding: 20px; border-radius: 4px; }
-            .row { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-            .row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-            .label { font-weight: 600; color: #605e5c; }
-            .value { font-weight: 400; color: #201f1e; }
-            .next-steps { background-color: #eff6fc; border-left: 4px solid #0078D4; padding: 15px; margin-top: 20px; }
-            .footer { background-color: #f3f2f1; padding: 15px; text-align: center; color: #605e5c; font-size: 12px; }
-        </style>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <!--[if mso]>
+        <xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+        <![endif]-->
     </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Ibrahim Fibres Limited</h1>
-            </div>
-            <div class="content">
-                <div class="status-banner">
-                    <span style="font-size: 20px;">${statusIcon}</span>
-                    <span>${subject}</span>
-                </div>
-                
-                <p style="margin-bottom: 20px; line-height: 1.6;">${message}</p>
-                
-                <div class="info-box">
-                    <div class="row">
-                        <span class="label">Request ID</span>
-                        <span class="value">#${requestId}</span>
-                    </div>
-                    <div class="row">
-                        <span class="label">Type</span>
-                        <span class="value">${requestType}</span>
-                    </div>
-                    <div class="row">
-                        <span class="label">Status</span>
-                        <span class="value" style="color: ${statusColor}; font-weight: 600;">${currentStage || status}</span>
-                    </div>
-                    ${rejecterRole ? `
-                    <div class="row">
-                        <span class="label">Rejected By</span>
-                        <span class="value">${rejecterRole}</span>
-                    </div>
-                    ` : ''}
-                    ${comment ? `
-                    <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
-                        <span class="label" style="display:block; margin-bottom:5px;">Comment:</span>
-                        <span class="value" style="font-style: italic;">"${comment}"</span>
-                    </div>
-                    ` : ''}
-                </div>
+    <body style="margin:0;padding:0;background-color:#f3f2f1;font-family:Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f2f1;">
+            <tr>
+                <td align="center" style="padding:20px 10px;">
+                    <!-- Outer container -->
+                    <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e1dfdd;">
+                        <!-- Header -->
+                        <tr>
+                            <td bgcolor="#0078D4" style="background-color:#0078D4;padding:20px;text-align:center;">
+                                <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:600;font-family:Arial,sans-serif;">Ibrahim Fibres Limited</h1>
+                            </td>
+                        </tr>
+                        <!-- Content -->
+                        <tr>
+                            <td style="padding:30px;color:#323130;font-family:Arial,sans-serif;">
 
-                ${nextSteps ? `
-                <div class="next-steps">
-                    <strong style="color: #0078D4; display: block; margin-bottom: 5px;">Next Steps</strong>
-                    ${nextSteps}
-                </div>
-                ` : ''}
-            </div>
-            <div class="footer">
-                <p>This is an automated notification from the IFL Workflow System.<br>Please do not reply to this email.</p>
-            </div>
-        </div>
+                                <!-- Status banner using table -->
+                                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+                                    <tr>
+                                        <td bgcolor="${statusColor}" style="background-color:${statusColor};padding:12px 15px;">
+                                            <table cellpadding="0" cellspacing="0" border="0">
+                                                <tr>
+                                                    <td style="font-size:20px;padding-right:10px;vertical-align:middle;font-family:Arial,sans-serif;">${statusIcon}</td>
+                                                    <td style="color:#ffffff;font-weight:600;font-size:15px;font-family:Arial,sans-serif;vertical-align:middle;">${subject}</td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <p style="margin:0 0 20px 0;line-height:1.6;font-size:14px;color:#323130;font-family:Arial,sans-serif;">${message}</p>
+
+                                <!-- Info box -->
+                                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8f9fa;border:1px solid #e1dfdd;">
+                                    <tr>
+                                        <td style="padding:0;">
+                                            <!-- Request ID row -->
+                                            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                                <tr>
+                                                    <td style="padding:12px 15px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;">
+                                                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                                            <tr>
+                                                                <td style="font-weight:600;color:#605e5c;font-size:14px;font-family:Arial,sans-serif;">Request ID</td>
+                                                                <td align="right" style="color:#201f1e;font-size:14px;font-family:Arial,sans-serif;">#${requestId}</td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                                <!-- Type row -->
+                                                <tr>
+                                                    <td style="padding:12px 15px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;">
+                                                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                                            <tr>
+                                                                <td style="font-weight:600;color:#605e5c;font-size:14px;font-family:Arial,sans-serif;">Type</td>
+                                                                <td align="right" style="color:#201f1e;font-size:14px;font-family:Arial,sans-serif;">${requestType}</td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                                <!-- Status row -->
+                                                <tr>
+                                                    <td style="padding:12px 15px;${rejecterRole || comment ? 'border-bottom:1px solid #eee;' : ''}font-family:Arial,sans-serif;">
+                                                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                                            <tr>
+                                                                <td style="font-weight:600;color:#605e5c;font-size:14px;font-family:Arial,sans-serif;">Status</td>
+                                                                <td align="right" style="color:${statusColor};font-weight:600;font-size:14px;font-family:Arial,sans-serif;">${currentStage || status}</td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                                ${rejecterRole ? `
+                                                <!-- Rejected by row -->
+                                                <tr>
+                                                    <td style="padding:12px 15px;${comment ? 'border-bottom:1px solid #eee;' : ''}font-family:Arial,sans-serif;">
+                                                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                                            <tr>
+                                                                <td style="font-weight:600;color:#605e5c;font-size:14px;font-family:Arial,sans-serif;">Rejected By</td>
+                                                                <td align="right" style="color:#201f1e;font-size:14px;font-family:Arial,sans-serif;">${rejecterRole}</td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                                ` : ''}
+                                                ${comment ? `
+                                                <!-- Comment row -->
+                                                <tr>
+                                                    <td style="padding:12px 15px;font-family:Arial,sans-serif;">
+                                                        <p style="margin:0 0 5px 0;font-weight:600;color:#605e5c;font-size:14px;font-family:Arial,sans-serif;">Comment</p>
+                                                        <p style="margin:0;color:#201f1e;font-style:italic;font-size:14px;font-family:Arial,sans-serif;">"${comment}"</p>
+                                                    </td>
+                                                </tr>
+                                                ` : ''}
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                ${nextSteps ? `
+                                <!-- Next steps -->
+                                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">
+                                    <tr>
+                                        <td style="background-color:#eff6fc;border-left:4px solid #0078D4;padding:15px;font-family:Arial,sans-serif;">
+                                            <p style="margin:0 0 5px 0;font-weight:700;color:#0078D4;font-size:14px;font-family:Arial,sans-serif;">Next Steps</p>
+                                            <p style="margin:0;font-size:14px;color:#323130;font-family:Arial,sans-serif;">${nextSteps}</p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                ` : ''}
+                            </td>
+                        </tr>
+                        <!-- Footer -->
+                        <tr>
+                            <td bgcolor="#f3f2f1" style="background-color:#f3f2f1;padding:15px;text-align:center;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;">
+                                <p style="margin:0;">This is an automated notification from the IFL Workflow System.<br>Please do not reply to this email.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
     </body>
     </html>
     `;
