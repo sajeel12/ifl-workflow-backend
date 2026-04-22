@@ -29,7 +29,7 @@
                  autocomplete="off"
                  oninput="onMainSearch(this.value)"
                  onkeydown="onMainKey(event)"
-                 onfocus="if(this.value.trim().length>=2) _mainSuggestFetch(this.value.trim())">
+                 onfocus="if(!FloatSuggest.isOpen() && this.value.trim().length>=2) _mainSuggestFetch(this.value.trim())">
           <button class="btn btn-secondary" onclick="clearMainSearch()">Clear</button>
           <button class="btn btn-primary"   onclick="loadEmployees(1)">Search</button>
         </div>
@@ -302,14 +302,21 @@ function switchTab(name) {
 /* ================================================================
    MAIN SEARCH BAR SUGGESTIONS
 ================================================================ */
+let _mainLoadingTimer;
 async function _mainSuggestFetch(q) {
   const inp = document.getElementById('searchInput');
   if (q.length < 2) { FloatSuggest.close(); return; }
 
-  FloatSuggest.show(inp, suggestLoading(), () => {});
+  clearTimeout(_mainLoadingTimer);
+  _mainLoadingTimer = setTimeout(() => {
+    if (q.length >= 2) FloatSuggest.show(inp, suggestLoading(), () => {});
+  }, 150);
+
   try {
     const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
     const json = await res.json();
+    clearTimeout(_mainLoadingTimer);
+
     if (!json.success || !json.data.length) {
       FloatSuggest.show(inp, suggestEmpty(q), () => {});
       return;
@@ -328,6 +335,7 @@ async function _mainSuggestFetch(q) {
       loadEmployees(1);
     });
   } catch {
+    clearTimeout(_mainLoadingTimer);
     FloatSuggest.show(inp, '<div class="a-suggest-empty" style="color:var(--a-red);">Error fetching results</div>', () => {});
   }
 }
@@ -358,14 +366,20 @@ function clearMainSearch() {
 /* ================================================================
    HOD MODAL SEARCH SUGGESTIONS
 ================================================================ */
+let _hodLoadingTimer;
 async function _hodSuggestFetch(q) {
   const inp = document.getElementById('hodSearchInput');
   if (q.length < 2) { FloatSuggest.close(); return; }
 
-  FloatSuggest.show(inp, suggestLoading(), () => {});
+  clearTimeout(_hodLoadingTimer);
+  _hodLoadingTimer = setTimeout(() => {
+    if (q.length >= 2) FloatSuggest.show(inp, suggestLoading(), () => {});
+  }, 150);
+
   try {
     const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=10`);
     const json = await res.json();
+    clearTimeout(_hodLoadingTimer);
     const results = (json.data || []).filter(e => e.employeeId !== _hodExcludeId);
 
     if (!results.length) {
@@ -381,6 +395,7 @@ async function _hodSuggestFetch(q) {
       selectHod(emp.employeeId, emp.name, emp.designation || '', emp.department || '', emp.email || '');
     });
   } catch {
+    clearTimeout(_hodLoadingTimer);
     FloatSuggest.show(inp, '<div class="a-suggest-empty" style="color:var(--a-red);">Error</div>', () => {});
   }
 }
