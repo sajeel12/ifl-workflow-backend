@@ -1,6 +1,8 @@
 import Employee from '../models/Employee.js';
 import SyncLog from '../models/SyncLog.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
+import OnboardingRequest from '../models/OnboardingRequest.js';
+import TimelineEvent from '../models/TimelineEvent.js';
 import oracleSyncService from '../services/oracleSyncService.js';
 import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
@@ -418,6 +420,90 @@ class AdminController {
         } catch (error) {
             console.error('Error assigning Department HOD:', error);
             res.status(500).json({ success: false, error: 'Failed to assign HOD to department' });
+        }
+    }
+
+    /**
+     * View: Render Onboarding History & Timeline Panel
+     */
+    renderOnboardingHistoryPanel(req, res) {
+        res.render('pages/admin_onboarding_history', { activeTab: 'history' });
+    }
+
+    /**
+     * API: Get all onboarding requests with summary info
+     */
+    async getOnboardingRequests(req, res) {
+        try {
+            const { page = 1, limit = 15, status, search } = req.query;
+            const limitInt = parseInt(limit, 10);
+            const pageInt = parseInt(page, 10);
+            const offset = (pageInt - 1) * limitInt;
+
+            const whereClause = {};
+            if (status) whereClause.status = status;
+            if (search) {
+                const searchStr = `%${search}%`;
+                whereClause[Op.or] = [
+                    { employeeId: { [Op.like]: searchStr } },
+                    { fullName: { [Op.like]: searchStr } },
+                    { department: { [Op.like]: searchStr } }
+                ];
+            }
+
+            const { count, rows } = await OnboardingRequest.findAndCountAll({
+                where: whereClause,
+                limit: limitInt,
+                offset: offset,
+                order: [['createdAt', 'DESC']],
+                attributes: ['id', 'employeeId', 'fullName', 'department', 'designation', 'status', 'createdAt', 'hodApprovedAt', 'dciImplementedAt', 'opsCompletedAt']
+            });
+
+            res.json({
+                success: true,
+                data: rows,
+                pagination: {
+                    total: count,
+                    page: pageInt,
+                    limit: limitInt,
+                    totalPages: Math.ceil(count / limitInt)
+                }
+            });
+        } catch (error) {
+            console.error('Error fetching onboarding requests:', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch onboarding requests' });
+        }
+    }
+
+    /**
+     * API: Get timeline events for a specific onboarding request
+     */
+    async getOnboardingTimeline(req, res) {
+        try {
+            const { id } = req.params;
+
+            const request = await OnboardingRequest.findByPk(id, {
+                attributes: ['id', 'employeeId', 'fullName', 'department', 'designation', 'status', 'createdAt', 'hodApprovedAt', 'dciImplementedAt', 'opsCompletedAt']
+            });
+
+            if (!request) {
+                return res.status(404).json({ success: false, error: 'Onboarding request not found' });
+            }
+
+            const events = await TimelineEvent.findAll({
+                where: { requestId: id },
+                order: [['timestamp', 'ASC']],
+                attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
+            });
+
+            res.json({
+                success: true,
+                request: request,
+                timeline: events
+            });
+        } catch (error) {
+            console.error('Error fetching onboarding timeline:', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch onboarding timeline' });
         }
     }
 }

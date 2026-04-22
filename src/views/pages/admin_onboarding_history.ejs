@@ -1,0 +1,383 @@
+<%- include('../partials/admin_shell_top', { activeTab: 'history' }) %>
+
+  <!-- Page header -->
+  <div class="a-page-hd">
+    <h1 class="a-page-hd__title">Onboarding History & Timeline</h1>
+    <p class="a-page-hd__sub">View detailed onboarding workflow history and timeline for each employee.</p>
+  </div>
+
+  <!-- Filters -->
+  <div class="a-card" style="margin-bottom:0;border-bottom:none;border-radius:var(--a-radius-md) var(--a-radius-md) 0 0;">
+    <div class="a-card__body" style="padding:16px;">
+      <div style="display:grid;grid-template-columns:1fr 160px;gap:12px;align-items:flex-end;">
+        <div>
+          <label class="a-label">Search by name, ID or department</label>
+          <input type="text" id="searchInput" class="a-input" placeholder="Search…" oninput="onSearchChange()">
+        </div>
+        <div>
+          <label class="a-label">Status</label>
+          <select id="statusFilter" class="a-input" onchange="onFilterChange()">
+            <option value="">All Statuses</option>
+            <option value="Draft">Draft</option>
+            <option value="Pending">Pending</option>
+            <option value="Completed">Completed</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Requests List -->
+  <div class="a-card" style="border-radius:0 0 var(--a-radius-md) var(--a-radius-md);margin-bottom:24px;">
+    <div class="a-card__body" style="padding:0;">
+      <div id="requestsList">
+        <div style="text-align:center;padding:40px;color:var(--a-text-muted);">Loading requests…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline Details Modal -->
+  <div class="modal-overlay" id="timelineModal" style="opacity:0;pointer-events:none;">
+    <div class="modal a-modal--lg" style="max-width:800px;">
+      <div class="modal-header">
+        <div>
+          <h2 id="modalTitle">Onboarding Timeline</h2>
+          <p style="margin:4px 0 0;color:var(--a-text-muted);font-size:.85rem;" id="modalSubtitle"></p>
+        </div>
+        <button class="close-btn" onclick="closeModal()">×</button>
+      </div>
+      <div style="padding:24px;">
+        <div id="timelineContainer" style="position:relative;padding:12px 0;"></div>
+      </div>
+    </div>
+  </div>
+
+<%- include('../partials/admin_shell_bottom') %>
+
+<style>
+.request-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:16px;
+  border-bottom:1px solid var(--a-border);
+  cursor:pointer;
+  transition:background 0.15s ease;
+}
+
+.request-row:hover {
+  background:var(--a-bg-hover);
+}
+
+.request-row:last-child {
+  border-bottom:none;
+}
+
+.request-info {
+  flex:1;
+  min-width:0;
+}
+
+.request-name {
+  font-weight:600;
+  font-size:.95rem;
+  color:var(--a-text);
+  margin-bottom:4px;
+}
+
+.request-meta {
+  font-size:.8rem;
+  color:var(--a-text-muted);
+  display:flex;
+  gap:12px;
+}
+
+.request-badge {
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:var(--a-radius-sm);
+  font-size:.75rem;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+
+.request-badge.draft {
+  background:#f0f0f0;
+  color:#666;
+}
+
+.request-badge.pending {
+  background:#fff3cd;
+  color:#856404;
+}
+
+.request-badge.completed {
+  background:var(--a-green-bg);
+  color:var(--a-green);
+}
+
+.request-badge.rejected {
+  background:var(--a-red-bg);
+  color:var(--a-red);
+}
+
+/* Timeline styles */
+.timeline-item {
+  position:relative;
+  padding-left:40px;
+  padding-bottom:24px;
+}
+
+.timeline-item:last-child {
+  padding-bottom:0;
+}
+
+.timeline-dot {
+  position:absolute;
+  left:4px;
+  top:0;
+  width:24px;
+  height:24px;
+  border-radius:50%;
+  background:var(--a-bg);
+  border:2px solid var(--a-border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:.65rem;
+  font-weight:700;
+}
+
+.timeline-dot.approved {
+  background:var(--a-green);
+  border-color:var(--a-green);
+  color:white;
+}
+
+.timeline-dot.rejected {
+  background:var(--a-red);
+  border-color:var(--a-red);
+  color:white;
+}
+
+.timeline-dot.submitted {
+  background:var(--a-brand);
+  border-color:var(--a-brand);
+  color:white;
+}
+
+.timeline-dot.configured {
+  background:#9c27b0;
+  border-color:#9c27b0;
+  color:white;
+}
+
+.timeline-line {
+  position:absolute;
+  left:14px;
+  top:24px;
+  width:2px;
+  bottom:-24px;
+  background:var(--a-border);
+}
+
+.timeline-item:last-child .timeline-line {
+  display:none;
+}
+
+.timeline-content {
+  background:var(--a-bg);
+  padding:12px;
+  border-radius:var(--a-radius-sm);
+  border:1px solid var(--a-border);
+}
+
+.timeline-action {
+  font-weight:600;
+  font-size:.9rem;
+  color:var(--a-text);
+  margin-bottom:4px;
+}
+
+.timeline-actor {
+  font-size:.8rem;
+  color:var(--a-text-muted);
+  margin-bottom:6px;
+}
+
+.timeline-timestamp {
+  font-size:.75rem;
+  color:var(--a-text-muted);
+}
+
+.timeline-details {
+  margin-top:8px;
+  padding:8px;
+  background:var(--a-bg-alt);
+  border-radius:var(--a-radius-sm);
+  font-size:.8rem;
+  color:var(--a-text-muted);
+  line-height:1.4;
+  word-break:break-word;
+}
+</style>
+
+<script>
+let currentPage = 1;
+let totalPages = 1;
+let allRequests = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadRequests();
+});
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+const debouncedLoad = debounce(() => loadRequests(1), 300);
+
+function onSearchChange() {
+  debouncedLoad();
+}
+
+function onFilterChange() {
+  loadRequests(1);
+}
+
+async function loadRequests(page = 1) {
+  const search = document.getElementById('searchInput').value.trim();
+  const status = document.getElementById('statusFilter').value;
+
+  const params = new URLSearchParams({
+    page,
+    limit: 15,
+    ...(search && { search }),
+    ...(status && { status })
+  });
+
+  try {
+    const res = await fetch(`/admin/onboarding-requests?${params}`);
+    const json = await res.json();
+
+    if (!json.success || !json.data.length) {
+      document.getElementById('requestsList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--a-text-muted);">No onboarding requests found.</div>';
+      return;
+    }
+
+    allRequests = json.data;
+    currentPage = json.pagination.page;
+    totalPages = json.pagination.totalPages;
+
+    renderRequests(json.data);
+  } catch (e) {
+    console.error(e);
+    document.getElementById('requestsList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--a-red);">Error loading requests</div>';
+  }
+}
+
+function renderRequests(requests) {
+  const html = requests.map(req => {
+    const statusClass = req.status.toLowerCase();
+    const empInfo = `${req.employeeId} · ${req.department}`;
+    return `
+      <div class="request-row" onclick="loadTimeline(${req.id}, '${req.fullName}', '${req.employeeId}')">
+        <div class="request-info">
+          <div class="request-name">${req.fullName}</div>
+          <div class="request-meta">
+            <span>${empInfo}</span>
+            <span>${req.designation || '—'}</span>
+            <span style="color:var(--a-text-muted);">${new Date(req.createdAt).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <span class="request-badge ${statusClass}">${req.status}</span>
+      </div>`;
+  }).join('');
+
+  document.getElementById('requestsList').innerHTML = html;
+}
+
+async function loadTimeline(id, name, empId) {
+  try {
+    const res = await fetch(`/admin/onboarding-timeline/${id}`);
+    const json = await res.json();
+
+    if (!json.success) {
+      alert('Error loading timeline');
+      return;
+    }
+
+    const { request, timeline } = json;
+    document.getElementById('modalTitle').textContent = `${request.fullName}`;
+    document.getElementById('modalSubtitle').textContent = `Employee ID: ${request.employeeId} · Department: ${request.department} · Status: ${request.status}`;
+
+    renderTimeline(timeline, request);
+    openModal();
+  } catch (e) {
+    console.error(e);
+    alert('Error loading timeline');
+  }
+}
+
+function renderTimeline(events, request) {
+  if (!events || !events.length) {
+    document.getElementById('timelineContainer').innerHTML = '<div style="text-align:center;color:var(--a-text-muted);">No timeline events yet.</div>';
+    return;
+  }
+
+  const html = events.map((ev, i) => {
+    const icon = getActionIcon(ev.action);
+    const cls = getActionClass(ev.action);
+    const timestamp = new Date(ev.timestamp);
+    const timeStr = timestamp.toLocaleString();
+
+    return `
+      <div class="timeline-item">
+        <div class="timeline-line"></div>
+        <div class="timeline-dot ${cls}">${icon}</div>
+        <div class="timeline-content">
+          <div class="timeline-action">${ev.action}</div>
+          <div class="timeline-actor">By <strong>${ev.actorRole}</strong></div>
+          <div class="timeline-timestamp">${timeStr}</div>
+          ${ev.details ? `<div class="timeline-details">${escapeHtml(ev.details)}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('timelineContainer').innerHTML = html;
+}
+
+function getActionIcon(action) {
+  const icons = {
+    'Submitted': '✓',
+    'Approved': '✓',
+    'Rejected': '✕',
+    'Configured': '⚙'
+  };
+  return icons[action] || '•';
+}
+
+function getActionClass(action) {
+  if (action === 'Approved') return 'approved';
+  if (action === 'Rejected') return 'rejected';
+  if (action === 'Submitted') return 'submitted';
+  if (action === 'Configured') return 'configured';
+  return '';
+}
+
+function escapeHtml(text) {
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+function openModal() {
+  document.getElementById('timelineModal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('timelineModal').classList.remove('active');
+}
+</script>

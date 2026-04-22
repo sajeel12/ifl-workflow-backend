@@ -8,6 +8,7 @@ router.get('/hod-panel', adminController.renderHodPanel);
 router.get('/settings', adminController.renderSettingsPanel);
 router.get('/offboarding', adminController.renderOffboardingPanel);
 router.get('/workflow-approvers', adminController.renderWorkflowApproversPanel);
+router.get('/onboarding-history', adminController.renderOnboardingHistoryPanel);
 
 // API endpoints internally for the admin section
 router.get('/employees', adminController.searchEmployees);
@@ -23,5 +24,9 @@ router.post('/assign-department-hod', adminController.assignDepartmentHod);
 // Workflow Approver Configuration
 router.get('/workflow-approvers/api', adminController.getWorkflowApprovers);
 router.put('/workflow-approvers/:id', adminController.updateWorkflowApprover);
+
+// Onboarding History & Timeline
+router.get('/onboarding-requests', adminController.getOnboardingRequests);
+router.get('/onboarding-timeline/:id', adminController.getOnboardingTimeline);
 
 export default router;
