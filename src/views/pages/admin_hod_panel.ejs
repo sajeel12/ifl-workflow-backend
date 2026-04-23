@@ -55,6 +55,14 @@
 
       <!-- ── Department View ── -->
       <div id="view-department" style="display:none;">
+        <div class="a-search">
+          <input type="text" id="deptSearchInput" class="a-input"
+                 placeholder="Search departments by name or HOD…"
+                 autocomplete="off"
+                 oninput="onDeptSearch(this.value)">
+          <button class="btn btn-secondary" onclick="clearDeptSearch()">Clear</button>
+        </div>
+
         <div class="table-container">
           <table>
             <thead>
@@ -446,21 +454,47 @@ async function loadDepartments() {
     if (json.success) {
       currentDepartments = json.data;
       document.getElementById('stats').innerText = `${json.data.length} departments`;
-      renderDepartmentTable(json.data);
+      const q = (document.getElementById('deptSearchInput')?.value || '').trim();
+      renderDepartmentTable(filterDepartments(q), q);
     } else tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--a-red);">${json.error}</td></tr>`;
   } catch { tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--a-red);">Network Error</td></tr>`; }
 }
 
-function renderDepartmentTable(departments) {
+function filterDepartments(q) {
+  if (!q) return currentDepartments;
+  const needle = q.toLowerCase();
+  return currentDepartments.filter(d =>
+    (d.departmentName || '').toLowerCase().includes(needle) ||
+    (d.currentHodName || '').toLowerCase().includes(needle)
+  );
+}
+
+const _deptSearchDebounced = debounce(() => {
+  const q = document.getElementById('deptSearchInput').value.trim();
+  renderDepartmentTable(filterDepartments(q), q);
+  document.getElementById('stats').innerText =
+    `${filterDepartments(q).length} of ${currentDepartments.length} departments`;
+}, 180);
+
+function onDeptSearch(val) { _deptSearchDebounced(val); }
+
+function clearDeptSearch() {
+  const inp = document.getElementById('deptSearchInput');
+  if (inp) inp.value = '';
+  renderDepartmentTable(currentDepartments, '');
+  document.getElementById('stats').innerText = `${currentDepartments.length} departments`;
+}
+
+function renderDepartmentTable(departments, q = '') {
   const tbody = document.getElementById('departmentTableBody');
   if (!departments.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--a-text-muted);">No departments found.</td></tr>'; return; }
   tbody.innerHTML = departments.map(d => {
     const badge = d.currentHodId
-      ? `<span class="badge assigned" title="${d.currentHodId}">${d.currentHodName}</span>`
-      : `<span class="badge unassigned">${d.currentHodName}</span>`;
+      ? `<span class="badge assigned" title="${d.currentHodId}">${highlight(d.currentHodName, q)}</span>`
+      : `<span class="badge unassigned">${highlight(d.currentHodName, q)}</span>`;
     const safe = (d.originalDeptName || '').replace(/'/g, "\\'");
     return `<tr>
-      <td><strong>${d.departmentName}</strong></td>
+      <td><strong>${highlight(d.departmentName, q)}</strong></td>
       <td>${d.employeeCount} employees</td>
       <td>${badge}</td>
       <td><button class="btn btn-primary" style="padding:5px 12px;font-size:.8rem;" onclick="openAssignModal(null,'${safe}','${d.departmentName}')">Assign HOD</button></td>

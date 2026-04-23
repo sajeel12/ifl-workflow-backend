@@ -32,6 +32,7 @@ const HRMSService = {
                 fullName:        emp.name,
                 designation:     emp.designation,
                 department:      emp.mainDept || emp.orgElementName,
+                subDepartment:   emp.orgElementName || emp.unit,
                 projectUnit:     emp.unit,
                 joiningDate:     emp.joiningDate,
                 mobile:          emp.mobile,

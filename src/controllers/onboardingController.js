@@ -1,5 +1,9 @@
 import * as onboardingService from '../services/onboardingService.js';
 import logger from '../utils/logger.js';
+import SystemConfig from '../models/SystemConfig.js';
+import OnboardingRequest from '../models/OnboardingRequest.js';
+import TimelineEvent from '../models/TimelineEvent.js';
+import { Op } from 'sequelize';
 
 export const handleRequest = async (req, res) => {
     const { token } = req.query;
@@ -34,7 +38,25 @@ const handleSubmission = async (req, res, token) => {
 
     try {
         if (!token) {
-            // HR Submission
+            // HR Submission — attach requester info from SSO user
+            if (req.user) {
+                data.requesterName = data.requesterName || req.user.displayName || req.user.username;
+                data.requesterEmail = req.user.email || null;
+            }
+
+            // Guard: block duplicate active request for same employee
+            if (data.employeeId) {
+                const existing = await OnboardingRequest.findOne({
+                    where: {
+                        employeeId: data.employeeId,
+                        status: { [Op.notIn]: ['Rejected', 'Completed'] }
+                    }
+                });
+                if (existing) {
+                    return res.redirect(`/api/onboarding/history/${existing.id}`);
+                }
+            }
+
             await onboardingService.createRequest(data);
             return renderSuccess(res, 'Request Submitted', 'The request has been sent to IT Operations for service configuration.');
         } else {
@@ -62,8 +84,8 @@ const handleSubmission = async (req, res, token) => {
                 return renderSuccess(res, `Decision Recorded`, `The request has been processed. (Action: ${action})`);
             }
             else if (role === 'ITHOD') {
-                const { action } = data;
-                await onboardingService.handleITHODApproval(token, action);
+                const { action, itHodRemarks } = data;
+                await onboardingService.handleITHODApproval(token, action, itHodRemarks);
                 return renderSuccess(res, `Decision Recorded`, `The request has been finalized. (Action: ${action})`);
             }
             else if (role === 'OPS') {
@@ -89,10 +111,16 @@ const handleSubmission = async (req, res, token) => {
 
 export const handleProofUpload = async (req, res) => {
     try {
-        const { token, implementerName } = req.body;
+        const { token } = req.body;
         if (!req.files || req.files.length === 0) {
             return renderError(res, 'No files uploaded.');
         }
+
+        // Auto-fill implementer from Windows/SSO login; fall back to form field if no SSO session
+        const implementerName =
+            (req.user && (req.user.displayName || req.user.username)) ||
+            req.body.implementerName ||
+            'Unknown Implementer';
 
         const filePaths = req.files.map(f => f.path);
         await onboardingService.handleDCIImplementation(token, filePaths, implementerName);
@@ -106,12 +134,36 @@ export const handleProofUpload = async (req, res) => {
 const renderForm = async (req, res, token) => {
     let request = {};
     let role = 'HR';
+    let timeline = [];
 
     if (token) {
         const context = await onboardingService.getFormContext(token);
         if (!context) return renderError(res, 'Invalid or Expired Token');
         request = context.request;
         role = context.role;
+        // Load timeline events for this request to expose history within the form page
+        try {
+            timeline = await TimelineEvent.findAll({
+                where: { requestId: request.id },
+                order: [['timestamp', 'ASC']],
+                attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
+            });
+            timeline = timeline.map(e => e.toJSON());
+        } catch (e) {
+            logger.warn('[Onboarding] Could not load timeline: ' + e.message);
+        }
+    } else if (req.query.employeeId && role === 'HR') {
+        // HR entered an employeeId on the initiate form — if an active request exists,
+        // redirect them to its history/status page.
+        const existing = await OnboardingRequest.findOne({
+            where: {
+                employeeId: req.query.employeeId,
+                status: { [Op.notIn]: ['Rejected', 'Completed'] }
+            }
+        });
+        if (existing) {
+            return res.redirect(`/api/onboarding/history/${existing.id}`);
+        }
     } else if (req.query.mock) {
         role = req.query.mock.toUpperCase(); // IT, HOD, DCI, OPS, HR
         if (role === 'DSI') role = 'DCI'; // Handle legacy DSI param
@@ -157,6 +209,17 @@ const renderForm = async (req, res, token) => {
     const configDisabled = role !== 'DCI' ? 'disabled' : '';
     const dciRemarksDisabled = role !== 'DCIManager' ? 'disabled' : '';
     const hodRemarksDisabled = role !== 'HOD' ? 'disabled' : '';
+
+    // Auto-fill requester name from logged-in SSO user if not already set on the record
+    const currentUser = req.user || null;
+    if (!request.requesterName && currentUser) {
+        request.requesterName = currentUser.displayName || currentUser.username;
+        request.requesterEmail = currentUser.email;
+    }
+    // Intranet default: pre-check for brand-new HR form (no existing request)
+    if (role === 'HR' && !request.id && request.intranetAccess === undefined) {
+        request.intranetAccess = true;
+    }
 
     const val = (field) => request[field] || '';
     const chk = (field) => request[field] ? 'checked' : '';
@@ -221,6 +284,22 @@ const renderForm = async (req, res, token) => {
         `;
     }
 
+    // Load dynamic config for dropdown fields
+    let printerLocations = [];
+    let fileSharePaths = [];
+    let sharepointPaths = [];
+    try {
+        const configs = await SystemConfig.findAll({ attributes: ['key', 'value'] });
+        configs.forEach(c => {
+            const v = c.value;
+            if (c.key === 'printer_locations' && Array.isArray(v)) printerLocations = v;
+            if (c.key === 'file_share_paths'  && Array.isArray(v)) fileSharePaths = v;
+            if (c.key === 'sharepoint_paths'   && Array.isArray(v)) sharepointPaths = v;
+        });
+    } catch (e) {
+        logger.warn('[Onboarding] Could not load SystemConfig for form dropdowns: ' + e.message);
+    }
+
     return res.render('pages/onboarding_form', {
         title: `Onboarding - ${role}`,
         request,
@@ -236,8 +315,68 @@ const renderForm = async (req, res, token) => {
         formAction,
         formEnctype,
         steps,
-        opsChecklistHTML
+        opsChecklistHTML,
+        printerLocations,
+        fileSharePaths,
+        sharepointPaths,
+        timeline,
+        currentUser
     });
+};
+
+/**
+ * JSON lookup — does an active onboarding request exist for this employeeId?
+ * Used by the HR form's "Get Employee Data" flow to redirect to history.
+ */
+export const lookupExistingRequest = async (req, res) => {
+    try {
+        const { employeeId } = req.query;
+        if (!employeeId) return res.json({ existingRequestId: null });
+
+        const existing = await OnboardingRequest.findOne({
+            where: {
+                employeeId,
+                status: { [Op.notIn]: ['Rejected', 'Completed'] }
+            },
+            attributes: ['id', 'status', 'fullName']
+        });
+
+        return res.json({
+            existingRequestId: existing ? existing.id : null,
+            status: existing ? existing.status : null,
+            fullName: existing ? existing.fullName : null
+        });
+    } catch (err) {
+        logger.error(`[Onboarding Lookup] ${err.message}`);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * Render history / status page for an existing onboarding request.
+ * Used when a user tries to submit for an employee who already has an active request.
+ */
+export const renderHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const request = await OnboardingRequest.findByPk(id);
+        if (!request) return renderError(res, 'Onboarding request not found');
+
+        const events = await TimelineEvent.findAll({
+            where: { requestId: id },
+            order: [['timestamp', 'ASC']],
+            attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
+        });
+
+        return res.render('pages/onboarding_history', {
+            title: `Onboarding History - ${request.fullName || request.employeeId}`,
+            request,
+            timeline: events.map(e => e.toJSON())
+        });
+    } catch (err) {
+        logger.error(`[Onboarding History] ${err.message}`);
+        return renderError(res, err.message);
+    }
 };
 
 const renderSuccess = (res, title, message) => {

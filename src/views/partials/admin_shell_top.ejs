@@ -43,6 +43,7 @@
           Workflow Approvers
         </a>
 
+
         <!-- Onboarding History -->
         <a href="/admin/onboarding-history"
            class="a-nav__item <%= (typeof activeTab !== 'undefined' && activeTab === 'history') ? 'a-nav__item--active' : '' %>">
@@ -56,6 +57,19 @@
         </a>
 
         <hr class="a-sidebar__divider">
+
+        <!-- System Configuration -->
+        <a href="/admin/system-config"
+           class="a-nav__item <%= (typeof activeTab !== 'undefined' && activeTab === 'config') ? 'a-nav__item--active' : '' %>">
+          <svg class="a-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="1"/>
+            <path d="M12 1v6m0 6v6"/>
+            <path d="M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24"/>
+            <path d="M1 12h6m6 0h6"/>
+            <path d="M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/>
+          </svg>
+          System Config
+        </a>
 
         <!-- HRMS Sync -->
         <a href="/admin/settings"

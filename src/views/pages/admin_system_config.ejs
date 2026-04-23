@@ -1,0 +1,426 @@
+<%- include('../partials/admin_shell_top', { activeTab: 'config' }) %>
+
+  <!-- Page header -->
+  <div class="a-page-hd">
+    <h1 class="a-page-hd__title">System Configuration</h1>
+    <p class="a-page-hd__sub">Configure printers, file server paths, and SharePoint URLs that appear in onboarding forms.</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="a-card">
+    <div class="a-card__hd">
+      <div class="a-tabs" style="border:none;margin:0;flex:1;">
+        <button class="a-tab a-tab--active" onclick="switchTab('printers',this)">Printer Locations</button>
+        <button class="a-tab" onclick="switchTab('file-paths',this)">File Share Paths</button>
+        <button class="a-tab" onclick="switchTab('sharepoint',this)">SharePoint URLs</button>
+        <button class="a-tab" onclick="switchTab('completion',this)">Completion Recipients</button>
+      </div>
+    </div>
+
+    <div class="a-card__body">
+
+      <!-- Printers Tab -->
+      <div id="tab-printers" class="tab-content">
+        <h3 style="margin-top:0;font-size:1rem;margin-bottom:16px;">Printer Locations</h3>
+        <div id="printersList" class="a-scroll-list" style="margin-bottom:20px;"></div>
+        <button class="btn btn-secondary" onclick="addPrinterRow()">+ Add Printer</button>
+        <div style="margin-top:16px;display:flex;gap:10px;">
+          <button class="btn btn-primary" onclick="savePrinters(this)">Save Printer Config</button>
+          <span class="a-save-status" id="st-printers"></span>
+        </div>
+      </div>
+
+      <!-- File Paths Tab -->
+      <div id="tab-file-paths" class="tab-content" style="display:none;">
+        <h3 style="margin-top:0;font-size:1rem;margin-bottom:16px;">File Share Paths</h3>
+        <div id="filePathsList" class="a-scroll-list" style="margin-bottom:20px;"></div>
+        <button class="btn btn-secondary" onclick="addFilePathRow()">+ Add Path</button>
+        <div style="margin-top:16px;display:flex;gap:10px;">
+          <button class="btn btn-primary" onclick="saveFilePaths(this)">Save File Paths Config</button>
+          <span class="a-save-status" id="st-file-paths"></span>
+        </div>
+      </div>
+
+      <!-- SharePoint Tab -->
+      <div id="tab-sharepoint" class="tab-content" style="display:none;">
+        <h3 style="margin-top:0;font-size:1rem;margin-bottom:16px;">SharePoint URLs</h3>
+        <div id="sharepointList" class="a-scroll-list" style="margin-bottom:20px;"></div>
+        <button class="btn btn-secondary" onclick="addSharePointRow()">+ Add SharePoint</button>
+        <div style="margin-top:16px;display:flex;gap:10px;">
+          <button class="btn btn-primary" onclick="saveSharePoint(this)">Save SharePoint Config</button>
+          <span class="a-save-status" id="st-sharepoint"></span>
+        </div>
+      </div>
+
+      <!-- Completion Notification Recipients Tab -->
+      <div id="tab-completion" class="tab-content" style="display:none;">
+        <h3 style="margin-top:0;font-size:1rem;margin-bottom:8px;">Final Completion Notification Recipients</h3>
+        <p style="margin:0 0 16px 0;color:var(--a-text-muted);font-size:.85rem;">
+          When an onboarding request is fully completed by OPS, an email is sent to the recipients below.
+          Typically includes DCI Manager and OPS Manager, but you can add any number of addresses.
+        </p>
+        <div id="completionList" class="a-scroll-list" style="margin-bottom:20px;"></div>
+        <button class="btn btn-secondary" onclick="addCompletionRow()">+ Add Recipient</button>
+        <div style="margin-top:16px;display:flex;gap:10px;">
+          <button class="btn btn-primary" onclick="saveCompletion(this)">Save Recipients</button>
+          <span class="a-save-status" id="st-completion"></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<%- include('../partials/admin_shell_bottom') %>
+
+<style>
+.config-row {
+  display:grid;
+  grid-template-columns:1fr 1fr 40px;
+  gap:12px;
+  padding:12px;
+  background:var(--a-bg);
+  border:1px solid var(--a-border);
+  border-radius:var(--a-radius-sm);
+  margin-bottom:10px;
+  align-items:flex-end;
+}
+
+.config-row input {
+  padding:8px 10px;
+}
+
+.config-row button {
+  padding:6px 10px;
+  height:36px;
+  background:var(--a-red);
+  color:white;
+  border:none;
+  border-radius:var(--a-radius-sm);
+  cursor:pointer;
+  font-weight:600;
+  font-size:.8rem;
+}
+
+.config-row button:hover {
+  background:#c41e3a;
+}
+
+.config-label {
+  display:block;
+  font-weight:600;
+  font-size:.85rem;
+  margin-bottom:4px;
+  color:var(--a-text);
+}
+</style>
+
+<script>
+/* ================================================================
+   FLOAT SUGGEST — shared floating autocomplete overlay
+   (same pattern used in admin_hod_panel.ejs)
+================================================================ */
+const FloatSuggest = (() => {
+  let el, activeInput = null, focusIdx = -1, items = [];
+  function init() {
+    el = document.createElement('div');
+    el.className = 'a-float-suggest';
+    document.body.appendChild(el);
+    document.addEventListener('mousedown', e => {
+      if (el.contains(e.target) || e.target === activeInput) return;
+      close();
+    });
+    window.addEventListener('scroll', reposition, { passive: true, capture: true });
+    window.addEventListener('resize', reposition, { passive: true });
+  }
+  function show(inputEl, html, onItemClick) {
+    activeInput = inputEl;
+    el.innerHTML = html;
+    focusIdx = -1;
+    items = [...el.querySelectorAll('.a-suggest-item')];
+    items.forEach((item, i) => {
+      item.addEventListener('mousedown', e => { e.preventDefault(); onItemClick(item, i); });
+    });
+    el.classList.add('open');
+    reposition();
+  }
+  function close() { el.classList.remove('open'); el.innerHTML = ''; activeInput = null; focusIdx = -1; items = []; }
+  function isOpen() { return el && el.classList.contains('open'); }
+  function navigate(dir) {
+    if (!items.length) return false;
+    focusIdx = Math.max(-1, Math.min(items.length - 1, focusIdx + dir));
+    items.forEach((it, i) => it.classList.toggle('a-suggest-item--focused', i === focusIdx));
+    if (focusIdx >= 0) items[focusIdx].scrollIntoView({ block: 'nearest' });
+    return true;
+  }
+  function selectFocused() {
+    if (focusIdx >= 0 && items[focusIdx]) { items[focusIdx].dispatchEvent(new MouseEvent('mousedown')); return true; }
+    return false;
+  }
+  function reposition() {
+    if (!activeInput || !isOpen()) return;
+    const r = activeInput.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    el.style.left = r.left + 'px';
+    el.style.width = Math.max(r.width, 280) + 'px';
+    if (spaceBelow >= 150) {
+      el.style.top = (r.bottom + 5) + 'px'; el.style.bottom = 'auto';
+      el.style.maxHeight = Math.min(320, spaceBelow - 12) + 'px';
+    } else {
+      el.style.bottom = (window.innerHeight - r.top + 5) + 'px'; el.style.top = 'auto';
+      el.style.maxHeight = Math.min(320, r.top - 12) + 'px';
+    }
+  }
+  return { init, show, close, isOpen, navigate, selectFocused };
+})();
+
+function _debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+function _highlight(text, q) {
+  if (!q || !text) return text || '';
+  const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(text).replace(new RegExp(`(${esc})`, 'gi'), '<mark>$1</mark>');
+}
+
+/* Fetch employee suggestions and render into FloatSuggest for the given input */
+async function fetchEmployeeSuggest(inp, q, onPick) {
+  if (q.length < 2) { FloatSuggest.close(); return; }
+  try {
+    const res = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
+    const json = await res.json();
+    const results = (json.data || []).filter(e => e.email);
+    if (!results.length) {
+      FloatSuggest.show(inp, `<div class="a-suggest-empty">No employees with email for "<strong>${q}</strong>"</div>`, () => {});
+      return;
+    }
+    const html = results.map(emp => `
+      <div class="a-suggest-item">
+        <div class="a-suggest-item__avatar">${(emp.name||'?').charAt(0).toUpperCase()}</div>
+        <div class="a-suggest-item__body">
+          <div class="a-suggest-item__name">${_highlight(emp.name, q)}</div>
+          <div class="a-suggest-item__meta">
+            <strong>${emp.employeeId}</strong>
+            ${emp.department ? ' · ' + _highlight(emp.department, q) : ''}
+            ${emp.email ? ' · ' + _highlight(emp.email, q) : ''}
+          </div>
+        </div>
+      </div>`).join('');
+    FloatSuggest.show(inp, html, (item, i) => onPick(results[i]));
+  } catch {
+    FloatSuggest.show(inp, '<div class="a-suggest-empty" style="color:var(--a-red);">Error fetching results</div>', () => {});
+  }
+}
+
+let currentConfigs = <%- JSON.stringify(configs) %>;
+let printers = [];
+let filePaths = [];
+let sharepoints = [];
+let completionRecipients = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+  FloatSuggest.init();
+  printers = (currentConfigs.printer_locations || []);
+  filePaths = (currentConfigs.file_share_paths || []);
+  sharepoints = (currentConfigs.sharepoint_paths || []);
+  // Completion recipients: accept either array of strings or array of {email, name}
+  const raw = currentConfigs.completion_notification_recipients || [];
+  completionRecipients = raw.map(r => typeof r === 'string' ? { email: r, name: '' } : r);
+  renderPrinters();
+  renderFilePaths();
+  renderSharePoint();
+  renderCompletion();
+});
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.a-tab').forEach(b => b.classList.remove('a-tab--active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+  if (btn) btn.classList.add('a-tab--active');
+  document.getElementById('tab-' + tab).style.display = 'block';
+}
+
+// ── Printers ──
+function renderPrinters() {
+  const html = printers.map((p, i) => `
+    <div class="config-row">
+      <div>
+        <label class="config-label">Name</label>
+        <input type="text" value="${p.name || ''}" onchange="printers[${i}].name = this.value" class="a-input">
+      </div>
+      <div>
+        <label class="config-label">Location</label>
+        <input type="text" value="${p.location || ''}" onchange="printers[${i}].location = this.value" class="a-input">
+      </div>
+      <button onclick="removePrinter(${i})">Delete</button>
+    </div>`).join('');
+  document.getElementById('printersList').innerHTML = html;
+}
+
+function addPrinterRow() {
+  printers.push({ name: '', location: '' });
+  renderPrinters();
+}
+
+function removePrinter(i) {
+  printers.splice(i, 1);
+  renderPrinters();
+}
+
+async function savePrinters(btn) {
+  await saveConfig('printer_locations', printers, 'st-printers', btn);
+}
+
+// ── File Paths ──
+function renderFilePaths() {
+  const html = filePaths.map((p, i) => `
+    <div class="config-row">
+      <div>
+        <label class="config-label">Name</label>
+        <input type="text" value="${p.name || ''}" onchange="filePaths[${i}].name = this.value" class="a-input">
+      </div>
+      <div>
+        <label class="config-label">Path (\\\\server\\share)</label>
+        <input type="text" value="${p.path || ''}" onchange="filePaths[${i}].path = this.value" class="a-input">
+      </div>
+      <button onclick="removeFilePath(${i})">Delete</button>
+    </div>`).join('');
+  document.getElementById('filePathsList').innerHTML = html;
+}
+
+function addFilePathRow() {
+  filePaths.push({ name: '', path: '' });
+  renderFilePaths();
+}
+
+function removeFilePath(i) {
+  filePaths.splice(i, 1);
+  renderFilePaths();
+}
+
+async function saveFilePaths(btn) {
+  await saveConfig('file_share_paths', filePaths, 'st-file-paths', btn);
+}
+
+// ── SharePoint ──
+function renderSharePoint() {
+  const html = sharepoints.map((p, i) => `
+    <div class="config-row">
+      <div>
+        <label class="config-label">Name</label>
+        <input type="text" value="${p.name || ''}" onchange="sharepoints[${i}].name = this.value" class="a-input">
+      </div>
+      <div>
+        <label class="config-label">URL</label>
+        <input type="text" value="${p.url || ''}" onchange="sharepoints[${i}].url = this.value" class="a-input">
+      </div>
+      <button onclick="removeSharePoint(${i})">Delete</button>
+    </div>`).join('');
+  document.getElementById('sharepointList').innerHTML = html;
+}
+
+function addSharePointRow() {
+  sharepoints.push({ name: '', url: '' });
+  renderSharePoint();
+}
+
+function removeSharePoint(i) {
+  sharepoints.splice(i, 1);
+  renderSharePoint();
+}
+
+async function saveSharePoint(btn) {
+  await saveConfig('sharepoint_paths', sharepoints, 'st-sharepoint', btn);
+}
+
+// ── Completion Notification Recipients ──
+function renderCompletion() {
+  const html = completionRecipients.map((r, i) => `
+    <div class="config-row">
+      <div>
+        <label class="config-label">Name / Role (optional)</label>
+        <input type="text" value="${(r.name || '').replace(/"/g,'&quot;')}" onchange="completionRecipients[${i}].name = this.value" class="a-input" placeholder="e.g. DCI Manager">
+      </div>
+      <div>
+        <label class="config-label">Search Employee or Enter Email</label>
+        <input type="text"
+               data-completion-idx="${i}"
+               value="${(r.email || '').replace(/"/g,'&quot;')}"
+               oninput="onCompletionEmailInput(this)"
+               onkeydown="onCompletionKey(event)"
+               onchange="completionRecipients[${i}].email = this.value"
+               class="a-input" placeholder="Type name / ID / email…" autocomplete="off">
+      </div>
+      <button onclick="removeCompletion(${i})">Delete</button>
+    </div>`).join('');
+  document.getElementById('completionList').innerHTML = html;
+}
+
+/* Debounced employee suggestion for each recipient email input */
+const _completionSuggest = _debounce((inp, q) => {
+  fetchEmployeeSuggest(inp, q, emp => {
+    const i = parseInt(inp.getAttribute('data-completion-idx'), 10);
+    if (isNaN(i) || !completionRecipients[i]) return;
+    completionRecipients[i].email = emp.email || '';
+    if (!completionRecipients[i].name) completionRecipients[i].name = emp.name || '';
+    FloatSuggest.close();
+    renderCompletion();
+  });
+}, 260);
+
+function onCompletionEmailInput(inp) {
+  const i = parseInt(inp.getAttribute('data-completion-idx'), 10);
+  if (!isNaN(i) && completionRecipients[i]) completionRecipients[i].email = inp.value;
+  _completionSuggest(inp, inp.value.trim());
+}
+
+function onCompletionKey(e) {
+  if (e.key === 'ArrowDown') { e.preventDefault(); FloatSuggest.navigate(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); FloatSuggest.navigate(-1); }
+  else if (e.key === 'Enter')   { if (FloatSuggest.isOpen()) { e.preventDefault(); FloatSuggest.selectFocused(); } }
+  else if (e.key === 'Escape')  { FloatSuggest.close(); }
+}
+
+function addCompletionRow() {
+  completionRecipients.push({ email: '', name: '' });
+  renderCompletion();
+}
+
+function removeCompletion(i) {
+  completionRecipients.splice(i, 1);
+  renderCompletion();
+}
+
+async function saveCompletion(btn) {
+  // Strip empty rows before saving
+  const clean = completionRecipients.filter(r => r.email && r.email.trim());
+  await saveConfig('completion_notification_recipients', clean, 'st-completion', btn);
+}
+
+// Generic save
+async function saveConfig(key, value, statusId, btn) {
+  const statusEl = document.getElementById(statusId);
+  btn.disabled = true;
+  statusEl.className = 'a-save-status a-save-status--ing';
+  statusEl.textContent = 'Saving…';
+
+  try {
+    const res = await fetch('/admin/system-config/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value })
+    });
+    const json = await res.json();
+
+    if (json.success) {
+      statusEl.className = 'a-save-status a-save-status--ok';
+      statusEl.textContent = 'Saved ✓';
+      setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'a-save-status'; }, 3500);
+    } else {
+      statusEl.className = 'a-save-status a-save-status--err';
+      statusEl.textContent = 'Error: ' + json.error;
+    }
+  } catch (e) {
+    statusEl.className = 'a-save-status a-save-status--err';
+    statusEl.textContent = 'Network error';
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>

@@ -1,17 +1,25 @@
-<%- include('../partials/header') %>
-    <style>
-        h1 {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #201f1e;
-        }
+<%- include('../partials/header', { title: 'Workflow Approval' }) %>
+    <link rel="stylesheet" href="/css/modern.css">
 
-        .subtitle {
-            color: #605e5c;
-            font-size: 14px;
-            margin-bottom: 32px;
-        }
+    <header class="app-header">
+        <div class="brand-section">
+            <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+            <div class="app-title">
+                <h1>Workflow Approval</h1>
+                <p>Ibrahim Fibers Limited</p>
+            </div>
+        </div>
+        <div class="status-section">
+            <% if (locals.token) { %>
+                <div class="status-badge">Action Required</div>
+            <% } %>
+        </div>
+    </header>
+
+    <div class="app-container" style="padding: 40px;">
+        <div class="subtitle">
+            Please review the details below and provide your decision.
+        </div>
 
         .section-title {
             font-size: 14px;

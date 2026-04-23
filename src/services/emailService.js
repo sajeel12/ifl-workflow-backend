@@ -1,24 +1,32 @@
 import nodemailer from 'nodemailer';
 import logger from '../utils/logger.js';
 
-// Build transporter options
+// Build transporter options — auto-detects Outlook vs internal Exchange relay
+const smtpPort = parseInt(process.env.SMTP_PORT || '25', 10);
+const hasAuth = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+
 const transporterOptions = {
     host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '25', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    ignoreTLS: true, // Forces plaintext connection, skipping STARTTLS (common fix for internal Exchange relays)
+    port: smtpPort,
+    secure: process.env.SMTP_SECURE === 'true', // true for port 465, false for 587/25
     tls: {
-        ciphers: 'SSLv3',
-        rejectUnauthorized: false
+        rejectUnauthorized: false // Accept self-signed certs (common in corporate environments)
     }
 };
 
-// Only add auth section if a username is provided (Anonymous Relay if empty)
-if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+if (hasAuth) {
+    // Authenticated SMTP (e.g. Outlook.com on port 587) — STARTTLS is required
+    transporterOptions.requireTLS = true;  // Enforce STARTTLS upgrade
     transporterOptions.auth = {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
     };
+    logger.info(`[Email] Configured for authenticated SMTP → ${process.env.SMTP_HOST}:${smtpPort} (STARTTLS)`);
+} else {
+    // Anonymous internal relay (e.g. Exchange on port 25) — no TLS needed
+    transporterOptions.ignoreTLS = true;
+    transporterOptions.tls.ciphers = 'SSLv3';
+    logger.info(`[Email] Configured for anonymous relay → ${process.env.SMTP_HOST}:${smtpPort} (no TLS)`);
 }
 
 const transporter = nodemailer.createTransport(transporterOptions);

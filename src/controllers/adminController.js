@@ -1,6 +1,7 @@
 import Employee from '../models/Employee.js';
 import SyncLog from '../models/SyncLog.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
+import SystemConfig from '../models/SystemConfig.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
 import oracleSyncService from '../services/oracleSyncService.js';
@@ -368,7 +369,7 @@ class AdminController {
     async updateWorkflowApprover(req, res) {
         try {
             const { id } = req.params;
-            const { approverEmail, approverName, isActive } = req.body;
+            const { approverEmail, approverName, secondaryEmail, secondaryName, isActive } = req.body;
 
             const config = await WorkflowApproverConfig.findByPk(id);
             if (!config) {
@@ -376,9 +377,11 @@ class AdminController {
             }
 
             await config.update({
-                approverEmail: approverEmail?.trim() || null,
-                approverName:  approverName?.trim()  || null,
-                isActive:      isActive !== undefined ? Boolean(isActive) : config.isActive
+                approverEmail:  approverEmail?.trim()  || null,
+                approverName:   approverName?.trim()   || null,
+                secondaryEmail: secondaryEmail?.trim() || null,
+                secondaryName:  secondaryName?.trim()  || null,
+                isActive:       isActive !== undefined ? Boolean(isActive) : config.isActive
             });
 
             res.json({ success: true, message: `Approver "${config.label}" updated successfully`, data: config });
@@ -506,6 +509,50 @@ class AdminController {
             res.status(500).json({ success: false, error: 'Failed to fetch onboarding timeline' });
         }
     }
+
+    /**
+     * View: Render System Configuration Admin Panel
+     */
+    async renderSystemConfigPanel(req, res) {
+        try {
+            const configs = await SystemConfig.findAll();
+            const configMap = {};
+            configs.forEach(c => {
+                let v = c.value;
+                // Defensive: if older data was double-stringified, parse again
+                if (typeof v === 'string') {
+                    try { v = JSON.parse(v); } catch { /* leave as-is */ }
+                }
+                configMap[c.key] = v;
+            });
+            res.render('pages/admin_system_config', { activeTab: 'config', configs: configMap });
+        } catch (error) {
+            console.error('Error rendering system config panel:', error);
+            res.render('pages/admin_system_config', { activeTab: 'config', configs: {} });
+        }
+    }
+
+    /**
+     * API: Update system configuration
+     */
+    async updateSystemConfig(req, res) {
+        try {
+            const { key, value } = req.body;
+            if (!key) return res.status(400).json({ success: false, error: 'Missing key' });
+
+            const [config] = await SystemConfig.findOrCreate({
+                where: { key },
+                defaults: { value: {} }
+            });
+
+            await config.update({ value });
+            res.json({ success: true, message: `${key} updated successfully` });
+        } catch (error) {
+            console.error('Error updating system config:', error);
+            res.status(500).json({ success: false, error: 'Failed to update config' });
+        }
+    }
+
 }
 
 export default new AdminController();

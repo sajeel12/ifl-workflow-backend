@@ -3,16 +3,16 @@
   <!-- Page header -->
   <div class="a-page-hd">
     <h1 class="a-page-hd__title">Workflow Approver Configuration</h1>
-    <p class="a-page-hd__sub">Set the email for each step in the onboarding workflow. Changes take effect immediately — no restart required.</p>
+    <p class="a-page-hd__sub">Set Primary & Secondary approvers for each workflow step. If Primary doesn't respond within 2 days, notifications route to Secondary automatically.</p>
   </div>
 
   <!-- Info banner -->
   <div class="a-banner a-banner--info">
     <span class="a-banner__icon">ℹ</span>
     <div>
-      Each card below maps to one step in the onboarding workflow. Set the <strong>Approver Email</strong> so notifications reach the right person or team.
-      The <strong>HOD</strong> is resolved automatically per employee from HRMS and is not listed here.
-      Fields highlighted in orange have no email configured and will block that workflow step.
+      <strong>Fallback:</strong> Primary is used first. After 2 days without response, Secondary takes over and Primary is marked expired.
+      <strong>Cross-backup:</strong> DCI Manager ↔ IT HOD cover each other when their own slots are blank.
+      The <strong>HOD</strong> is resolved per-employee from HRMS and is not listed here.
     </div>
   </div>
 
@@ -44,43 +44,91 @@
       <p style="font-size:.83rem;color:var(--a-text-muted);margin:0 0 16px;line-height:1.55;"><%= ap.description %></p>
       <% } %>
 
-      <!-- Employee search -->
-      <div class="a-field" style="margin-bottom:10px;">
-        <label class="a-label">Search Employee Directory</label>
-        <input type="text"
-               id="search-<%= ap.id %>"
-               class="a-input"
-               placeholder="Type name, ID or email to auto-fill…"
-               autocomplete="off"
-               oninput="onApproverSearch(<%= ap.id %>, this.value)"
-               onkeydown="onApproverKey(<%= ap.id %>, event)"
-               onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(<%= ap.id %>, this.value.trim())">
+      <!-- ── PRIMARY ── -->
+      <div class="approver-section" style="margin-bottom:14px;">
+        <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-weight:700;font-size:.78rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Primary Approver</span>
+          <% if (ap.primaryExpiredAt) { %>
+            <span style="font-size:.7rem;background:var(--a-red-bg);color:var(--a-red);padding:2px 8px;border-radius:var(--a-radius-sm);font-weight:600;">EXPIRED</span>
+          <% } %>
+        </div>
+
+        <!-- Search -->
+        <div class="a-field" style="margin-bottom:8px;">
+          <input type="text"
+                 id="psearch-<%= ap.id %>"
+                 class="a-input"
+                 placeholder="🔍 Search employee directory (auto-fills primary)…"
+                 autocomplete="off"
+                 oninput="onApproverSearch(<%= ap.id %>, 'primary', this.value)"
+                 onkeydown="onApproverKey(event)"
+                 onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(<%= ap.id %>, 'primary', this.value.trim())">
+        </div>
+
+        <div class="a-field-row">
+          <div class="a-field" style="margin:0;">
+            <label class="a-label">Primary Email</label>
+            <input type="email"
+                   id="email-<%= ap.id %>"
+                   class="a-input <%= (!ap.approverEmail) ? 'a-input--warn' : '' %>"
+                   value="<%= ap.approverEmail || '' %>"
+                   placeholder="primary@company.com"
+                   oninput="onInput(<%= ap.id %>, this)">
+          </div>
+          <div class="a-field" style="margin:0;">
+            <label class="a-label">Primary Name</label>
+            <input type="text"
+                   id="name-<%= ap.id %>"
+                   class="a-input"
+                   value="<%= ap.approverName || '' %>"
+                   placeholder="Team / Person Name">
+          </div>
+        </div>
       </div>
 
-      <!-- Fields -->
-      <div class="a-field-row">
-        <div class="a-field" style="margin:0;">
-          <label class="a-label">Approver Email</label>
-          <input type="email"
-                 id="email-<%= ap.id %>"
-                 class="a-input <%= (!ap.approverEmail || ap.approverEmail === '') ? 'a-input--warn' : '' %>"
-                 value="<%= ap.approverEmail || '' %>"
-                 placeholder="approver@company.com"
-                 oninput="onInput(<%= ap.id %>, this)">
+      <!-- ── SECONDARY ── -->
+      <div class="approver-section" style="padding-top:12px;border-top:1px dashed var(--a-border);">
+        <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-weight:700;font-size:.78rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Secondary (Fallback)</span>
+          <span style="font-size:.7rem;color:var(--a-text-muted);">Activates after 2 days</span>
         </div>
-        <div class="a-field" style="margin:0;">
-          <label class="a-label">Display Name</label>
+
+        <!-- Search -->
+        <div class="a-field" style="margin-bottom:8px;">
           <input type="text"
-                 id="name-<%= ap.id %>"
+                 id="ssearch-<%= ap.id %>"
                  class="a-input"
-                 value="<%= ap.approverName || '' %>"
-                 placeholder="Team / Person Name">
+                 placeholder="🔍 Search employee directory (auto-fills secondary)…"
+                 autocomplete="off"
+                 oninput="onApproverSearch(<%= ap.id %>, 'secondary', this.value)"
+                 onkeydown="onApproverKey(event)"
+                 onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(<%= ap.id %>, 'secondary', this.value.trim())">
+        </div>
+
+        <div class="a-field-row">
+          <div class="a-field" style="margin:0;">
+            <label class="a-label">Secondary Email</label>
+            <input type="email"
+                   id="semail-<%= ap.id %>"
+                   class="a-input"
+                   value="<%= ap.secondaryEmail || '' %>"
+                   placeholder="secondary@company.com"
+                   oninput="document.getElementById('st-' + <%= ap.id %>).textContent = '';">
+          </div>
+          <div class="a-field" style="margin:0;">
+            <label class="a-label">Secondary Name</label>
+            <input type="text"
+                   id="sname-<%= ap.id %>"
+                   class="a-input"
+                   value="<%= ap.secondaryName || '' %>"
+                   placeholder="Team / Person Name">
+          </div>
         </div>
       </div>
 
       <!-- Footer -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
-        <button class="btn btn-primary" style="padding:7px 18px;" onclick="save(<%= ap.id %>)">Save</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--a-border);">
+        <button class="btn btn-primary" style="padding:8px 22px;" onclick="save(<%= ap.id %>)">Save</button>
         <span class="a-save-status" id="st-<%= ap.id %>"></span>
       </div>
 
@@ -95,8 +143,7 @@
 
 <script>
 /* ================================================================
-   FLOAT SUGGEST — single fixed overlay appended to <body>
-   Escapes any modal / overflow clipping
+   FLOAT SUGGEST — single fixed overlay, escapes any overflow clipping
 ================================================================ */
 const FloatSuggest = (() => {
   let el, activeInput = null, focusIdx = -1, items = [];
@@ -154,17 +201,15 @@ const FloatSuggest = (() => {
     if (!activeInput || !isOpen()) return;
     const r = activeInput.getBoundingClientRect();
     const spaceBelow = window.innerHeight - r.bottom;
-
     el.style.left  = r.left + 'px';
-    el.style.width = Math.max(r.width, 260) + 'px';
-
+    el.style.width = Math.max(r.width, 280) + 'px';
     if (spaceBelow >= 150) {
-      el.style.top    = (r.bottom + 5) + 'px';
+      el.style.top = (r.bottom + 5) + 'px';
       el.style.bottom = 'auto';
       el.style.maxHeight = Math.min(320, spaceBelow - 12) + 'px';
     } else {
       el.style.bottom = (window.innerHeight - r.top + 5) + 'px';
-      el.style.top    = 'auto';
+      el.style.top = 'auto';
       el.style.maxHeight = Math.min(320, r.top - 12) + 'px';
     }
   }
@@ -212,13 +257,13 @@ function empHTML(emp, q) {
 }
 
 /* ================================================================
-   APPROVER CARD SEARCH
+   APPROVER CARD SEARCH (Primary OR Secondary)
 ================================================================ */
-// Per-card debounced fetchers stored by approver id
-const _approverDebouncers = {};
+const _approverDebouncers = {}; // key: `${id}-${which}`
 
-async function _approverSuggestFetch(id, q) {
-  const inp = document.getElementById('search-' + id);
+async function _approverSuggestFetch(id, which, q) {
+  const inpId = (which === 'primary' ? 'psearch-' : 'ssearch-') + id;
+  const inp = document.getElementById(inpId);
   if (q.length < 2) { FloatSuggest.close(); return; }
 
   FloatSuggest.show(inp, suggestLoading(), () => {});
@@ -235,19 +280,17 @@ async function _approverSuggestFetch(id, q) {
 
     FloatSuggest.show(inp, html, (item, i) => {
       const emp = json.data[i];
-      // Auto-fill email and name fields on the card
-      const emailInp = document.getElementById('email-' + id);
-      const nameInp  = document.getElementById('name-'  + id);
+      const emailId = (which === 'primary' ? 'email-' : 'semail-') + id;
+      const nameId  = (which === 'primary' ? 'name-'  : 'sname-')  + id;
+      const emailInp = document.getElementById(emailId);
+      const nameInp  = document.getElementById(nameId);
       if (emp.email) {
         emailInp.value = emp.email;
         emailInp.classList.remove('a-input--warn');
       }
       if (emp.name) nameInp.value = emp.name;
-      // Clear search field and close
       inp.value = '';
       FloatSuggest.close();
-      // Clear the status so user knows they need to save
-      document.getElementById('st-' + id).textContent = '';
       setStatus(id, 'ing', 'Unsaved changes');
     });
   } catch {
@@ -255,18 +298,19 @@ async function _approverSuggestFetch(id, q) {
   }
 }
 
-function _getApproverDebouncer(id) {
-  if (!_approverDebouncers[id]) {
-    _approverDebouncers[id] = debounce((q) => _approverSuggestFetch(id, q), 280);
+function _getDebouncer(id, which) {
+  const key = `${id}-${which}`;
+  if (!_approverDebouncers[key]) {
+    _approverDebouncers[key] = debounce((q) => _approverSuggestFetch(id, which, q), 280);
   }
-  return _approverDebouncers[id];
+  return _approverDebouncers[key];
 }
 
-function onApproverSearch(id, val) {
-  _getApproverDebouncer(id)(val.trim());
+function onApproverSearch(id, which, val) {
+  _getDebouncer(id, which)(val.trim());
 }
 
-function onApproverKey(id, e) {
+function onApproverKey(e) {
   if (e.key === 'ArrowDown') { e.preventDefault(); FloatSuggest.navigate(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); FloatSuggest.navigate(-1); }
   else if (e.key === 'Enter') { e.preventDefault(); FloatSuggest.selectFocused(); }
@@ -290,15 +334,16 @@ function onInput(id, el) {
 }
 
 async function save(id) {
-  const email  = document.getElementById('email-'  + id).value.trim();
-  const name   = document.getElementById('name-'   + id).value.trim();
-  const active = document.getElementById('active-' + id).checked;
-  const btn    = document.querySelector(`.a-approver-card[data-id="${id}"] .btn`);
+  const email          = document.getElementById('email-'  + id).value.trim();
+  const name           = document.getElementById('name-'   + id).value.trim();
+  const secondaryEmail = document.getElementById('semail-' + id).value.trim();
+  const secondaryName  = document.getElementById('sname-'  + id).value.trim();
+  const active         = document.getElementById('active-' + id).checked;
+  const btn            = document.querySelector(`.a-approver-card[data-id="${id}"] .btn`);
 
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    setStatus(id, 'err', 'Invalid email');
-    return;
-  }
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
+  if (secondaryEmail && !emailRe.test(secondaryEmail)) { setStatus(id, 'err', 'Invalid secondary email'); return; }
 
   btn.disabled = true;
   setStatus(id, 'ing', 'Saving…');
@@ -307,7 +352,13 @@ async function save(id) {
     const res  = await fetch('/admin/workflow-approvers/' + id, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approverEmail: email || null, approverName: name || null, isActive: active })
+      body: JSON.stringify({
+        approverEmail:  email || null,
+        approverName:   name || null,
+        secondaryEmail: secondaryEmail || null,
+        secondaryName:  secondaryName || null,
+        isActive: active
+      })
     });
     const data = await res.json();
     if (data.success) {
@@ -342,9 +393,6 @@ function showToast(cls, msg) {
   _toastTimer = setTimeout(() => t.classList.remove('a-toast--show'), 3500);
 }
 
-/* ================================================================
-   INIT
-================================================================ */
 document.addEventListener('DOMContentLoaded', () => {
   FloatSuggest.init();
 });

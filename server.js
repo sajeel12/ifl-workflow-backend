@@ -7,6 +7,7 @@ import OffboardingRequest from './src/models/OffboardingRequest.js';
 import TimelineEvent from './src/models/TimelineEvent.js';
 import SyncLog from './src/models/SyncLog.js';
 import WorkflowApproverConfig from './src/models/WorkflowApproverConfig.js';
+import SystemConfig from './src/models/SystemConfig.js';
 
 const DEFAULT_APPROVER_CONFIGS = [
     { roleKey: 'IT_OPS',          label: 'IT Operations Team',    description: 'Handles IT configuration in Step 2', workflowStage: 'Step 2 – IT Configuration',       approverEmail: process.env.EMAIL_IT_OPS      || '', approverName: 'IT Operations' },
@@ -74,6 +75,143 @@ async function startServer() {
         if (count === 0) {
             await WorkflowApproverConfig.bulkCreate(DEFAULT_APPROVER_CONFIGS);
             logger.info('Seeded default WorkflowApproverConfig rows.');
+        }
+
+        // Seed default system configs if table is empty.
+        // NOTE: the SystemConfig model's `value` setter stringifies for us — DO NOT pre-stringify.
+        const configCount = await SystemConfig.count();
+        if (configCount === 0) {
+            const defaults = [
+                {
+                    key: 'printer_locations',
+                    value: [
+                        { name: 'Laser Printer - Ground Floor', location: 'Building A, Room 101' },
+                        { name: 'Laser Printer - First Floor', location: 'Building B, Room 205' },
+                        { name: 'Dot Matrix - Accounts', location: 'Building A, Room 102' }
+                    ],
+                    description: 'Available printer locations'
+                },
+                {
+                    key: 'file_share_paths',
+                    value: [
+                        { name: 'Department Share', path: '\\\\fileserver\\departments' },
+                        { name: 'Home Folder', path: '\\\\fileserver\\home' },
+                        { name: 'Archive', path: '\\\\fileserver\\archive' }
+                    ],
+                    description: 'File server share paths'
+                },
+                {
+                    key: 'sharepoint_paths',
+                    value: [
+                        { name: 'HR Documents', url: 'https://ifl.sharepoint.com/sites/hr' },
+                        { name: 'Finance Portal', url: 'https://ifl.sharepoint.com/sites/finance' },
+                        { name: 'IT Knowledge Base', url: 'https://ifl.sharepoint.com/sites/it-kb' }
+                    ],
+                    description: 'SharePoint site URLs'
+                }
+            ];
+            // Use individual create() so the setter runs (bulkCreate bypasses setters by default)
+            for (const cfg of defaults) {
+                await SystemConfig.create(cfg);
+            }
+            logger.info('Seeded default SystemConfig rows.');
+        }
+
+        // Seed sample onboarding requests + timeline events for UI demonstration
+        const onboardingCount = await OnboardingRequest.count();
+        if (onboardingCount === 0) {
+            const now = new Date();
+            const daysAgo = (n) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+            const hoursAgo = (n) => new Date(now.getTime() - n * 60 * 60 * 1000);
+
+            const samples = [
+                {
+                    status: 'Completed',
+                    employeeId: '1042',
+                    fullName: 'Ahmed Raza',
+                    department: 'IT',
+                    designation: 'Software Engineer',
+                    location: 'Head Office',
+                    joiningDate: daysAgo(30),
+                    hrSubmittedAt: daysAgo(10),
+                    itSubmittedAt: daysAgo(9),
+                    hodApprovedAt: daysAgo(8),
+                    dciSubmittedAt: daysAgo(7),
+                    dciManagerDecidedAt: daysAgo(6),
+                    dciImplementedAt: daysAgo(4),
+                    opsCompletedAt: daysAgo(2),
+                    approvalStatus: 'Approved',
+                    createdAt: daysAgo(10),
+                    timeline: [
+                        { action: 'Submitted',  actorRole: 'HR',         details: 'Initial onboarding request created',                   timestamp: daysAgo(10) },
+                        { action: 'Configured', actorRole: 'IT',         details: 'IT services configured: email, network, printers',    timestamp: daysAgo(9) },
+                        { action: 'Approved',   actorRole: 'HOD',        details: 'Access approved by HOD',                               timestamp: daysAgo(8) },
+                        { action: 'Submitted',  actorRole: 'DCI',        details: 'DCI configuration submitted for manager review',      timestamp: daysAgo(7) },
+                        { action: 'Approved',   actorRole: 'DCIManager', details: 'DCI Manager approved the configuration',              timestamp: daysAgo(6) },
+                        { action: 'Configured', actorRole: 'DCI',        details: 'AD account provisioned and group policy applied',     timestamp: daysAgo(4) },
+                        { action: 'Approved',   actorRole: 'OPS',        details: 'OPS verified all services — onboarding complete',     timestamp: daysAgo(2) }
+                    ]
+                },
+                {
+                    status: 'Pending',
+                    employeeId: '1055',
+                    fullName: 'Fatima Khan',
+                    department: 'Finance',
+                    designation: 'Financial Analyst',
+                    location: 'Head Office',
+                    joiningDate: daysAgo(5),
+                    hrSubmittedAt: daysAgo(3),
+                    itSubmittedAt: daysAgo(2),
+                    hodApprovedAt: hoursAgo(20),
+                    approvalStatus: 'Pending',
+                    createdAt: daysAgo(3),
+                    timeline: [
+                        { action: 'Submitted',  actorRole: 'HR',  details: 'Onboarding initiated for Finance hire', timestamp: daysAgo(3) },
+                        { action: 'Configured', actorRole: 'IT',  details: 'Basic IT services provisioned',         timestamp: daysAgo(2) },
+                        { action: 'Approved',   actorRole: 'HOD', details: 'HOD approved, forwarded to DCI team',   timestamp: hoursAgo(20) }
+                    ]
+                },
+                {
+                    status: 'Rejected',
+                    employeeId: '1061',
+                    fullName: 'Bilal Ahmed',
+                    department: 'HR',
+                    designation: 'HR Officer',
+                    joiningDate: daysAgo(14),
+                    hrSubmittedAt: daysAgo(14),
+                    itSubmittedAt: daysAgo(13),
+                    approvalStatus: 'Rejected',
+                    createdAt: daysAgo(14),
+                    timeline: [
+                        { action: 'Submitted',  actorRole: 'HR',  details: 'Onboarding request submitted',                      timestamp: daysAgo(14) },
+                        { action: 'Configured', actorRole: 'IT',  details: 'Services configured',                                timestamp: daysAgo(13) },
+                        { action: 'Rejected',   actorRole: 'HOD', details: 'Rejected: duplicate account exists for this person', timestamp: daysAgo(12) }
+                    ]
+                },
+                {
+                    status: 'Draft',
+                    employeeId: '1078',
+                    fullName: 'Sara Malik',
+                    department: 'Marketing',
+                    designation: 'Marketing Executive',
+                    joiningDate: daysAgo(1),
+                    hrSubmittedAt: hoursAgo(6),
+                    approvalStatus: 'Pending',
+                    createdAt: hoursAgo(6),
+                    timeline: [
+                        { action: 'Submitted', actorRole: 'HR', details: 'Draft created — awaiting IT configuration', timestamp: hoursAgo(6) }
+                    ]
+                }
+            ];
+
+            for (const sample of samples) {
+                const { timeline, ...requestData } = sample;
+                const req = await OnboardingRequest.create(requestData);
+                for (const ev of timeline) {
+                    await TimelineEvent.create({ ...ev, requestId: req.id });
+                }
+            }
+            logger.info(`Seeded ${samples.length} sample onboarding requests with timeline events.`);
         }
 
         app.listen(PORT, '0.0.0.0', () => {

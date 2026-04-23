@@ -6,16 +6,22 @@
     <p class="a-page-hd__sub">View detailed onboarding workflow history and timeline for each employee.</p>
   </div>
 
-  <!-- Filters -->
-  <div class="a-card" style="margin-bottom:0;border-bottom:none;border-radius:var(--a-radius-md) var(--a-radius-md) 0 0;">
-    <div class="a-card__body" style="padding:16px;">
-      <div style="display:grid;grid-template-columns:1fr 160px;gap:12px;align-items:flex-end;">
+  <!-- Main Content Card -->
+  <div class="a-card">
+    <!-- Search & Filter Section -->
+    <div class="a-card__body" style="padding:20px; border-bottom:1px solid var(--a-border); background:var(--a-surface-2);">
+      <div style="display:grid;grid-template-columns:1fr 180px;gap:16px;align-items:flex-end;">
         <div>
-          <label class="a-label">Search by name, ID or department</label>
-          <input type="text" id="searchInput" class="a-input" placeholder="Search…" oninput="onSearchChange()">
+          <label class="a-label">Search Requests</label>
+          <div style="position:relative;">
+            <input type="text" id="searchInput" class="a-input" placeholder="Search by name, ID or department..." oninput="onSearchChange()" style="padding-left:38px;">
+            <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--a-text-faint);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
         </div>
         <div>
-          <label class="a-label">Status</label>
+          <label class="a-label">Status Filter</label>
           <select id="statusFilter" class="a-input" onchange="onFilterChange()">
             <option value="">All Statuses</option>
             <option value="Draft">Draft</option>
@@ -26,19 +32,23 @@
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Requests List -->
-  <div class="a-card" style="border-radius:0 0 var(--a-radius-md) var(--a-radius-md);margin-bottom:24px;">
+    <!-- Results Section -->
+    <div class="a-card__hd" style="background:#fff; border-bottom:1px solid var(--a-border); padding:12px 20px;">
+      <h3 class="a-card__title" style="font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--a-text-muted);">Request History</h3>
+    </div>
     <div class="a-card__body" style="padding:0;">
       <div id="requestsList">
-        <div style="text-align:center;padding:40px;color:var(--a-text-muted);">Loading requests…</div>
+        <div style="text-align:center;padding:60px;color:var(--a-text-muted);">
+          <div style="font-size:2rem;margin-bottom:10px;opacity:0.3;">⏳</div>
+          Loading requests…
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Timeline Details Modal -->
-  <div class="modal-overlay" id="timelineModal" style="opacity:0;pointer-events:none;">
+  <div class="modal-overlay" id="timelineModal">
     <div class="modal a-modal--lg" style="max-width:800px;">
       <div class="modal-header">
         <div>
@@ -322,17 +332,60 @@ async function loadTimeline(id, name, empId) {
   }
 }
 
+function formatDetails(details) {
+  if (!details) return '';
+  try {
+    const obj = JSON.parse(details);
+    if (typeof obj === 'object' && obj !== null) {
+      if (Array.isArray(obj)) {
+        // Render Array (e.g., OPS checklist)
+        return '<ul style="margin:0;padding-left:20px;list-style:none;padding:0;">' + 
+          obj.map(item => `<li style="margin-bottom:4px;">${item.checked ? '✅' : '❌'} &nbsp; ${escapeHtml(item.item || JSON.stringify(item))}</li>`).join('') + 
+          '</ul>';
+      } else {
+        // Render Object (e.g., IT/DCI config payload)
+        return '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-family:monospace;font-size:0.85rem;margin-top:8px;padding:12px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">' + 
+          Object.entries(obj).map(([k, v]) => {
+            // Convert camelCase key to readable words
+            const key = k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+            let val = v;
+            if (v === true) val = '<span style="color:var(--a-green);font-weight:600;">Yes</span>';
+            else if (v === false) val = '<span style="color:var(--a-red);font-weight:600;">No</span>';
+            else if (v === '') val = '<span style="color:#94a3b8;font-style:italic;">N/A</span>';
+            else val = `<span style="color:#334155">${escapeHtml(String(v))}</span>`;
+            return `<strong style="color:#475569;white-space:nowrap;">${key}:</strong> <span>${val}</span>`;
+        }).join('') + '</div>';
+      }
+    }
+  } catch (e) {
+    // Not valid JSON, return as plain text
+  }
+  return escapeHtml(details);
+}
+
 function renderTimeline(events, request) {
   if (!events || !events.length) {
     document.getElementById('timelineContainer').innerHTML = '<div style="text-align:center;color:var(--a-text-muted);">No timeline events yet.</div>';
     return;
   }
 
-  const html = events.map((ev, i) => {
+  // Deduplicate legacy double-logged events (same action and actor within 5 seconds)
+  const deduped = [];
+  events.forEach(ev => {
+    const last = deduped[deduped.length - 1];
+    if (last && last.action === ev.action && last.actorRole === ev.actorRole) {
+      const diff = Math.abs(new Date(ev.timestamp) - new Date(last.timestamp));
+      if (diff < 5000) return; // Skip this duplicate
+    }
+    deduped.push(ev);
+  });
+
+  const html = deduped.map((ev, i) => {
     const icon = getActionIcon(ev.action);
     const cls = getActionClass(ev.action);
     const timestamp = new Date(ev.timestamp);
     const timeStr = timestamp.toLocaleString();
+    const formattedDetails = ev.details ? `<div class="timeline-details" style="background:transparent;padding:0;margin-top:12px;">${formatDetails(ev.details)}</div>` : '';
 
     return `
       <div class="timeline-item">
@@ -342,7 +395,7 @@ function renderTimeline(events, request) {
           <div class="timeline-action">${ev.action}</div>
           <div class="timeline-actor">By <strong>${ev.actorRole}</strong></div>
           <div class="timeline-timestamp">${timeStr}</div>
-          ${ev.details ? `<div class="timeline-details">${escapeHtml(ev.details)}</div>` : ''}
+          ${formattedDetails}
         </div>
       </div>`;
   }).join('');

@@ -9,6 +9,7 @@ router.get('/settings', adminController.renderSettingsPanel);
 router.get('/offboarding', adminController.renderOffboardingPanel);
 router.get('/workflow-approvers', adminController.renderWorkflowApproversPanel);
 router.get('/onboarding-history', adminController.renderOnboardingHistoryPanel);
+router.get('/system-config', adminController.renderSystemConfigPanel);
 
 // API endpoints internally for the admin section
 router.get('/employees', adminController.searchEmployees);
@@ -28,5 +29,8 @@ router.put('/workflow-approvers/:id', adminController.updateWorkflowApprover);
 // Onboarding History & Timeline
 router.get('/onboarding-requests', adminController.getOnboardingRequests);
 router.get('/onboarding-timeline/:id', adminController.getOnboardingTimeline);
+
+// System Configuration (Printers, File Paths, SharePoint)
+router.post('/system-config/update', adminController.updateSystemConfig);
 
 export default router;

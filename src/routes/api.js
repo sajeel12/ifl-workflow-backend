@@ -32,6 +32,12 @@ router.post('/onboarding/handle', onboardingController.handleRequest);
 // Phase 4: Upload Proof
 router.post('/onboarding/upload-proof', upload.array('dciProof', 5), onboardingController.handleProofUpload);
 
+// Lookup active onboarding request by employeeId (used by HR form JS)
+router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
+
+// History / status view for an existing onboarding request
+router.get('/onboarding/history/:id', onboardingController.renderHistory);
+
 
 router.get('/health', (req, res) => {
     res.json({ status: 'UP', timestamp: new Date() });

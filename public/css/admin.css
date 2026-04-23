@@ -376,7 +376,25 @@ td {
 tbody tr:hover { background: #f8fafc; }
 tbody tr:last-child td { border-bottom: none; }
 
-.table-container, .a-table-wrap { overflow-x: auto; }
+.table-container, .a-table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 60vh;
+  border-radius: var(--a-radius-sm);
+}
+.table-container thead th, .a-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--a-surface-2, #f8fafc);
+}
+
+/* Generic scrollable list container for admin pages (config lists, recipient lists, etc.) */
+.a-scroll-list {
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 
 /* ── Badges ─────────────────────────────────────────────── */
 .badge, .a-badge {

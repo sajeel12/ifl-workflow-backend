@@ -18,9 +18,12 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     },
 
     // Section 1: Requestor Information (HR)
+    requesterName: { type: DataTypes.STRING }, // Auto-filled from logged-in initiator
+    requesterEmail: { type: DataTypes.STRING },
     employeeId: { type: DataTypes.STRING },
     fullName: { type: DataTypes.STRING },
     department: { type: DataTypes.STRING },
+    subDepartment: { type: DataTypes.STRING }, // Sub-department / organizational unit
     designation: { type: DataTypes.STRING },
     joiningDate: { type: DataTypes.DATE },
     officeExtension: { type: DataTypes.STRING },
@@ -54,6 +57,10 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     },
     iflPortalLink: {
         type: DataTypes.STRING,
+        allowNull: true
+    },
+    sharepointRole: {
+        type: DataTypes.STRING, // 'Viewer', 'Editor', 'Contributor'
         allowNull: true
     },
 
@@ -105,6 +112,14 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         allowNull: true
     },
     dciRemarks: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    itHodRemarks: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    dciChangeRequestRemarks: {
         type: DataTypes.TEXT,
         allowNull: true
     },

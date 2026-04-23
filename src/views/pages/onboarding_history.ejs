@@ -1,0 +1,131 @@
+<%- include('../partials/header', { title: 'Onboarding Request History' }) %>
+<link rel="stylesheet" href="/css/modern.css">
+
+<header class="app-header">
+    <div class="brand-section">
+        <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+        <div class="app-title">
+            <h1>Onboarding Request History</h1>
+            <p>Ibrahim Fibers Limited</p>
+        </div>
+    </div>
+    <div class="status-section">
+        <div class="status-badge">REQ #<%= request.id %> | <%= request.status %></div>
+    </div>
+</header>
+
+<div class="app-container" style="padding: 24px;">
+    <style>
+        .history-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid #e2e8f0;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+        .info-item { display: flex; flex-direction: column; }
+        .info-item .label {
+            font-size: 0.75rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+        .info-item .value {
+            font-size: 0.95rem;
+            color: #0f172a;
+            font-weight: 500;
+        }
+        .timeline-item {
+            position: relative;
+            padding-left: 40px;
+            padding-bottom: 24px;
+            border-left: 2px solid #e2e8f0;
+            margin-left: 12px;
+        }
+        .timeline-item:last-child { border-left-color: transparent; }
+        .timeline-dot {
+            position: absolute;
+            left: -11px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.65rem; font-weight: 700;
+        }
+        .timeline-dot.approved { background: #16a34a; }
+        .timeline-dot.rejected { background: #dc2626; }
+        .timeline-action {
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 2px;
+        }
+        .timeline-meta { font-size: 0.8rem; color: #64748b; margin-bottom: 6px; }
+        .timeline-details {
+            background: #f8fafc;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: #334155;
+            word-break: break-word;
+        }
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 8px;
+        }
+    </style>
+
+    <div class="history-card">
+        <div class="section-title">Request Summary</div>
+        <div class="info-grid">
+            <div class="info-item"><span class="label">Employee</span><span class="value"><%= request.fullName %></span></div>
+            <div class="info-item"><span class="label">Employee ID</span><span class="value"><%= request.employeeId %></span></div>
+            <div class="info-item"><span class="label">Department</span><span class="value"><%= request.department || '—' %></span></div>
+            <div class="info-item"><span class="label">Sub-Department</span><span class="value"><%= request.subDepartment || '—' %></span></div>
+            <div class="info-item"><span class="label">Designation</span><span class="value"><%= request.designation || '—' %></span></div>
+            <div class="info-item"><span class="label">Requester</span><span class="value"><%= request.requesterName || '—' %></span></div>
+            <div class="info-item"><span class="label">Current Status</span><span class="value"><%= request.status %></span></div>
+            <div class="info-item"><span class="label">Approval</span><span class="value"><%= request.approvalStatus || 'Pending' %></span></div>
+        </div>
+    </div>
+
+    <div class="history-card">
+        <div class="section-title">Timeline / History Trail</div>
+        <% if (!timeline || !timeline.length) { %>
+            <p style="color:#64748b;">No history events recorded yet.</p>
+        <% } else { %>
+            <% timeline.forEach((ev, i) => {
+                const cls = ev.action.toLowerCase().includes('reject') ? 'rejected' :
+                            ev.action.toLowerCase().includes('approve') ? 'approved' : '';
+            %>
+                <div class="timeline-item">
+                    <div class="timeline-dot <%= cls %>"><%= i + 1 %></div>
+                    <div class="timeline-action"><%= ev.action %></div>
+                    <div class="timeline-meta">By <strong><%= ev.actorRole %></strong> · <%= new Date(ev.timestamp).toLocaleString() %></div>
+                    <% if (ev.details) { %>
+                        <div class="timeline-details"><%= ev.details %></div>
+                    <% } %>
+                </div>
+            <% }) %>
+        <% } %>
+    </div>
+
+    <div style="text-align:center; margin-top:20px;">
+        <a href="/api/onboarding/initiate" class="btn btn-secondary" style="text-decoration:none;">← Back to Onboarding</a>
+    </div>
+</div>
+
+<%- include('../partials/footer') %>
