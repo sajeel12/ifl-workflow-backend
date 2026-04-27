@@ -38,6 +38,9 @@ router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
 // History / status view for an existing onboarding request
 router.get('/onboarding/history/:id', onboardingController.renderHistory);
 
+// Role-scoped queue: pending actions or full history for a given role
+router.get('/onboarding/queue', onboardingController.getRoleQueue);
+
 
 router.get('/health', (req, res) => {
     res.json({ status: 'UP', timestamp: new Date() });

@@ -57,6 +57,19 @@
         </div>
         <button class="close-btn" onclick="closeModal()">×</button>
       </div>
+
+      <!-- Admin Recovery Actions Bar -->
+      <div id="adminActionsBar" style="display:none; padding:12px 24px; border-bottom:1px solid var(--a-border); background:#fffbeb; gap:10px; align-items:center; flex-wrap:wrap;">
+        <div style="flex:1; min-width:240px;">
+          <div style="font-size:.8rem; font-weight:600; color:#854d0e; margin-bottom:2px;">Recovery Action</div>
+          <div style="font-size:.75rem; color:#a16207;" id="adminActionsHint">If the original recipient deleted their action email, re-send it using the same token.</div>
+        </div>
+        <input type="email" id="resendOverrideEmail" class="a-input" placeholder="Override email (optional)" style="max-width:240px;">
+        <button id="btnResendEmail" class="a-btn" style="background:#0078D4; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:600;" onclick="resendStageEmail()">
+          ✉ Resend Action Email
+        </button>
+      </div>
+
       <div style="padding:24px;">
         <div id="timelineContainer" style="position:relative;padding:12px 0;"></div>
       </div>
@@ -133,105 +146,60 @@
   color:var(--a-red);
 }
 
-/* Timeline styles */
-.timeline-item {
-  position:relative;
-  padding-left:40px;
-  padding-bottom:24px;
+/* Timeline styles — matched to the user-facing /history page */
+#timelineContainer .timeline-item {
+  position: relative;
+  padding-left: 40px;
+  padding-bottom: 24px;
+  border-left: 2px solid #e2e8f0;
+  margin-left: 12px;
 }
+#timelineContainer .timeline-item:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+#timelineContainer .timeline-dot {
+  position: absolute;
+  left: -11px;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  box-shadow: 0 0 0 4px #fff;
+}
+#timelineContainer .timeline-dot.approved { background: #16a34a; }
+#timelineContainer .timeline-dot.rejected { background: #dc2626; }
+#timelineContainer .timeline-dot.email    { background: #0078D4; }
+#timelineContainer .timeline-dot.system   { background: #64748b; }
 
-.timeline-item:last-child {
-  padding-bottom:0;
+#timelineContainer .timeline-action {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #0f172a;
+  margin-bottom: 2px;
 }
-
-.timeline-dot {
-  position:absolute;
-  left:4px;
-  top:0;
-  width:24px;
-  height:24px;
-  border-radius:50%;
-  background:var(--a-bg);
-  border:2px solid var(--a-border);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:.65rem;
-  font-weight:700;
+#timelineContainer .timeline-meta {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-bottom: 8px;
 }
-
-.timeline-dot.approved {
-  background:var(--a-green);
-  border-color:var(--a-green);
-  color:white;
+#timelineContainer .timeline-details {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #334155;
+  word-break: break-word;
 }
-
-.timeline-dot.rejected {
-  background:var(--a-red);
-  border-color:var(--a-red);
-  color:white;
-}
-
-.timeline-dot.submitted {
-  background:var(--a-brand);
-  border-color:var(--a-brand);
-  color:white;
-}
-
-.timeline-dot.configured {
-  background:#9c27b0;
-  border-color:#9c27b0;
-  color:white;
-}
-
-.timeline-line {
-  position:absolute;
-  left:14px;
-  top:24px;
-  width:2px;
-  bottom:-24px;
-  background:var(--a-border);
-}
-
-.timeline-item:last-child .timeline-line {
-  display:none;
-}
-
-.timeline-content {
-  background:var(--a-bg);
-  padding:12px;
-  border-radius:var(--a-radius-sm);
-  border:1px solid var(--a-border);
-}
-
-.timeline-action {
-  font-weight:600;
-  font-size:.9rem;
-  color:var(--a-text);
-  margin-bottom:4px;
-}
-
-.timeline-actor {
-  font-size:.8rem;
-  color:var(--a-text-muted);
-  margin-bottom:6px;
-}
-
-.timeline-timestamp {
-  font-size:.75rem;
-  color:var(--a-text-muted);
-}
-
-.timeline-details {
-  margin-top:8px;
-  padding:8px;
-  background:var(--a-bg-alt);
-  border-radius:var(--a-radius-sm);
-  font-size:.8rem;
-  color:var(--a-text-muted);
-  line-height:1.4;
-  word-break:break-word;
-}
+#timelineContainer .timeline-details strong { color: #475569; font-weight: 600; }
 </style>
 
 <script>
@@ -310,6 +278,10 @@ function renderRequests(requests) {
   document.getElementById('requestsList').innerHTML = html;
 }
 
+// Track the request currently shown in the modal so the resend button knows its target
+let currentModalRequestId = null;
+let currentModalStatus = null;
+
 async function loadTimeline(id, name, empId) {
   try {
     const res = await fetch(`/admin/onboarding-timeline/${id}`);
@@ -321,8 +293,25 @@ async function loadTimeline(id, name, empId) {
     }
 
     const { request, timeline } = json;
+    currentModalRequestId = request.id;
+    currentModalStatus = request.status;
+
     document.getElementById('modalTitle').textContent = `${request.fullName}`;
     document.getElementById('modalSubtitle').textContent = `Employee ID: ${request.employeeId} · Department: ${request.department} · Status: ${request.status}`;
+
+    // Show recovery bar only when the request is still in an active (token-bearing) stage
+    const closedStates = ['Completed', 'Rejected', 'Draft'];
+    const bar = document.getElementById('adminActionsBar');
+    if (bar) {
+      const canResend = !closedStates.includes(request.status);
+      bar.style.display = canResend ? 'flex' : 'none';
+      const hint = document.getElementById('adminActionsHint');
+      if (hint) {
+        hint.textContent = canResend
+          ? `Stage: ${request.status}. The original action email can be re-sent — the existing token will be reused.`
+          : `Request is ${request.status}; no active stage email to resend.`;
+      }
+    }
 
     renderTimeline(timeline, request);
     openModal();
@@ -332,40 +321,41 @@ async function loadTimeline(id, name, empId) {
   }
 }
 
-function formatDetails(details) {
-  if (!details) return '';
+async function resendStageEmail() {
+  if (!currentModalRequestId) return;
+  const btn = document.getElementById('btnResendEmail');
+  const overrideEl = document.getElementById('resendOverrideEmail');
+  const overrideEmail = overrideEl ? overrideEl.value.trim() : '';
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Sending…'; }
+
   try {
-    const obj = JSON.parse(details);
-    if (typeof obj === 'object' && obj !== null) {
-      if (Array.isArray(obj)) {
-        // Render Array (e.g., OPS checklist)
-        return '<ul style="margin:0;padding-left:20px;list-style:none;padding:0;">' + 
-          obj.map(item => `<li style="margin-bottom:4px;">${item.checked ? '✅' : '❌'} &nbsp; ${escapeHtml(item.item || JSON.stringify(item))}</li>`).join('') + 
-          '</ul>';
-      } else {
-        // Render Object (e.g., IT/DCI config payload)
-        return '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-family:monospace;font-size:0.85rem;margin-top:8px;padding:12px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">' + 
-          Object.entries(obj).map(([k, v]) => {
-            // Convert camelCase key to readable words
-            const key = k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-            let val = v;
-            if (v === true) val = '<span style="color:var(--a-green);font-weight:600;">Yes</span>';
-            else if (v === false) val = '<span style="color:var(--a-red);font-weight:600;">No</span>';
-            else if (v === '') val = '<span style="color:#94a3b8;font-style:italic;">N/A</span>';
-            else val = `<span style="color:#334155">${escapeHtml(String(v))}</span>`;
-            return `<strong style="color:#475569;white-space:nowrap;">${key}:</strong> <span>${val}</span>`;
-        }).join('') + '</div>';
-      }
+    const res = await fetch(`/admin/onboarding/${currentModalRequestId}/resend-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(overrideEmail ? { toEmail: overrideEmail } : {})
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      alert(json.error || 'Failed to resend email');
+      return;
     }
+    alert(json.message || 'Action email re-sent successfully.');
+    if (overrideEl) overrideEl.value = '';
+    // Refresh the modal so the new "Email Regenerated" timeline event appears
+    await loadTimeline(currentModalRequestId);
   } catch (e) {
-    // Not valid JSON, return as plain text
+    console.error(e);
+    alert('Network error while resending email.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = original; }
   }
-  return escapeHtml(details);
 }
 
 function renderTimeline(events, request) {
+  const container = document.getElementById('timelineContainer');
   if (!events || !events.length) {
-    document.getElementById('timelineContainer').innerHTML = '<div style="text-align:center;color:var(--a-text-muted);">No timeline events yet.</div>';
+    container.innerHTML = '<div style="text-align:center;color:var(--a-text-muted);padding:20px;">No timeline events yet.</div>';
     return;
   }
 
@@ -375,50 +365,37 @@ function renderTimeline(events, request) {
     const last = deduped[deduped.length - 1];
     if (last && last.action === ev.action && last.actorRole === ev.actorRole) {
       const diff = Math.abs(new Date(ev.timestamp) - new Date(last.timestamp));
-      if (diff < 5000) return; // Skip this duplicate
+      if (diff < 5000) return;
     }
     deduped.push(ev);
   });
 
   const html = deduped.map((ev, i) => {
-    const icon = getActionIcon(ev.action);
-    const cls = getActionClass(ev.action);
-    const timestamp = new Date(ev.timestamp);
-    const timeStr = timestamp.toLocaleString();
-    const formattedDetails = ev.details ? `<div class="timeline-details" style="background:transparent;padding:0;margin-top:12px;">${formatDetails(ev.details)}</div>` : '';
+    const action = ev.action || '';
+    const a = action.toLowerCase();
+    let cls = '';
+    if (a.includes('reject')) cls = 'rejected';
+    else if (a.includes('approve') || a === 'completed' || a.includes('completed')) cls = 'approved';
+    else if (a.includes('email')) cls = 'email';
+    else if (ev.actorRole === 'System' || ev.actorRole === 'Admin') cls = 'system';
+
+    const label = ev.actionLabel || ev.action || '';
+    const time = new Date(ev.timestamp).toLocaleString();
+    // Server-supplied detailsHTML already has SVG icons + value pills baked in
+    const detailsBlock = ev.detailsHTML
+      ? `<div class="timeline-details">${ev.detailsHTML}</div>`
+      : '';
 
     return `
       <div class="timeline-item">
-        <div class="timeline-line"></div>
-        <div class="timeline-dot ${cls}">${icon}</div>
-        <div class="timeline-content">
-          <div class="timeline-action">${ev.action}</div>
-          <div class="timeline-actor">By <strong>${ev.actorRole}</strong></div>
-          <div class="timeline-timestamp">${timeStr}</div>
-          ${formattedDetails}
-        </div>
+        <div class="timeline-dot ${cls}">${i + 1}</div>
+        <div class="timeline-action">${escapeHtml(label)}</div>
+        <div class="timeline-meta">By <strong>${escapeHtml(ev.actorRole || '—')}</strong> · ${time}</div>
+        ${detailsBlock}
       </div>`;
   }).join('');
 
-  document.getElementById('timelineContainer').innerHTML = html;
-}
-
-function getActionIcon(action) {
-  const icons = {
-    'Submitted': '✓',
-    'Approved': '✓',
-    'Rejected': '✕',
-    'Configured': '⚙'
-  };
-  return icons[action] || '•';
-}
-
-function getActionClass(action) {
-  if (action === 'Approved') return 'approved';
-  if (action === 'Rejected') return 'rejected';
-  if (action === 'Submitted') return 'submitted';
-  if (action === 'Configured') return 'configured';
-  return '';
+  container.innerHTML = html;
 }
 
 function escapeHtml(text) {

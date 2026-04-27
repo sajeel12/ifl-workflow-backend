@@ -8,9 +8,9 @@ async function seed() {
 
         await Employee.bulkCreate([
             { employeeId: '1001', name: 'Fatima Ali', email: 'fatima.ali@ifl.com', designation: 'Senior Developer', mainDept: 'IT Dept' },
-            { employeeId: '1002', name: 'Usman Tariq', email: 'usman.tariq@ifl.com', designation: 'IT Manager', mainDept: 'IT Dept' },
+            { employeeId: '1002', name: 'Usman Tariq', email: 'sajeel.dilshad@perception-it.com', designation: 'IT Manager', mainDept: 'IT Dept' },
             { employeeId: '1003', name: 'Aisha Khan', email: 'aisha.khan@ifl.com', designation: 'HR Executive', mainDept: 'HR' },
-            { employeeId: '128793', name: 'Israr Ul Haq', email: 'israr.haq@ifl.com', designation: 'Senior Officer', mainDept: 'Data Center' }
+            { employeeId: '128793', name: 'Sajeel', email: 'sajeel.dilshad@perception-it.com', designation: 'Senior Officer', mainDept: 'Data Center' }
         ], { updateOnDuplicate: ['name', 'email', 'designation', 'mainDept'] });
 
         console.log('Seeded 4 employees successfully.');

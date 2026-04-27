@@ -89,16 +89,32 @@
     </style>
 
     <div class="history-card">
-        <div class="section-title">Request Summary</div>
+        <div class="section-title">Request Parties</div>
+        <div class="info-grid" style="grid-template-columns: 1fr 1fr;">
+            <div style="background:#eff6fc; border-left:4px solid #0078D4; border-radius:6px; padding:14px;">
+                <div class="label" style="margin-bottom:6px;">Initiated By</div>
+                <div style="font-size:1rem; font-weight:600; color:#0f172a;"><%= request.requesterName || '—' %></div>
+                <div style="font-size:0.85rem; color:#475569; margin-top:2px;"><%= request.requesterEmail || '—' %></div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:4px;">Submitted: <%= request.hrSubmittedAt ? new Date(request.hrSubmittedAt).toLocaleString() : '—' %></div>
+            </div>
+            <div style="background:#fff7ed; border-left:4px solid #ea580c; border-radius:6px; padding:14px;">
+                <div class="label" style="margin-bottom:6px;">Currently Assigned To</div>
+                <div style="font-size:1rem; font-weight:600; color:#0f172a;"><%= currentRecipient && currentRecipient.name ? currentRecipient.name : (currentRecipient && currentRecipient.role ? currentRecipient.role : '—') %></div>
+                <div style="font-size:0.85rem; color:#475569; margin-top:2px;"><%= currentRecipient && currentRecipient.email ? currentRecipient.email : '—' %></div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:4px;">Stage: <%= request.status %></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="history-card">
+        <div class="section-title">Employee Summary</div>
         <div class="info-grid">
             <div class="info-item"><span class="label">Employee</span><span class="value"><%= request.fullName %></span></div>
             <div class="info-item"><span class="label">Employee ID</span><span class="value"><%= request.employeeId %></span></div>
             <div class="info-item"><span class="label">Department</span><span class="value"><%= request.department || '—' %></span></div>
             <div class="info-item"><span class="label">Sub-Department</span><span class="value"><%= request.subDepartment || '—' %></span></div>
             <div class="info-item"><span class="label">Designation</span><span class="value"><%= request.designation || '—' %></span></div>
-            <div class="info-item"><span class="label">Requester</span><span class="value"><%= request.requesterName || '—' %></span></div>
-            <div class="info-item"><span class="label">Current Status</span><span class="value"><%= request.status %></span></div>
-            <div class="info-item"><span class="label">Approval</span><span class="value"><%= request.approvalStatus || 'Pending' %></span></div>
+            <div class="info-item"><span class="label">Approval Status</span><span class="value"><%= request.approvalStatus || 'Pending' %></span></div>
         </div>
     </div>
 
@@ -113,10 +129,10 @@
             %>
                 <div class="timeline-item">
                     <div class="timeline-dot <%= cls %>"><%= i + 1 %></div>
-                    <div class="timeline-action"><%= ev.action %></div>
+                    <div class="timeline-action"><%= ev.actionLabel || ev.action %></div>
                     <div class="timeline-meta">By <strong><%= ev.actorRole %></strong> · <%= new Date(ev.timestamp).toLocaleString() %></div>
-                    <% if (ev.details) { %>
-                        <div class="timeline-details"><%= ev.details %></div>
+                    <% if (ev.detailsHTML) { %>
+                        <div class="timeline-details"><%- ev.detailsHTML %></div>
                     <% } %>
                 </div>
             <% }) %>

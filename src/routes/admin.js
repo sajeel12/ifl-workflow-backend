@@ -33,4 +33,7 @@ router.get('/onboarding-timeline/:id', adminController.getOnboardingTimeline);
 // System Configuration (Printers, File Paths, SharePoint)
 router.post('/system-config/update', adminController.updateSystemConfig);
 
+// Resend the active stage email for an onboarding request (admin recovery)
+router.post('/onboarding/:id/resend-email', adminController.resendStageEmail);
+
 export default router;

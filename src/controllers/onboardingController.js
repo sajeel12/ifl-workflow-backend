@@ -4,6 +4,39 @@ import SystemConfig from '../models/SystemConfig.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
 import { Op } from 'sequelize';
+import { humanizeDetails, humanizeDetailsHTML, humanizeAction } from '../utils/historyFormatter.js';
+import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
+
+// Map workflow status -> the role currently responsible for it
+const STATUS_TO_ROLE = {
+    PendingIT: { key: 'IT_OPS', label: 'IT Operations' },
+    PendingHOD: { key: 'HOD', label: 'Head of Department' },
+    PendingDCI: { key: 'DCI_TEAM', label: 'DCI Team' },
+    PendingDCIManager: { key: 'DCI_MANAGER', label: 'DCI Manager' },
+    PendingITHOD: { key: 'IT_HOD', label: 'IT HOD' },
+    PendingDCIImplementation: { key: 'DCI_IMPLEMENTER', label: 'DCI Implementer' },
+    PendingOPSAction: { key: 'OPS_TEAM', label: 'OPS Team' },
+    Completed: { key: null, label: 'Completed' },
+    Rejected: { key: null, label: 'Closed (Rejected)' }
+};
+
+const resolveCurrentRecipient = async (status) => {
+    const map = STATUS_TO_ROLE[status];
+    if (!map) return { role: status, name: '', email: '' };
+    if (!map.key) return { role: map.label, name: '', email: '' };
+    try {
+        const cfg = await WorkflowApproverConfig.findOne({ where: { roleKey: map.key, isActive: true } });
+        if (!cfg) return { role: map.label, name: '', email: '' };
+        const usingSecondary = cfg.primaryExpiredAt && cfg.secondaryEmail;
+        return {
+            role: map.label + (usingSecondary ? ' (Secondary)' : ''),
+            name: usingSecondary ? cfg.secondaryName : cfg.approverName,
+            email: usingSecondary ? cfg.secondaryEmail : cfg.approverEmail
+        };
+    } catch {
+        return { role: map.label, name: '', email: '' };
+    }
+};
 
 export const handleRequest = async (req, res) => {
     const { token } = req.query;
@@ -148,7 +181,13 @@ const renderForm = async (req, res, token) => {
                 order: [['timestamp', 'ASC']],
                 attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
             });
-            timeline = timeline.map(e => e.toJSON());
+            timeline = timeline.map(e => {
+                const ev = e.toJSON();
+                ev.actionLabel = humanizeAction(ev.action);
+                ev.detailsText = humanizeDetails(ev.details);
+                ev.detailsHTML = humanizeDetailsHTML(ev.details);
+                return ev;
+            });
         } catch (e) {
             logger.warn('[Onboarding] Could not load timeline: ' + e.message);
         }
@@ -324,6 +363,72 @@ const renderForm = async (req, res, token) => {
     });
 };
 
+// Map a role key to the request statuses it owns/can act on
+const ROLE_TO_PENDING_STATUS = {
+    IT_OPS: ['PendingIT'],
+    HOD: ['PendingHOD'],
+    DCI_TEAM: ['PendingDCI'],
+    DCI_MANAGER: ['PendingDCIManager'],
+    IT_HOD: ['PendingITHOD'],
+    DCI_IMPLEMENTER: ['PendingDCIImplementation'],
+    OPS_TEAM: ['PendingOPSAction']
+};
+
+const ROLE_TO_HISTORY_STATUS = {
+    IT_OPS: ['PendingIT', 'PendingHOD', 'PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
+    HOD: ['PendingHOD', 'PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
+    DCI_TEAM: ['PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
+    DCI_MANAGER: ['PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
+    IT_HOD: ['PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
+    DCI_IMPLEMENTER: ['PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
+    OPS_TEAM: ['PendingOPSAction', 'Completed', 'Rejected']
+};
+
+/**
+ * GET /api/onboarding/queue?role=DCI_IMPLEMENTER&type=pending|history
+ * Returns the list of requests visible to a given role.
+ * Each row includes id, employee, status, currentRecipient.
+ */
+export const getRoleQueue = async (req, res) => {
+    try {
+        const role = String(req.query.role || '').toUpperCase();
+        const type = String(req.query.type || 'pending').toLowerCase();
+        const map = type === 'history' ? ROLE_TO_HISTORY_STATUS : ROLE_TO_PENDING_STATUS;
+
+        if (!map[role]) {
+            return res.status(400).json({ success: false, error: `Unknown role "${role}". Valid: ${Object.keys(map).join(', ')}` });
+        }
+
+        const rows = await OnboardingRequest.findAll({
+            where: { status: { [Op.in]: map[role] } },
+            order: [['updatedAt', 'DESC']],
+            attributes: ['id', 'employeeId', 'fullName', 'department', 'subDepartment', 'designation',
+                         'requesterName', 'requesterEmail', 'status', 'createdAt', 'updatedAt']
+        });
+
+        // Uniform shape so all role UIs look the same
+        const data = rows.map(r => {
+            const j = r.toJSON();
+            const stage = STATUS_TO_ROLE[j.status];
+            return {
+                requestId: j.id,
+                employee: { id: j.employeeId, name: j.fullName, designation: j.designation,
+                            department: j.department, subDepartment: j.subDepartment },
+                initiator: { name: j.requesterName, email: j.requesterEmail },
+                currentStage: j.status,
+                currentRole: stage ? stage.label : j.status,
+                lastUpdated: j.updatedAt,
+                actionable: ROLE_TO_PENDING_STATUS[role]?.includes(j.status) || false
+            };
+        });
+
+        return res.json({ success: true, role, type, count: data.length, data });
+    } catch (err) {
+        logger.error(`[Onboarding Queue] ${err.message}`);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+};
+
 /**
  * JSON lookup — does an active onboarding request exist for this employeeId?
  * Used by the HR form's "Get Employee Data" flow to redirect to history.
@@ -368,10 +473,21 @@ export const renderHistory = async (req, res) => {
             attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
         });
 
+        const timeline = events.map(e => {
+            const ev = e.toJSON();
+            ev.actionLabel = humanizeAction(ev.action);
+            ev.detailsText = humanizeDetails(ev.details);
+            ev.detailsHTML = humanizeDetailsHTML(ev.details);
+            return ev;
+        });
+
+        const currentRecipient = await resolveCurrentRecipient(request.status);
+
         return res.render('pages/onboarding_history', {
             title: `Onboarding History - ${request.fullName || request.employeeId}`,
             request,
-            timeline: events.map(e => e.toJSON())
+            timeline,
+            currentRecipient
         });
     } catch (err) {
         logger.error(`[Onboarding History] ${err.message}`);

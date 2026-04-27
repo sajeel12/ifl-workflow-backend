@@ -54,13 +54,13 @@
                 <ol style="margin:0; padding-left:20px; list-style:decimal; color:#334155;">
                     <% timeline.forEach(ev => { %>
                         <li style="margin-bottom:10px; line-height:1.5;">
-                            <strong><%= ev.action %></strong>
+                            <strong><%= ev.actionLabel || ev.action %></strong>
                             <span style="color:#64748b;">— by <%= ev.actorRole %></span>
                             <div style="font-size:0.8rem; color:#94a3b8;">
                                 <%= new Date(ev.timestamp).toLocaleString() %>
                             </div>
-                            <% if (ev.details) { %>
-                                <div style="font-size:0.85rem; color:#475569; margin-top:4px; word-break:break-word;"><%= ev.details.length > 300 ? ev.details.slice(0,300) + '…' : ev.details %></div>
+                            <% if (ev.detailsHTML) { %>
+                                <div style="font-size:0.85rem; color:#475569; margin-top:6px; word-break:break-word;"><%- ev.detailsHTML %></div>
                             <% } %>
                         </li>
                     <% }) %>
@@ -477,7 +477,63 @@
         </form>
     </div>
 
+    <style>
+        /* Loading spinner animation for submit buttons */
+        @keyframes ifl-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .ifl-spinner { animation: ifl-spin 0.7s linear infinite; vertical-align: -3px; margin-right: 6px; }
+        button.is-loading { opacity: 0.75; cursor: wait; pointer-events: none; }
+        button.is-loading > .ifl-btn-original { display: none; }
+        button:disabled { cursor: not-allowed; }
+    </style>
     <script>
+        /* Wrap the action-bar form so any submit click shows a spinner and locks the buttons */
+        (function setupSubmitLoaders() {
+            const SPINNER_SVG = '<svg class="ifl-spinner" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>';
+
+            document.addEventListener('DOMContentLoaded', () => {
+                document.querySelectorAll('form').forEach(form => {
+                    form.addEventListener('submit', (e) => {
+                        // Run native validation first; if it fails, don't lock the buttons.
+                        if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+
+                        // Capture the actual submitter so we can preserve `name=value` for action buttons (Approve/Reject)
+                        const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
+
+                        // Disable every submit button in the form so the user can't double-click or pick another action
+                        form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                            // Preserve the original label inside a span so we can restore it later
+                            if (!btn.querySelector('.ifl-btn-original')) {
+                                const span = document.createElement('span');
+                                span.className = 'ifl-btn-original';
+                                while (btn.firstChild) span.appendChild(btn.firstChild);
+                                btn.appendChild(span);
+                            }
+                            btn.disabled = true;
+                            btn.classList.add('is-loading');
+
+                            // The clicked button gets the spinner inline
+                            if (btn === submitter) {
+                                const indicator = document.createElement('span');
+                                indicator.className = 'ifl-btn-loading-text';
+                                indicator.innerHTML = SPINNER_SVG + 'Working…';
+                                btn.appendChild(indicator);
+                            }
+                        });
+
+                        // Safety net: if the page hasn't navigated within 30s (server stall), restore the buttons
+                        setTimeout(() => {
+                            form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                                btn.disabled = false;
+                                btn.classList.remove('is-loading');
+                                const ind = btn.querySelector('.ifl-btn-loading-text');
+                                if (ind) ind.remove();
+                            });
+                        }, 30000);
+                    });
+                });
+            });
+        })();
+
         /* Show/hide inline history panel */
         function toggleHistoryPanel() {
             const p = document.getElementById('inlineHistoryPanel');

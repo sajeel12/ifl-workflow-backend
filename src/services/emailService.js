@@ -373,38 +373,161 @@ export const sendOnboardingDCINotification = async (toEmail, request, actionLink
     return sendApprovalEmail(toEmail, subject, message, actionLink, request.fullName, '');
 };
 
+/**
+ * Send the generated Work Order PDF as an email attachment.
+ * Used to deliver the signed Work Order to the DCI Manager (and optional CCs)
+ * once it has been generated.
+ */
+export const sendWorkOrderPDF = async (toEmail, request, pdfPath, ccList = []) => {
+    if (!toEmail) {
+        logger.warn('[Email] sendWorkOrderPDF: no recipient provided — skipping');
+        return;
+    }
+    const fs = await import('fs');
+    const path = await import('path');
+    if (!pdfPath || !fs.existsSync(pdfPath)) {
+        logger.warn(`[Email] sendWorkOrderPDF: PDF not found at ${pdfPath} — skipping`);
+        return;
+    }
+
+    const filename = path.basename(pdfPath);
+    const reqNo = `#${request.id}`;
+    const userInfo = `${request.fullName || '—'}${request.designation ? ' (' + request.designation + ')' : ''}`;
+    const subject = `[Work Order] Onboarding ${reqNo} — ${userInfo}`;
+
+    const htmlBody = `
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"></head>
+    <body style="margin:0;padding:0;background:#f3f2f1;font-family:Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f2f1;">
+            <tr><td align="center" style="padding:20px 10px;">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border:1px solid #e1dfdd;">
+                    <tr><td bgcolor="#0078D4" style="background:#0078D4;padding:20px;text-align:center;">
+                        <h1 style="color:#fff;margin:0;font-size:20px;font-weight:600;">Ibrahim Fibres Limited</h1>
+                    </td></tr>
+                    <tr><td style="padding:30px;color:#323130;">
+                        <h2 style="color:#0078D4;margin-top:0;margin-bottom:14px;font-size:18px;">Work Order Generated</h2>
+                        <p style="margin:0 0 14px 0;font-size:14px;line-height:1.5;">
+                            The signed Work Order PDF for onboarding request ${reqNo} has been generated and is attached
+                            for your records.
+                        </p>
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8f9fa;border-left:4px solid #0078D4;margin-bottom:14px;">
+                            <tr><td style="padding:14px;font-size:13px;color:#323130;">
+                                <strong>Employee:</strong> ${request.fullName || '—'}<br>
+                                <strong>Employee ID:</strong> ${request.employeeId || '—'}<br>
+                                <strong>Department:</strong> ${[request.department, request.subDepartment].filter(Boolean).join(' / ') || '—'}<br>
+                                <strong>Request #:</strong> ${request.id}<br>
+                                <strong>Approval Status:</strong> ${request.approvalStatus || 'Approved'}
+                            </td></tr>
+                        </table>
+                        <p style="margin:0;font-size:13px;color:#605e5c;">
+                            No further action is required from you for this work order — it has been forwarded to
+                            the DCI Implementer for provisioning.
+                        </p>
+                    </td></tr>
+                    <tr><td bgcolor="#f3f2f1" style="background:#f3f2f1;padding:15px;text-align:center;color:#605e5c;font-size:12px;">
+                        Automated notification · IFL Workflow System · Please do not reply.
+                    </td></tr>
+                </table>
+            </td></tr>
+        </table>
+    </body></html>`;
+
+    try {
+        const info = await transporter.sendMail({
+            from: process.env.SMTP_FROM,
+            to: toEmail,
+            cc: ccList && ccList.length ? ccList.join(',') : undefined,
+            subject,
+            html: htmlBody,
+            attachments: [{ filename, path: pdfPath, contentType: 'application/pdf' }]
+        });
+        logger.info(`[Email] Work Order PDF sent to ${toEmail}${ccList.length ? ' (cc: ' + ccList.join(',') + ')' : ''}: ${info.messageId}`);
+        return info;
+    } catch (err) {
+        logger.error(`[Email] Failed to send Work Order PDF: ${err.message}`);
+    }
+};
+
 export const sendOnboardingNotification = async (toEmail, request, actionLink, type) => {
     let subject = '';
     let message = '';
 
-    const userInfo = `${request.fullName} (${request.designation})`;
+    const userInfo = `${request.fullName || '—'}${request.designation ? ' (' + request.designation + ')' : ''}`;
+    const dept = [request.department, request.subDepartment].filter(Boolean).join(' / ') || '—';
+    const reqNo = `#${request.id}`;
+
+    // Build a short, self-explanatory body: who/what/why/next-action
+    const intro = (whatYouDo, whatHappensNext) => [
+        `Request ${reqNo} — ${userInfo}`,
+        `Department: ${dept}`,
+        `Initiated by: ${request.requesterName || 'HR'}${request.requesterEmail ? ' <' + request.requesterEmail + '>' : ''}`,
+        '',
+        whatYouDo,
+        whatHappensNext ? `\nWhen you submit, ${whatHappensNext}` : ''
+    ].join('\n');
 
     switch (type) {
         case 'IT_OPS':
-            subject = `IT Ops Action: Configure Services for ${userInfo}`;
-            message = `A new onboarding request needs service configuration.`;
+            subject = `[Action Required] Configure IT services for ${userInfo} — Req ${reqNo}`;
+            message = intro(
+                'Please configure the requested IT services (intranet, email, printers, file shares, SharePoint).',
+                'the request will move to the Head of Department for review.'
+            );
             break;
         case 'HOD_REVIEW':
-            subject = `HOD Review: Onboarding Request for ${userInfo}`;
-            message = `IT Operations has configured services. Please review and approve.`;
+            subject = `[Approval Needed] Review onboarding request for ${userInfo} — Req ${reqNo}`;
+            message = intro(
+                'IT Operations has configured the services for this employee. Please review and approve or reject.',
+                'the request will move to the DCI Team for identity setup.'
+            );
             break;
         case 'DCI_INPUT':
-            subject = `DCI Team Action: Configure ID for ${userInfo}`;
-            message = `HOD has approved the request. Please configure DCI services (NT User, Email, etc.).`;
+            subject = `[Action Required] Set up DCI / AD identity for ${userInfo} — Req ${reqNo}`;
+            message = intro(
+                'HOD has approved the request. Please configure the AD/Exchange identity (NT user, SMTP, mailbox limits, GPO).',
+                'the request will move to the DCI Manager for technical approval.'
+            );
+            break;
+        case 'DCI_CHANGES_REQUESTED':
+            subject = `[Changes Requested] DCI Manager wants updates on ${userInfo} — Req ${reqNo}`;
+            message = intro(
+                'The DCI Manager has requested changes to the previously submitted DCI configuration. See remarks on the form and resubmit.',
+                'the request will go back to the DCI Manager for re-review.'
+            );
             break;
         case 'DCI_MANAGER_APPROVAL':
-            subject = `DCI Manager Approval: Onboarding Request for ${userInfo}`;
-            message = `DCI Team has submitted the configuration. Please provide final approval.`;
+            subject = `[Approval Needed] DCI Manager review for ${userInfo} — Req ${reqNo}`;
+            message = intro(
+                'The DCI Team has completed the identity configuration. Please approve, reject, or request changes.',
+                'standard requests move to Implementation; high-risk email requests route to IT HOD.'
+            );
             break;
         case 'IT_HOD_APPROVAL':
-            subject = `IT HOD Approval: Email Services for ${userInfo}`;
-            message = `Special Email Services were requested. Please approve.`;
+            subject = `[Approval Needed] IT HOD sign-off — external email for ${userInfo} — Req ${reqNo}`;
+            message = intro(
+                'External email access was requested. Per policy, this needs IT HOD approval before provisioning.',
+                'on approval, the request moves to DCI Implementation.'
+            );
+            break;
+        case 'DCI_IMPLEMENTATION':
+            subject = `[Action Required] Provision AD/Exchange account for ${userInfo} — Req ${reqNo}`;
+            message = intro(
+                'All approvals are complete. Please create the AD/Exchange account and upload screenshots as proof.',
+                'the request will move to the OPS Team for desk-side fulfillment.'
+            );
+            break;
+        case 'OPS_ACTION':
+            subject = `[Action Required] Desk setup & checklist for ${userInfo} — Req ${reqNo}`;
+            message = intro(
+                'The account has been provisioned. Please visit the user\'s desk, complete the physical setup checklist, and mark items done.',
+                'the request will be marked as Completed.'
+            );
             break;
         default:
-            subject = `Onboarding Action Required for ${userInfo}`;
-            message = `Your input is required for this request.`;
+            subject = `[Action Required] Onboarding step for ${userInfo} — Req ${reqNo}`;
+            message = intro('Your input is required to advance this onboarding request.', '');
     }
 
-    // Reuse generic approval email sender
-    return sendApprovalEmail(toEmail, subject, message, actionLink, request.fullName, 'HR Dept');
+    return sendApprovalEmail(toEmail, subject, message, actionLink, request.requesterName || 'HR', request.requesterEmail || '');
 };

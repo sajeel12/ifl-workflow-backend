@@ -8,6 +8,20 @@ import oracleSyncService from '../services/oracleSyncService.js';
 import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
 import cronService from '../services/cronService.js';
+import * as emailService from '../services/emailService.js';
+import RecipientService from '../services/recipientService.js';
+import { humanizeAction, humanizeDetails, humanizeDetailsHTML } from '../utils/historyFormatter.js';
+
+// Map workflow status -> the role currently responsible
+const STATUS_TO_RESEND = {
+    PendingIT: { roleKey: 'IT_OPS', type: 'IT_OPS' },
+    PendingHOD: { roleKey: 'HOD', type: 'HOD_REVIEW' },
+    PendingDCI: { roleKey: 'DCI_TEAM', type: 'DCI_INPUT' },
+    PendingDCIManager: { roleKey: 'DCI_MANAGER', type: 'DCI_MANAGER_APPROVAL' },
+    PendingITHOD: { roleKey: 'IT_HOD', type: 'IT_HOD_APPROVAL' },
+    PendingDCIImplementation: { roleKey: 'DCI_IMPLEMENTER', type: 'DCI_IMPLEMENTATION' },
+    PendingOPSAction: { roleKey: 'OPS_TEAM', type: 'OPS_ACTION' }
+};
 
 // State to remember current config (would usually be in DB)
 let currentCronConfig = {
@@ -499,10 +513,20 @@ class AdminController {
                 attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
             });
 
+            // Pre-format with the shared formatter so the admin modal can render
+            // the same way the user-facing /history page does.
+            const timeline = events.map(e => {
+                const ev = e.toJSON();
+                ev.actionLabel = humanizeAction(ev.action);
+                ev.detailsText = humanizeDetails(ev.details);
+                ev.detailsHTML = humanizeDetailsHTML(ev.details);
+                return ev;
+            });
+
             res.json({
                 success: true,
                 request: request,
-                timeline: events
+                timeline
             });
         } catch (error) {
             console.error('Error fetching onboarding timeline:', error);
@@ -529,6 +553,52 @@ class AdminController {
         } catch (error) {
             console.error('Error rendering system config panel:', error);
             res.render('pages/admin_system_config', { activeTab: 'config', configs: {} });
+        }
+    }
+
+    /**
+     * API: Re-send the action email for the current stage of a request.
+     * Useful when the original recipient deleted or lost the email.
+     * Reuses the existing currentStageToken — no new token is issued.
+     */
+    async resendStageEmail(req, res) {
+        try {
+            const { id } = req.params;
+            const overrideEmail = (req.body && req.body.toEmail) ? String(req.body.toEmail).trim() : null;
+
+            const request = await OnboardingRequest.findByPk(id);
+            if (!request) return res.status(404).json({ success: false, error: 'Request not found' });
+
+            if (!request.currentStageToken) {
+                return res.status(400).json({ success: false, error: `Request is in a closed state (${request.status}); no active token to resend.` });
+            }
+
+            const map = STATUS_TO_RESEND[request.status];
+            if (!map) return res.status(400).json({ success: false, error: `No resend handler for status "${request.status}"` });
+
+            const recipientEmail =
+                overrideEmail ||
+                await RecipientService.get(map.roleKey, { employeeId: request.employeeId });
+
+            if (!recipientEmail) {
+                return res.status(400).json({ success: false, error: `No recipient email could be resolved for role ${map.roleKey}` });
+            }
+
+            const actionLink = `${process.env.APP_URL}/api/onboarding/handle?token=${request.currentStageToken}`;
+            await emailService.sendOnboardingNotification(recipientEmail, request, actionLink, map.type);
+
+            await TimelineEvent.create({
+                requestId: request.id,
+                action: 'Email Regenerated',
+                actorRole: 'Admin',
+                details: `Action email re-sent to ${recipientEmail} for stage ${request.status} using existing token.`,
+                timestamp: new Date()
+            });
+
+            return res.json({ success: true, message: `Action email re-sent to ${recipientEmail}` });
+        } catch (error) {
+            console.error('Error resending stage email:', error);
+            return res.status(500).json({ success: false, error: 'Failed to resend stage email', details: error.message });
         }
     }
 
