@@ -1,0 +1,153 @@
+<%- include('../partials/header', { title: title }) %>
+
+<div class="header">
+    <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+    <div class="brand">IFL Workflow — My Queue</div>
+</div>
+
+<style>
+    .queue-wrap { max-width: 1080px; margin: 28px auto; padding: 0 20px; }
+
+    .queue-header {
+        display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between;
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+        padding: 18px 22px; margin-bottom: 18px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .queue-title h1 { font-size: 1.3rem; color: #0f172a; margin: 0 0 4px; font-weight: 700; }
+    .queue-title p  { font-size: 0.85rem; color: #64748b; margin: 0; }
+
+    .queue-controls { display: flex; gap: 10px; align-items: center; }
+    .queue-controls label { font-size: 0.78rem; color: #475569; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .queue-controls select {
+        padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+        font-size: 0.9rem; background: #fff; min-width: 200px;
+    }
+
+    .tab-row { display: flex; gap: 4px; margin-bottom: 16px; }
+    .tab {
+        padding: 8px 18px; background: transparent; border: 1px solid transparent;
+        border-bottom: 2px solid transparent; color: #64748b; font-weight: 600;
+        text-decoration: none; font-size: 0.9rem; border-radius: 6px 6px 0 0;
+    }
+    .tab.is-active { color: #0078D4; border-bottom-color: #0078D4; background: #fff; }
+
+    .queue-empty {
+        background: #fff; border: 1px dashed #cbd5e1; border-radius: 10px;
+        padding: 60px 20px; text-align: center; color: #64748b;
+    }
+    .queue-empty .em-icon { font-size: 2rem; opacity: 0.4; margin-bottom: 8px; }
+
+    .row-card {
+        display: flex; align-items: center; gap: 16px;
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+        padding: 14px 18px; margin-bottom: 10px;
+        text-decoration: none; color: inherit;
+        transition: box-shadow 0.15s, transform 0.15s;
+    }
+    .row-card:hover { box-shadow: 0 4px 12px rgba(15, 76, 129, 0.10); transform: translateY(-1px); }
+
+    .row-avatar {
+        width: 44px; height: 44px; border-radius: 50%;
+        background: linear-gradient(135deg, #0078D4, #3B82F6); color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 1rem; flex: 0 0 auto; text-transform: uppercase;
+    }
+    .row-main  { flex: 1; min-width: 0; }
+    .row-name  { font-weight: 600; color: #0f172a; font-size: 0.95rem; }
+    .row-sub   { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+    .row-meta  { font-size: 0.75rem; color: #94a3b8; margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .row-side  { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: 0 0 auto; }
+    .badge     {
+        font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+        text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .badge.actionable { background: #fef3c7; color: #b45309; }
+    .badge.review     { background: #dbeafe; color: #1d4ed8; }
+    .badge.history    { background: #f1f5f9; color: #475569; }
+
+    .row-cta {
+        font-size: 0.78rem; color: #0078D4; font-weight: 600;
+        display: inline-flex; align-items: center; gap: 4px;
+    }
+</style>
+
+<div class="queue-wrap">
+    <div class="queue-header">
+        <div class="queue-title">
+            <h1>
+                <% if (currentUser) { %>
+                    Welcome, <%= currentUser.displayName || currentUser.username %>
+                <% } else { %>
+                    My Queue
+                <% } %>
+            </h1>
+            <p>
+                Showing <strong><%= type === 'history' ? 'workflow history' : 'pending actions' %></strong>
+                for role <strong><%= role %></strong>
+                <% if (currentUser && currentUser.email) { %>
+                    · <%= currentUser.email %>
+                <% } %>
+            </p>
+        </div>
+
+        <form class="queue-controls" method="GET" action="/api/my/queue">
+            <label for="roleSelect">View as</label>
+            <select id="roleSelect" name="role" onchange="this.form.submit()">
+                <% roleOptions.forEach(r => { %>
+                    <option value="<%= r %>" <%= r === role ? 'selected' : '' %>><%= r.replace(/_/g, ' ') %></option>
+                <% }) %>
+            </select>
+            <input type="hidden" name="type" value="<%= type %>">
+        </form>
+    </div>
+
+    <div class="tab-row">
+        <a href="/api/my/queue?role=<%= role %>&type=pending" class="tab <%= type === 'pending' ? 'is-active' : '' %>">Pending Actions</a>
+        <a href="/api/my/queue?role=<%= role %>&type=history" class="tab <%= type === 'history' ? 'is-active' : '' %>">Workflow History</a>
+    </div>
+
+    <% if (!items.length) { %>
+        <div class="queue-empty">
+            <div class="em-icon">📭</div>
+            <div style="font-weight:600; color:#475569;">Nothing here right now</div>
+            <div style="margin-top:4px; font-size:0.85rem;">
+                <% if (type === 'pending') { %>
+                    No requests are waiting on the <strong><%= role %></strong> role.
+                <% } else { %>
+                    No requests are visible to the <strong><%= role %></strong> role yet.
+                <% } %>
+            </div>
+        </div>
+    <% } else { %>
+        <% items.forEach(item => {
+            const initials = (item.fullName || '?').trim().split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase() || '?';
+            const badgeCls = item.actionable ? 'actionable' : (type === 'history' ? 'history' : 'review');
+            const badgeText = item.actionable ? 'Action required' : (type === 'history' ? 'Past stage' : 'Awaiting earlier stage');
+        %>
+            <a href="<%= item.url %>" class="row-card">
+                <div class="row-avatar"><%= initials %></div>
+                <div class="row-main">
+                    <div class="row-name"><%= item.fullName %> <span style="color:#94a3b8; font-weight:500;">· #<%= item.requestId %></span></div>
+                    <div class="row-sub">
+                        <%= item.designation || '—' %> · <%= item.department %>
+                    </div>
+                    <div class="row-meta">
+                        <span>Initiated by <strong><%= item.initiatorName %></strong></span>
+                        <span>Currently with <strong><%= item.currentStageLabel %></strong></span>
+                        <span>Updated <%= new Date(item.lastUpdated).toLocaleDateString() %></span>
+                    </div>
+                </div>
+                <div class="row-side">
+                    <span class="badge <%= badgeCls %>"><%= badgeText %></span>
+                    <span class="row-cta">
+                        <%= item.actionable ? 'Open & Act →' : 'View →' %>
+                    </span>
+                </div>
+            </a>
+        <% }) %>
+    <% } %>
+</div>
+
+<%- include('../partials/footer') %>

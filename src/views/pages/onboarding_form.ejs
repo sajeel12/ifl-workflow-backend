@@ -23,7 +23,7 @@
         <div class="steps-container">
             <div class="steps">
                 <% steps.forEach((s, i)=> { %>
-                    <div class="step-item <%= s.status %>" onclick="toggleHistoryPanel()" style="cursor:pointer;" title="Click any step to view detailed history">
+                    <div class="step-item <%= s.status %>">
                         <div class="step-circle">
                             <%= i + 1 %>
                         </div>
@@ -33,35 +33,32 @@
                     </div>
                     <% }); %>
             </div>
-            <% if (request && request.id) { %>
-                <div style="text-align:right; margin-top:8px;">
-                    <button type="button" class="btn btn-secondary" onclick="toggleHistoryPanel()" style="font-size:0.85rem; padding:6px 12px;">
-                        View Detailed History
-                    </button>
-                    <a href="/api/onboarding/history/<%= request.id %>" class="btn btn-secondary" style="font-size:0.85rem; padding:6px 12px; text-decoration:none;" target="_blank">
-                        Open Full History
-                    </a>
-                </div>
-            <% } %>
         </div>
 
+        <%
+        // Inline workflow history — always visible, friendly summaries only.
+        // Each role sees only what's already happened (timeline cannot leak
+        // future-stage data because future events don't exist yet).
+        %>
         <% if (typeof timeline !== 'undefined' && timeline && timeline.length) { %>
-            <div id="inlineHistoryPanel" style="display:none; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-bottom:20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <strong style="color:#0f172a;">Request History / Timeline</strong>
-                    <button type="button" onclick="toggleHistoryPanel()" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#64748b;">×</button>
-                </div>
-                <ol style="margin:0; padding-left:20px; list-style:decimal; color:#334155;">
-                    <% timeline.forEach(ev => { %>
-                        <li style="margin-bottom:10px; line-height:1.5;">
-                            <strong><%= ev.actionLabel || ev.action %></strong>
-                            <span style="color:#64748b;">— by <%= ev.actorRole %></span>
-                            <div style="font-size:0.8rem; color:#94a3b8;">
-                                <%= new Date(ev.timestamp).toLocaleString() %>
-                            </div>
-                            <% if (ev.detailsHTML) { %>
-                                <div style="font-size:0.85rem; color:#475569; margin-top:6px; word-break:break-word;"><%- ev.detailsHTML %></div>
-                            <% } %>
+            <style>
+                .wf-history-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px 20px; margin-bottom:20px; }
+                .wf-history-title { font-size:0.8rem; font-weight:600; color:#475569; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px; }
+                .wf-history-list { margin:0; padding-left:0; list-style:none; }
+                .wf-step { position:relative; padding-left:34px; padding-bottom:14px; margin-left:11px; border-left:2px solid #e2e8f0; }
+                .wf-step.is-last { border-left-color: transparent; padding-bottom:0; }
+                .wf-step .wf-dot { position:absolute; left:-11px; top:0; width:22px; height:22px; border-radius:50%; background:#3b82f6; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; box-shadow:0 0 0 4px #f8fafc; }
+                .wf-step .wf-summary { font-size:0.9rem; color:#0f172a; line-height:1.4; }
+                .wf-step .wf-time { font-size:0.75rem; color:#94a3b8; margin-top:2px; }
+            </style>
+            <div class="wf-history-card">
+                <div class="wf-history-title">Workflow Progress</div>
+                <ol class="wf-history-list">
+                    <% timeline.forEach((ev, i) => { %>
+                        <li class="wf-step <%= i === timeline.length - 1 ? 'is-last' : '' %>">
+                            <span class="wf-dot"><%= i + 1 %></span>
+                            <div class="wf-summary"><%= ev.summary %></div>
+                            <div class="wf-time"><%= new Date(ev.timestamp).toLocaleString() %></div>
                         </li>
                     <% }) %>
                 </ol>
@@ -383,8 +380,8 @@
                                                         <option value="Lightly Managed"
                                                             <%=val('groupPolicyLevel')==='Lightly Managed' ? 'selected'
                                                             : '' %>>Lightly Managed</option>
-                                                        <option value="Kiosk" <%=val('groupPolicyLevel')==='Kiosk'
-                                                            ? 'selected' : '' %>>Kiosk</option>
+                                                        <option value="IT User" <%=val('groupPolicyLevel')==='IT User'
+                                                            ? 'selected' : '' %>>IT User</option>
                                                     </select>
                                                 </div>
                                                 <div class="form-group"><label>Extra Facility</label><textarea
@@ -534,13 +531,6 @@
             });
         })();
 
-        /* Show/hide inline history panel */
-        function toggleHistoryPanel() {
-            const p = document.getElementById('inlineHistoryPanel');
-            if (!p) return;
-            p.style.display = p.style.display === 'none' ? 'block' : 'none';
-        }
-
         /* Toggle printer location dropdown/input based on checkbox */
         function togglePrinterLocation(type) {
             const chk = document.getElementById('chk-' + type);
@@ -601,16 +591,19 @@
                             }
                         }
 
-                        // Check if an active onboarding request already exists for this employee
+                        // Check if an active onboarding request already exists for this employee.
+                        // HR is not allowed to view in-flight workflow data (least-privilege).
+                        // We tell them the employee is locked and stop the flow — no link to trail.
                         try {
                             const existRes = await fetch('/api/onboarding/lookup?employeeId=' + encodeURIComponent(empId));
                             if (existRes.ok) {
                                 const existData = await existRes.json();
                                 if (existData && existData.existingRequestId) {
-                                    if (confirm('An active onboarding request (#' + existData.existingRequestId + ') already exists for this employee. Open its history instead?')) {
-                                        window.location.href = '/api/onboarding/history/' + existData.existingRequestId;
-                                        return;
-                                    }
+                                    alert('An onboarding request for this employee is already in progress. Please wait for it to complete before initiating a new one.');
+                                    // Reset the field so HR doesn't try to submit anyway
+                                    empIdInput.value = '';
+                                    empIdInput.focus();
+                                    return;
                                 }
                             }
                         } catch (_) { /* non-fatal */ }

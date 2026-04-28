@@ -143,4 +143,67 @@ export const humanizeAction = (action) => {
     return action.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
 };
 
-export default { humanizeDetails, humanizeDetailsHTML, humanizeAction };
+/**
+ * Produce a single user-friendly sentence describing a workflow event.
+ * Used by the inline history panel where staged users should see a clean
+ * narrative — not internal JSON dumps. Hides implementation details by design.
+ */
+export const narrate = (event = {}) => {
+    const action = event.action || '';
+    const details = event.details || '';
+    const isJson = looksLikeJson(details);
+
+    // Pull the optional remarks/note string out of plain-text details
+    const remark = !isJson && details ? String(details).trim() : '';
+
+    switch (action) {
+        case 'Request Initiated':
+            return remark || 'Request submitted by HR.';
+        case 'IT Services Configured':
+            return 'IT Operations configured the requested services and forwarded the request.';
+        case 'HOD Approved':
+            return remark
+                ? `Head of Department approved the request. Remarks: ${remark}`
+                : 'Head of Department approved the request.';
+        case 'HOD Rejected':
+            return remark
+                ? `Head of Department rejected the request. Remarks: ${remark}`
+                : 'Head of Department rejected the request.';
+        case 'DCI Configuration Submitted':
+            return 'DCI Team submitted the AD/Exchange identity configuration.';
+        case 'DCI Manager Approved':
+            return remark
+                ? `DCI Manager approved the configuration. Remarks: ${remark}`
+                : 'DCI Manager approved the configuration.';
+        case 'DCI Manager Approved (High Risk)':
+            return 'DCI Manager approved; routed to IT HOD for email-policy sign-off.';
+        case 'DCI Manager Rejected':
+            return remark
+                ? `DCI Manager rejected the request. Remarks: ${remark}`
+                : 'DCI Manager rejected the request.';
+        case 'DCI Manager Requested Changes':
+            return remark
+                ? `DCI Manager requested changes. Notes: ${remark}`
+                : 'DCI Manager requested changes — sent back to DCI Team.';
+        case 'IT HOD Approved':
+            return remark
+                ? `IT HOD approved external email access. Remarks: ${remark}`
+                : 'IT HOD approved external email access.';
+        case 'IT HOD Rejected':
+            return remark
+                ? `IT HOD rejected the request. Remarks: ${remark}`
+                : 'IT HOD rejected the request.';
+        case 'DCI Implementation Completed':
+            return remark || 'Account provisioned and proof uploaded by DCI Implementer.';
+        case 'OPS Checklist Completed':
+            return 'Workstation setup verified by OPS — request closed.';
+        case 'Email Regenerated':
+            return 'Action email re-sent by Admin.';
+        case 'Work Order PDF Emailed':
+            return 'Work Order PDF sent to DCI Manager for record.';
+        default:
+            return humanizeAction(action) + (remark ? `. ${remark}` : '');
+    }
+};
+
+export default { humanizeDetails, humanizeDetailsHTML, humanizeAction, narrate };

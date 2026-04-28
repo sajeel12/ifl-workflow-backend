@@ -102,7 +102,7 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         allowNull: true
     },
     groupPolicyLevel: {
-        type: DataTypes.STRING, // 'Highly Managed', 'Lightly Managed', 'IT User'
+        type: DataTypes.STRING, // 'Highly Managed' | 'Lightly Managed' | 'IT User'
         allowNull: true
     },
 

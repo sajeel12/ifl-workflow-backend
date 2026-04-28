@@ -31,6 +31,32 @@
             z-index: 1000;
         }
 
+        /* SSO identity badge — sits at the right edge of every page header */
+        .sso-badge {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.12);
+            padding: 6px 12px 6px 8px;
+            border-radius: 999px;
+            color: #fff;
+            font-size: 13px;
+            min-height: 32px;
+        }
+        .sso-badge .sso-avatar {
+            width: 28px; height: 28px; border-radius: 50%;
+            background: rgba(255, 255, 255, 0.25);
+            color: #fff; font-weight: 700; font-size: 12px;
+            display: flex; align-items: center; justify-content: center;
+            text-transform: uppercase; flex: 0 0 auto;
+        }
+        .sso-badge .sso-text { display: flex; flex-direction: column; line-height: 1.15; }
+        .sso-badge .sso-name { font-weight: 600; }
+        .sso-badge .sso-meta { font-size: 11px; opacity: 0.85; }
+        .sso-badge.is-anonymous .sso-avatar { background: rgba(255, 255, 255, 0.15); }
+        .sso-badge.is-anonymous .sso-name { font-weight: 500; opacity: 0.85; }
+
         .logo {
             height: 48px;
             padding: 6px;
@@ -126,3 +152,50 @@
 </head>
 
 <body>
+    <!--
+        Global SSO identity badge — populated at runtime from /api/auth/me.
+        Stays at the top of every page so users (and the demo audience) can
+        immediately see who the system thinks is signed in. If SSO isn't
+        configured, it shows "Not signed in" so the gap is visible, not silent.
+    -->
+    <div id="ssoBadge" class="sso-badge is-anonymous" style="position:fixed;top:14px;right:24px;z-index:1100;">
+        <div class="sso-avatar">?</div>
+        <div class="sso-text">
+            <div class="sso-name">Checking session…</div>
+            <div class="sso-meta">SSO</div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            const badge = document.getElementById('ssoBadge');
+            if (!badge) return;
+
+            const set = (name, meta, signedIn) => {
+                badge.classList.toggle('is-anonymous', !signedIn);
+                const initials = (name || '?').trim().split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '?';
+                badge.querySelector('.sso-avatar').textContent = initials;
+                badge.querySelector('.sso-name').textContent = name || 'Not signed in';
+                badge.querySelector('.sso-meta').textContent = meta || 'SSO';
+            };
+
+            // Optional helper: if a sidecar token is available, attach it.
+            const fetchOpts = { credentials: 'include', headers: {} };
+            try {
+                const stash = sessionStorage.getItem('x-sidecar-token');
+                if (stash) fetchOpts.headers['x-sidecar-token'] = stash;
+            } catch (_) { /* sessionStorage may be unavailable */ }
+
+            fetch('/api/auth/me', fetchOpts)
+                .then(r => r.ok ? r.json() : null)
+                .then(j => {
+                    if (j && j.user) {
+                        const u = j.user;
+                        const role = u.designation || (j.authMethod || 'SSO');
+                        set(u.displayName || u.username || u.email, role, true);
+                    } else {
+                        set('Not signed in', 'SSO required', false);
+                    }
+                })
+                .catch(() => set('Not signed in', 'SSO unavailable', false));
+        })();
+    </script>

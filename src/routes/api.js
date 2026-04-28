@@ -24,13 +24,17 @@ router.all('/approvals/handle', approvalController.handleApprovalClick);
 router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
 
 // User Onboarding Routes
-router.get('/onboarding/initiate', onboardingController.handleRequest); // Explicit initiation route
-router.post('/onboarding/initiate', onboardingController.handleRequest); // Handle form submission from initiate page
+// /initiate is gated by SSO so the requester identity comes from AD, not form input.
+// /handle stays unauthenticated — it's reached via one-time email approval tokens
+// (DCI Manager / IT HOD actionable cards) that have their own auth.
+router.get('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
+router.post('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
 router.get('/onboarding/handle', onboardingController.handleRequest);
 router.post('/onboarding/handle', onboardingController.handleRequest);
 
-// Phase 4: Upload Proof
-router.post('/onboarding/upload-proof', upload.array('dciProof', 5), onboardingController.handleProofUpload);
+// Proof upload is performed by the DCI Implementer in a logged-in browser session,
+// so SSO is required — implementerName is taken from req.user, not the form.
+router.post('/onboarding/upload-proof', ssoMiddleware, upload.array('dciProof', 5), onboardingController.handleProofUpload);
 
 // Lookup active onboarding request by employeeId (used by HR form JS)
 router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
@@ -38,8 +42,11 @@ router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
 // History / status view for an existing onboarding request
 router.get('/onboarding/history/:id', onboardingController.renderHistory);
 
-// Role-scoped queue: pending actions or full history for a given role
+// Role-scoped queue: pending actions or full history for a given role (JSON)
 router.get('/onboarding/queue', onboardingController.getRoleQueue);
+
+// Role-scoped queue (rendered page) — the user-facing "My Pending Actions" view
+router.get('/my/queue', ssoMiddleware, onboardingController.renderRoleQueue);
 
 
 router.get('/health', (req, res) => {
@@ -77,8 +84,8 @@ router.get('/ad-debug/:username', async (req, res) => {
 });
 
 // --- Offboarding Routes ---
-router.get('/offboarding/initiate', offboardingController.initiate);
-router.post('/offboarding/initiate', offboardingController.initiate);
+router.get('/offboarding/initiate', ssoMiddleware, offboardingController.initiate);
+router.post('/offboarding/initiate', ssoMiddleware, offboardingController.initiate);
 router.get('/offboarding/pending-manager', offboardingController.getPendingManager);
 router.get('/offboarding/pending-system', offboardingController.getPendingSystem);
 router.get('/offboarding/all', offboardingController.getAll);

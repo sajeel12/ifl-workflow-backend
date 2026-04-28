@@ -4,7 +4,7 @@ import SystemConfig from '../models/SystemConfig.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
 import { Op } from 'sequelize';
-import { humanizeDetails, humanizeDetailsHTML, humanizeAction } from '../utils/historyFormatter.js';
+import { humanizeDetails, humanizeDetailsHTML, humanizeAction, narrate } from '../utils/historyFormatter.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 
 // Map workflow status -> the role currently responsible for it
@@ -71,22 +71,40 @@ const handleSubmission = async (req, res, token) => {
 
     try {
         if (!token) {
-            // HR Submission — attach requester info from SSO user
+            // HR Submission — requester identity ALWAYS comes from SSO; we ignore
+            // any requesterName / requesterEmail in the body so a malicious or
+            // mistaken POST cannot misattribute the request to someone else.
             if (req.user) {
-                data.requesterName = data.requesterName || req.user.displayName || req.user.username;
+                data.requesterName = req.user.displayName || req.user.username;
                 data.requesterEmail = req.user.email || null;
+            } else {
+                return res.status(401).render('pages/message', {
+                    title: 'Sign-in required',
+                    heading: 'SSO sign-in required',
+                    titleClass: 'error',
+                    message: 'This request must be initiated from the IFL portal so we can identify the requester. Please open this page from the portal and try again.'
+                });
             }
 
-            // Guard: block duplicate active request for same employee
+            // Guard: block duplicate active request for same employee.
+            // HR-stage users must NOT see the prior request's history/trail —
+            // workflow visibility is least-privilege and HR has no claim to
+            // mid-flight data. Just refuse the submission with a clean message.
             if (data.employeeId) {
                 const existing = await OnboardingRequest.findOne({
                     where: {
                         employeeId: data.employeeId,
                         status: { [Op.notIn]: ['Rejected', 'Completed'] }
-                    }
+                    },
+                    attributes: ['id']
                 });
                 if (existing) {
-                    return res.redirect(`/api/onboarding/history/${existing.id}`);
+                    return res.status(409).render('pages/message', {
+                        title: 'Request already exists',
+                        heading: 'A request is already in progress',
+                        titleClass: 'error',
+                        message: `An onboarding request for employee #${data.employeeId} is already moving through the workflow. You cannot submit a duplicate. Please wait for the existing request to complete (or be rejected) before initiating a new one.`
+                    });
                 }
             }
 
@@ -122,7 +140,11 @@ const handleSubmission = async (req, res, token) => {
                 return renderSuccess(res, `Decision Recorded`, `The request has been finalized. (Action: ${action})`);
             }
             else if (role === 'OPS') {
-                const { opsName } = data;
+                // OPS action is reached via the email-link token flow (no SSO
+                // middleware), but if the OPS user happens to be signed in via
+                // SSO we prefer that identity over the form-supplied opsName so
+                // it can't be misattributed.
+                const opsName = (req.user && (req.user.displayName || req.user.username)) || data.opsName;
                 // Parse checklist from body keys starting with "check_"
                 const checklistData = [];
                 Object.keys(data).forEach(key => {
@@ -149,11 +171,13 @@ export const handleProofUpload = async (req, res) => {
             return renderError(res, 'No files uploaded.');
         }
 
-        // Auto-fill implementer from Windows/SSO login; fall back to form field if no SSO session
-        const implementerName =
-            (req.user && (req.user.displayName || req.user.username)) ||
-            req.body.implementerName ||
-            'Unknown Implementer';
+        // The /upload-proof route is gated by ssoMiddleware, so req.user is
+        // guaranteed when SSO_MODE=PROD. Implementer identity comes ONLY from
+        // SSO — we ignore req.body.implementerName so it can't be spoofed.
+        if (!req.user) {
+            return renderError(res, 'SSO sign-in required to record implementation proof.');
+        }
+        const implementerName = req.user.displayName || req.user.username;
 
         const filePaths = req.files.map(f => f.path);
         await onboardingService.handleDCIImplementation(token, filePaths, implementerName);
@@ -186,22 +210,31 @@ const renderForm = async (req, res, token) => {
                 ev.actionLabel = humanizeAction(ev.action);
                 ev.detailsText = humanizeDetails(ev.details);
                 ev.detailsHTML = humanizeDetailsHTML(ev.details);
+                ev.summary     = narrate(ev);
                 return ev;
             });
         } catch (e) {
             logger.warn('[Onboarding] Could not load timeline: ' + e.message);
         }
     } else if (req.query.employeeId && role === 'HR') {
-        // HR entered an employeeId on the initiate form — if an active request exists,
-        // redirect them to its history/status page.
+        // HR is entering an employee number — if an active request already
+        // exists, refuse with a least-privilege blocked-message. HR cannot view
+        // the in-flight request's trail; that's reserved for the role currently
+        // holding the workflow.
         const existing = await OnboardingRequest.findOne({
             where: {
                 employeeId: req.query.employeeId,
                 status: { [Op.notIn]: ['Rejected', 'Completed'] }
-            }
+            },
+            attributes: ['id']
         });
         if (existing) {
-            return res.redirect(`/api/onboarding/history/${existing.id}`);
+            return res.status(409).render('pages/message', {
+                title: 'Request already exists',
+                heading: 'A request is already in progress',
+                titleClass: 'error',
+                message: `An onboarding request for employee #${req.query.employeeId} is already moving through the workflow. Please wait for it to complete before initiating a new one.`
+            });
         }
     } else if (req.query.mock) {
         role = req.query.mock.toUpperCase(); // IT, HOD, DCI, OPS, HR
@@ -384,6 +417,103 @@ const ROLE_TO_HISTORY_STATUS = {
     OPS_TEAM: ['PendingOPSAction', 'Completed', 'Rejected']
 };
 
+// Map AD designation strings (or workflow role keys) → queue role key.
+// Lets users land on the queue page automatically without picking a role.
+const DESIGNATION_TO_ROLE = {
+    HR: 'IT_OPS', // HR initiates, doesn't have a queue. Default landing role for them is informational.
+    'IT OPS': 'IT_OPS',
+    'IT_OPS': 'IT_OPS',
+    'IT': 'IT_OPS',
+    'HOD': 'HOD',
+    'HEAD OF DEPARTMENT': 'HOD',
+    'DCI': 'DCI_TEAM',
+    'DCI TEAM': 'DCI_TEAM',
+    'DCI_TEAM': 'DCI_TEAM',
+    'DCI MANAGER': 'DCI_MANAGER',
+    'DCI_MANAGER': 'DCI_MANAGER',
+    'IT HOD': 'IT_HOD',
+    'IT_HOD': 'IT_HOD',
+    'DCI IMPLEMENTER': 'DCI_IMPLEMENTER',
+    'DCI_IMPLEMENTER': 'DCI_IMPLEMENTER',
+    'OPS': 'OPS_TEAM',
+    'OPS TEAM': 'OPS_TEAM',
+    'OPS_TEAM': 'OPS_TEAM'
+};
+
+/**
+ * Render the role-based pending-actions page. Picks role from:
+ *   1. ?role=X query parameter (explicit override)
+ *   2. req.user.designation mapped via DESIGNATION_TO_ROLE
+ *   3. Default to IT_OPS so the page is never empty in demos
+ */
+export const renderRoleQueue = async (req, res) => {
+    try {
+        const explicit = req.query.role ? String(req.query.role).toUpperCase() : null;
+        const fromDesig = req.user && req.user.designation
+            ? DESIGNATION_TO_ROLE[String(req.user.designation).toUpperCase()] || null
+            : null;
+        const role = explicit || fromDesig || 'IT_OPS';
+        const type = String(req.query.type || 'pending').toLowerCase();
+        const map = type === 'history' ? ROLE_TO_HISTORY_STATUS : ROLE_TO_PENDING_STATUS;
+
+        const validRoles = Object.keys(ROLE_TO_PENDING_STATUS);
+        const safeRole = validRoles.includes(role) ? role : 'IT_OPS';
+        const statuses = map[safeRole] || [];
+
+        const rows = statuses.length ? await OnboardingRequest.findAll({
+            where: { status: { [Op.in]: statuses } },
+            order: [['updatedAt', 'DESC']],
+            attributes: [
+                'id', 'employeeId', 'fullName', 'department', 'subDepartment',
+                'designation', 'requesterName', 'requesterEmail', 'status',
+                'createdAt', 'updatedAt', 'currentStageToken'
+            ]
+        }) : [];
+
+        const items = rows.map(r => {
+            const j = r.toJSON();
+            const stage = STATUS_TO_ROLE[j.status];
+            const actionable = ROLE_TO_PENDING_STATUS[safeRole]?.includes(j.status) || false;
+            // Build the action URL — actionable rows go to the form via current stage token,
+            // historical rows go to the read-only history page.
+            const url = actionable && j.currentStageToken
+                ? `/api/onboarding/handle?token=${j.currentStageToken}`
+                : `/api/onboarding/history/${j.id}`;
+            return {
+                requestId: j.id,
+                employeeId: j.employeeId,
+                fullName: j.fullName,
+                department: [j.department, j.subDepartment].filter(Boolean).join(' / ') || '—',
+                designation: j.designation,
+                initiatorName: j.requesterName || '—',
+                initiatorEmail: j.requesterEmail || '',
+                currentStage: j.status,
+                currentStageLabel: stage ? stage.label : j.status,
+                lastUpdated: j.updatedAt,
+                actionable,
+                url
+            };
+        });
+
+        return res.render('pages/role_queue', {
+            title: `My ${type === 'history' ? 'Workflow History' : 'Pending Actions'}`,
+            role: safeRole,
+            type,
+            items,
+            currentUser: req.user || null,
+            roleOptions: validRoles
+        });
+    } catch (err) {
+        logger.error(`[Role Queue] ${err.message}`);
+        return res.status(500).render('pages/message', {
+            title: 'Error',
+            heading: 'Could not load your queue',
+            titleClass: 'error',
+            message: err.message
+        });
+    }
+};
+
 /**
  * GET /api/onboarding/queue?role=DCI_IMPLEMENTER&type=pending|history
  * Returns the list of requests visible to a given role.
@@ -443,13 +573,13 @@ export const lookupExistingRequest = async (req, res) => {
                 employeeId,
                 status: { [Op.notIn]: ['Rejected', 'Completed'] }
             },
-            attributes: ['id', 'status', 'fullName']
+            attributes: ['id']
         });
 
+        // HR is the only caller of this endpoint and must not see workflow
+        // state (status, name, current stage) — return only a boolean signal.
         return res.json({
-            existingRequestId: existing ? existing.id : null,
-            status: existing ? existing.status : null,
-            fullName: existing ? existing.fullName : null
+            existingRequestId: existing ? existing.id : null
         });
     } catch (err) {
         logger.error(`[Onboarding Lookup] ${err.message}`);
@@ -478,6 +608,7 @@ export const renderHistory = async (req, res) => {
             ev.actionLabel = humanizeAction(ev.action);
             ev.detailsText = humanizeDetails(ev.details);
             ev.detailsHTML = humanizeDetailsHTML(ev.details);
+            ev.summary     = narrate(ev);
             return ev;
         });
 

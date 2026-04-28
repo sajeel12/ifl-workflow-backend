@@ -4,6 +4,28 @@ import crypto from 'crypto';
 
 const SHARED_SECRET = process.env.SSO_SHARED_SECRET || 'IFL_WORKFLOW_SECRET_KEY_2025';
 
+// SSO_MODE controls authentication behavior — useful when local testing
+// without the IIS sidecar producing real x-sidecar-token headers.
+//
+//   "PROD"      (default) — Real sidecar required. Reject any request without a
+//                           valid token. Production must always run this.
+//   "MOCK"                — Skip the sidecar entirely. Inject a fake user from
+//                           SSO_MOCK_* env vars so devs can hit /initiate
+//                           without IIS in the loop.
+//   "OPTIONAL"            — Try the sidecar; if no header present, fall back
+//                           to the mock user. Lets one backend serve both
+//                           a real-IIS frontend and a local browser.
+const SSO_MODE = (process.env.SSO_MODE || 'PROD').toUpperCase();
+
+const buildMockUser = () => ({
+    username:    process.env.SSO_MOCK_USERNAME    || 'dev.user',
+    email:       process.env.SSO_MOCK_EMAIL       || 'dev.user@ifl.com.pk',
+    displayName: process.env.SSO_MOCK_DISPLAY     || 'Dev User (Mock SSO)',
+    manager:     null,
+    raw:         { mock: true },
+    designation: process.env.SSO_MOCK_DESIGNATION || 'HR'
+});
+
 function verifySignature(username, timestamp, signature) {
     const data = `${username}|${timestamp}`;
     const hmac = crypto.createHmac('sha256', SHARED_SECRET);
@@ -22,11 +44,24 @@ function verifySignature(username, timestamp, signature) {
 
 export const ssoMiddleware = async (req, res, next) => {
     try {
+        // ─── MOCK mode: skip sidecar entirely, inject a dev identity ───
+        if (SSO_MODE === 'MOCK') {
+            req.user = buildMockUser();
+            logger.info(`[SSO] [MOCK MODE] Injected ${req.user.username} for ${req.method} ${req.originalUrl}`);
+            return next();
+        }
+
         const rawSidecarToken = req.headers['x-sidecar-token'] || '';
         const sidecarToken = rawSidecarToken.trim();
 
+        // ─── OPTIONAL mode: fall back to mock user when no sidecar header ───
         if (!sidecarToken) {
-            return res.status(401).json({ error: 'Unauthorized: Missing Auth Token' });
+            if (SSO_MODE === 'OPTIONAL') {
+                req.user = buildMockUser();
+                logger.info(`[SSO] [OPTIONAL MODE] No sidecar token; using mock user ${req.user.username}`);
+                return next();
+            }
+            return res.status(401).json({ error: 'Unauthorized: Missing Auth Token. Please open this page from the IFL portal — SSO required.' });
         }
 
         let authenticatedUser = null;
@@ -66,16 +101,15 @@ export const ssoMiddleware = async (req, res, next) => {
                 return res.status(403).json({ error: 'User Access Denied' });
             }
 
-
-            let designation = "";
-
-            //  this is dummy designation for now
-            if (userProfile.email = "sajeel.dilshad@perception-it.com") {
-                designation = "HR";
+            // Temporary designation override — until proper AD-group lookup is wired up.
+            // Fixed: this used to be `=` (assignment) which silently overwrote every
+            // user's email. Now a strict equality check.
+            let designation = '';
+            if (userProfile.mail === 'sajeel.dilshad@perception-it.com') {
+                designation = 'HR';
             }
-
-            // // Here we will check for designation in future
-            //  designation = await getDesignation(userProfile.sAMAccountName);
+            // TODO: replace with real AD-group / designation lookup
+            //   designation = await getDesignation(userProfile.sAMAccountName);
 
             req.user = {
                 username: userProfile.sAMAccountName,
@@ -97,3 +131,6 @@ export const ssoMiddleware = async (req, res, next) => {
         res.status(500).json({ error: 'Internal Authentication Error' });
     }
 };
+
+// Expose the resolved mode so other modules / health checks can introspect it.
+export const getSSOMode = () => SSO_MODE;
