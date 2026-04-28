@@ -1,473 +1,344 @@
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const LOGO_PATH = path.resolve(__dirname, '..', '..', 'public', 'logo.png');
+// Page constants — A4 portrait
+const PAGE_W = 595;
+const PAGE_H = 842;
+const M = 30;                 // outer page margin
+const W = PAGE_W - 2 * M;     // content width
 
-// Brand palette — kept in one place so it's easy to retheme later
-const COLOR = {
-    brandDark:   '#0F2A47',  // deep navy — header band
-    brand:       '#0F4C81',  // primary blue — accents
-    brandLight:  '#3B82F6',  // section bars
-    accent:      '#0078D4',  // microsoft-style highlight
-    success:     '#16A34A',
-    danger:      '#DC2626',
-    warning:     '#D97706',
-    text:        '#0F172A',
-    textMuted:   '#64748B',
-    textLight:   '#94A3B8',
-    border:      '#E2E8F0',
-    bgSoft:      '#F8FAFC',
-    bgYellow:    '#FEF3C7',
-    bgGreen:     '#DCFCE7',
-    bgRed:       '#FEE2E2',
-    bgGray:      '#F1F5F9',
-    white:       '#FFFFFF'
-};
-
-const PAGE = { width: 595, height: 842 };
-const MARGIN = 40;
-const CONTENT_W = PAGE.width - MARGIN * 2;
-
-const fmtDate = (d) => {
-    if (!d) return '—';
-    const dt = (d instanceof Date) ? d : new Date(d);
-    if (isNaN(dt.getTime())) return '—';
-    return dt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
-};
-
-const fmtVal = (v) => {
-    if (v === null || v === undefined || v === '') return '—';
-    if (v === true) return 'Yes';
-    if (v === false) return 'No';
+// Format helpers
+const fmt = (v) => {
+    if (v === null || v === undefined) return '';
+    if (v instanceof Date) {
+        if (isNaN(v.getTime())) return '';
+        return v.toLocaleDateString('en-GB');
+    }
     return String(v);
 };
 
+const fmtDateTime = (v) => {
+    if (!v) return '';
+    const d = (v instanceof Date) ? v : new Date(v);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+/**
+ * Generate the Intranet & Internet Proxy Form PDF.
+ * Layout matches the IFL paper form: plain black-and-white, two boxed
+ * sections (Applicant + System Infrastructure), signature lines at bottom.
+ */
 export const generateOnboardingPDF = async (request, outputPath) => {
     return new Promise((resolve, reject) => {
         const doc = new PDFDocument({
             size: 'A4',
-            margin: MARGIN,
-            bufferPages: true,
+            margin: 0,
             info: {
-                Title: `Onboarding Work Order #${request.id}`,
-                Author: 'IFL Workflow System',
-                Subject: `Onboarding for ${request.fullName || ''}`,
-                Producer: 'Ibrahim Fibres Limited'
+                Title:    `Intranet & Internet Proxy Form — Req #${request.id}`,
+                Author:   'Ibrahim Fibres Limited',
+                Subject:  `Onboarding for ${request.fullName || ''}`,
+                Producer: 'IFL Workflow System'
             }
         });
         const stream = fs.createWriteStream(outputPath);
         doc.pipe(stream);
 
-        // --- helpers bound to this doc ---
-        const ensureSpace = (need) => {
-            if (doc.y + need > PAGE.height - 70) doc.addPage();
+        doc.fillColor('#000');
+        doc.strokeColor('#000');
+        doc.lineWidth(0.5);
+
+        // ─── Drawing helpers ───────────────────────────────────────────
+
+        const text = (str, x, y, opts = {}) => {
+            doc.text(str || '', x, y, { lineBreak: false, ...opts });
         };
 
-        const drawHeaderBand = () => {
-            // Solid brand band across the top
-            doc.save();
-            doc.rect(0, 0, PAGE.width, 90).fill(COLOR.brandDark);
-
-            // Logo
-            try {
-                if (fs.existsSync(LOGO_PATH)) {
-                    doc.image(LOGO_PATH, MARGIN, 22, { fit: [110, 46] });
-                }
-            } catch { /* logo optional */ }
-
-            // Company wordmark
-            doc.fillColor(COLOR.white)
-               .font('Helvetica-Bold').fontSize(16)
-               .text('IBRAHIM FIBRES LIMITED', MARGIN + 130, 28, { width: 260 });
-            doc.font('Helvetica').fontSize(9).fillColor('#A8C5E0')
-               .text('Workflow Automation · IT Onboarding Module', MARGIN + 130, 50, { width: 260 });
-
-            // Right side document badge
-            doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR.white)
-               .text('WORK ORDER', PAGE.width - MARGIN - 140, 28, { width: 140, align: 'right' });
-            doc.font('Helvetica-Bold').fontSize(14).fillColor(COLOR.white)
-               .text(`#${request.id}`, PAGE.width - MARGIN - 140, 42, { width: 140, align: 'right' });
-            doc.font('Helvetica').fontSize(8).fillColor('#A8C5E0')
-               .text(fmtDate(new Date()), PAGE.width - MARGIN - 140, 62, { width: 140, align: 'right' });
-            doc.restore();
+        const labelText = (str, x, y, opts = {}) => {
+            doc.font('Helvetica').fontSize(8.5);
+            text(str, x, y, opts);
         };
 
-        const drawTitleStrip = () => {
-            const y = 100;
-            doc.font('Helvetica-Bold').fontSize(18).fillColor(COLOR.text)
-               .text('User Onboarding — Service Request', MARGIN, y);
-            doc.font('Helvetica').fontSize(10).fillColor(COLOR.textMuted)
-               .text(`Intranet, Internet, Email, File-Share & Identity Provisioning`, MARGIN, y + 24);
-            // Thin accent rule
-            doc.moveTo(MARGIN, y + 44).lineTo(MARGIN + CONTENT_W, y + 44)
-               .lineWidth(2).strokeColor(COLOR.brandLight).stroke();
-            doc.y = y + 56;
+        const valueText = (str, x, y, w) => {
+            doc.font('Helvetica').fontSize(9);
+            text(fmt(str), x, y, { width: w, ellipsis: true, lineBreak: false });
         };
 
-        const statusColor = (status) => {
-            if (!status) return { bg: COLOR.bgGray, fg: COLOR.textMuted };
-            const s = String(status).toLowerCase();
-            if (s.includes('reject')) return { bg: COLOR.bgRed,    fg: COLOR.danger };
-            if (s.includes('approve') || s === 'completed') return { bg: COLOR.bgGreen,  fg: COLOR.success };
-            if (s.includes('pending')) return { bg: COLOR.bgYellow, fg: COLOR.warning };
-            return { bg: COLOR.bgGray, fg: COLOR.textMuted };
-        };
-
-        const pill = (text, x, y, color) => {
-            const c = color || statusColor(text);
-            const padX = 8, padY = 3;
-            doc.font('Helvetica-Bold').fontSize(9);
-            const w = doc.widthOfString(text) + padX * 2;
-            const h = 16;
-            doc.save();
-            doc.roundedRect(x, y, w, h, 8).fill(c.bg);
-            doc.fillColor(c.fg).text(text, x + padX, y + padY, { lineBreak: false });
-            doc.restore();
-            return w;
-        };
-
-        const drawMetaCard = () => {
-            const y = doc.y;
-            const cellW = CONTENT_W / 4;
-            const h = 56;
-
-            doc.save();
-            doc.roundedRect(MARGIN, y, CONTENT_W, h, 6).fill(COLOR.bgSoft);
-            doc.lineWidth(0.5).strokeColor(COLOR.border).roundedRect(MARGIN, y, CONTENT_W, h, 6).stroke();
-
-            const cells = [
-                { label: 'REQUEST #',   value: `#${request.id}` },
-                { label: 'EMPLOYEE ID', value: request.employeeId || '—' },
-                { label: 'STAGE',       value: request.status || '—' },
-                { label: 'APPROVAL',    value: request.approvalStatus || 'Pending' }
-            ];
-
-            cells.forEach((c, i) => {
-                const cx = MARGIN + i * cellW + 12;
-                doc.font('Helvetica-Bold').fontSize(7).fillColor(COLOR.textMuted)
-                   .text(c.label, cx, y + 10, { width: cellW - 24, characterSpacing: 0.5 });
-                if (c.label === 'APPROVAL' || c.label === 'STAGE') {
-                    pill(c.value, cx, y + 26);
-                } else {
-                    doc.font('Helvetica-Bold').fontSize(13).fillColor(COLOR.text)
-                       .text(c.value, cx, y + 24, { width: cellW - 24, lineBreak: false });
-                }
-                if (i > 0) {
-                    doc.moveTo(MARGIN + i * cellW, y + 12)
-                       .lineTo(MARGIN + i * cellW, y + h - 12)
-                       .lineWidth(0.5).strokeColor(COLOR.border).stroke();
-                }
+        const fieldBox = (x, y, w, h, value) => {
+            doc.lineWidth(0.5).rect(x, y, w, h).stroke();
+            doc.font('Helvetica').fontSize(9).fillColor('#000');
+            doc.text(fmt(value), x + 4, y + 4, {
+                width: w - 8, height: h - 4, lineBreak: false, ellipsis: true
             });
-            doc.restore();
-            doc.y = y + h + 14;
         };
 
-        const sectionHeading = (title, tag) => {
-            ensureSpace(40);
-            const y = doc.y;
-            // Left accent bar
-            doc.save();
-            doc.rect(MARGIN, y, 4, 22).fill(COLOR.brandLight);
-            doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR.text)
-               .text(title, MARGIN + 12, y + 4);
-            if (tag) {
-                doc.font('Helvetica-Bold').fontSize(8).fillColor(COLOR.brand);
-                const tagW = doc.widthOfString(tag) + 14;
-                doc.roundedRect(PAGE.width - MARGIN - tagW, y + 3, tagW, 16, 8).fill(COLOR.bgSoft);
-                doc.fillColor(COLOR.brand)
-                   .text(tag, PAGE.width - MARGIN - tagW + 7, y + 7, { lineBreak: false });
+        // Label on the left, bordered text box on the right
+        const labeledField = (label, x, y, labelW, fieldW, h, value) => {
+            labelText(label + ':', x, y + 3);
+            fieldBox(x + labelW, y, fieldW, h, value);
+        };
+
+        // Checkbox: small square, optional tick inside, label to the right
+        const checkbox = (label, x, y, checked) => {
+            doc.lineWidth(0.5).rect(x, y + 1, 9, 9).stroke();
+            if (checked) {
+                doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+                text('✓', x + 1.5, y + 1.5);
             }
-            doc.restore();
-            doc.y = y + 28;
+            doc.font('Helvetica').fontSize(9);
+            text(label, x + 14, y + 3);
         };
 
-        // Render two-column key/value rows. Pass an array of {label, value, pill}
-        const fieldGrid = (fields) => {
-            const rowH = 24;
-            const colW = CONTENT_W / 2;
+        const sectionLabel = (str, x, y) => {
+            doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#000');
+            const w = doc.widthOfString(str);
+            text(str, x, y);
+            // Subtle underline under section labels (like the original form)
+            doc.moveTo(x, y + 11).lineTo(x + w, y + 11).lineWidth(0.5).stroke();
+        };
 
-            for (let i = 0; i < fields.length; i += 2) {
-                ensureSpace(rowH + 4);
-                const y = doc.y;
-                const pair = [fields[i], fields[i + 1]];
+        const horizontalRule = (x1, x2, y) => {
+            doc.lineWidth(0.5).moveTo(x1, y).lineTo(x2, y).stroke();
+        };
 
-                pair.forEach((f, idx) => {
-                    if (!f) return;
-                    const cx = MARGIN + idx * colW;
-                    doc.font('Helvetica-Bold').fontSize(7).fillColor(COLOR.textMuted)
-                       .text(String(f.label).toUpperCase(), cx + 6, y, { width: colW - 12, characterSpacing: 0.5 });
-                    if (f.pill) {
-                        pill(fmtVal(f.value), cx + 6, y + 9);
-                    } else {
-                        doc.font('Helvetica').fontSize(10).fillColor(COLOR.text)
-                           .text(fmtVal(f.value), cx + 6, y + 9, { width: colW - 12, ellipsis: true, lineBreak: false });
-                    }
-                });
-                doc.y = y + rowH;
+        // ════════════════════════════════════════════════════════════════
+        // APPLICANT BOX
+        // ════════════════════════════════════════════════════════════════
+        const appTop = M;
+        const appHeight = 540;     // ~64% of A4 — leaves room for the System Infra box below
+        const appBottom = appTop + appHeight;
+
+        doc.lineWidth(0.7).rect(M, appTop, W, appHeight).stroke();
+        doc.lineWidth(0.5);
+
+        // Title bar (small bordered box near the top)
+        const titleX = M + 90;
+        const titleW = W - 180;
+        const titleY = appTop + 12;
+        doc.rect(titleX, titleY, titleW, 22).stroke();
+        doc.font('Helvetica-Bold').fontSize(13).fillColor('#000');
+        text('Intranet & Internet Proxy Form', titleX, titleY + 6, {
+            width: titleW, align: 'center'
+        });
+
+        // Top-right "Request Initiated On" field
+        let y = titleY + 30;
+        const initLabelW = 110;
+        labelText('Request Initiated On:', M + W - 230, y + 3);
+        fieldBox(M + W - 230 + initLabelW, y, 110, 16, fmtDateTime(request.hrSubmittedAt));
+
+        // ─── Applicant fields (2-column grid) ───────────────────────────
+        const colLeftX = M + 8;
+        const colRightX = M + W / 2 + 4;
+        const colWidth = W / 2 - 12;
+
+        y += 22;
+        labeledField('Employee Number', colLeftX, y, 95, colWidth - 100, 16, request.employeeId);
+        labeledField('Department',      colRightX, y, 70, colWidth - 75,  16, request.department);
+
+        y += 22;
+        labeledField('Request Initator Name', colLeftX, y, 110, colWidth - 115, 16, request.requesterName);
+        labeledField('Project / Unit',         colRightX, y, 70,  colWidth - 75,  16, request.location || 'Head Office');
+
+        y += 22;
+        labeledField('Designation', colLeftX, y, 65, colWidth - 70, 16, request.designation);
+        labeledField('Joining Date', colRightX, y, 65, colWidth - 70, 16,
+            request.joiningDate ? fmt(request.joiningDate) : 'N/A');
+
+        // Office Ext / Home / Mobile (3 fields on one row)
+        y += 22;
+        labelText('Office Extension:', colLeftX, y + 3);
+        fieldBox(colLeftX + 88, y, 50, 16, request.officeExtension);
+        text('-', colLeftX + 142, y + 3);
+        labelText('Home Phone #:', colLeftX + 165, y + 3);
+        fieldBox(colLeftX + 235, y, 45, 16, request.homePhone);
+        text('-', colLeftX + 282, y + 3);
+        labelText('Mobile #:', colLeftX + 305, y + 3);
+        fieldBox(colLeftX + 350, y, M + W - colLeftX - 350 - 8, 16, request.mobilePhone);
+
+        // ─── Intranet & Internet Services ───────────────────────────────
+        y += 30;
+        sectionLabel('Intranet & Internet Services:', colLeftX, y);
+
+        y += 18;
+        checkbox('Intranet', colLeftX, y, request.intranetAccess);
+        labelText('Internet Facility:', colLeftX + 130, y + 3);
+        checkbox('General Browsing', colLeftX + 210, y, request.internetAccess);
+        checkbox('Specific WebSites', colLeftX + 340, y, request.specificWebsites);
+
+        y += 22;
+        labelText('Purpose of Use: (Please Specify)', colLeftX, y);
+        const purposeRule1 = colLeftX + 170;
+        horizontalRule(purposeRule1, M + W - 8, y + 9);
+        doc.font('Helvetica').fontSize(9);
+        text(fmt(request.internetPurpose), purposeRule1 + 3, y + 1, {
+            width: M + W - 8 - purposeRule1 - 3, ellipsis: true, lineBreak: false
+        });
+
+        // ─── External Email Services ────────────────────────────────────
+        y += 22;
+        sectionLabel('External Email Services:', colLeftX, y);
+
+        y += 18;
+        checkbox('Incoming', colLeftX + 80, y, request.emailIncoming);
+        checkbox('Outgoing', colLeftX + 200, y, request.emailOutgoing);
+
+        y += 22;
+        labelText('Purpose of Use: (Please Specify)', colLeftX, y);
+        const purposeRule2 = colLeftX + 170;
+        horizontalRule(purposeRule2, M + W - 8, y + 9);
+        doc.font('Helvetica').fontSize(9);
+        text(fmt(request.emailPurpose), purposeRule2 + 3, y + 1, {
+            width: M + W - 8 - purposeRule2 - 3, ellipsis: true, lineBreak: false
+        });
+
+        // ─── Print Services ─────────────────────────────────────────────
+        y += 22;
+        sectionLabel('Print Services:', colLeftX, y);
+
+        y += 18;
+        checkbox('Laser Printer', colLeftX + 80, y, request.laserPrinter);
+        labelText('Network Printer Name:', colLeftX + 200, y + 3);
+        fieldBox(colLeftX + 295, y, M + W - 8 - (colLeftX + 295), 16, request.laserPrinterLocation);
+
+        y += 18;
+        checkbox('Dot Matrix Printer', colLeftX + 80, y, request.dotMatrixPrinter);
+        labelText('Network Printer Name:', colLeftX + 200, y + 3);
+        fieldBox(colLeftX + 295, y, M + W - 8 - (colLeftX + 295), 16, request.dotMatrixPrinterLocation);
+
+        // ─── File Share Services ────────────────────────────────────────
+        y += 22;
+        sectionLabel('File Share Services:', colLeftX, y);
+
+        y += 18;
+        labeledField('Dept. Share  (S:)', colLeftX, y, 90, colWidth - 95, 16, request.deptSharePath);
+        labeledField('Home Folder (Z:)', colRightX, y, 90, colWidth - 95, 16, request.homeFolderPath);
+
+        y += 18;
+        labeledField('Terminal User (T:)',   colLeftX, y, 90, colWidth - 95, 16, '');
+        labeledField('IFL-Portal Site Link', colRightX, y, 90, colWidth - 95, 16, request.iflPortalLink);
+
+        // ─── NOTE block — flows naturally below the file share section ─
+        y += 22;
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+        text('NOTE:', colLeftX, y);
+        y += 12;
+        doc.font('Helvetica').fontSize(7.5);
+        const noteText = 'Applicant hereby notified that any dissemination, distribution or misuse of this profile is strictly prohibited and any vulnerability or violation of company policies caused damages due to this shall be born by the applicant. If you have any doubt on the use of the profile, please notify to the IT deptt immediately by available means. It is also deemed that HOD knows the consequences of such violation.';
+        doc.text(noteText, colLeftX, y, {
+            width: W - 16, height: 50, lineGap: 1.2, align: 'left'
+        });
+
+        // ─── Three-signature row anchored to the bottom of the applicant box
+        const sigRowY = appBottom - 40;
+        const sigSlotW = (W - 16) / 3;
+        for (let i = 0; i < 3; i++) {
+            const sx = colLeftX + i * sigSlotW;
+            horizontalRule(sx + 10, sx + sigSlotW - 10, sigRowY);
+        }
+        doc.font('Helvetica').fontSize(9).fillColor('#000');
+        const sigLabels = [
+            { line1: "Applicant's Signature",       line2: '' },
+            { line1: "Applicant's Head Of Deptt.",  line2: '' },
+            { line1: 'Director / GM Technology / Manager', line2: '(Required for Internet / Email Facility)' }
+        ];
+        sigLabels.forEach((sig, i) => {
+            const sx = colLeftX + i * sigSlotW;
+            doc.font('Helvetica').fontSize(9);
+            text(sig.line1, sx + 10, sigRowY + 4, { width: sigSlotW - 20, align: i === 2 ? 'left' : 'left' });
+            if (sig.line2) {
+                doc.font('Helvetica').fontSize(7);
+                text(sig.line2, sx + 10, sigRowY + 16, { width: sigSlotW - 20 });
             }
-            // Subtle row separator after section
-            doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + CONTENT_W, doc.y + 2)
-               .lineWidth(0.4).strokeColor(COLOR.border).stroke();
-            doc.y += 12;
-        };
+        });
 
-        // Render a clean vertical service list — one row per service with status
-        // dot, label and configuration detail. Always shows every service so the
-        // work order doubles as full documentation (disabled rows are dimmed).
-        const serviceList = (services) => {
-            const ROW_H = 28;
-            const STATUS_W = 26;
-            const LABEL_W = 170;
-            const DETAIL_X = MARGIN + STATUS_W + LABEL_W + 8;
-            const DETAIL_W = MARGIN + CONTENT_W - DETAIL_X;
+        // Name / Des labels under first two signatures
+        doc.font('Helvetica').fontSize(8.5);
+        const nameDesY = sigRowY + 22;
+        text('Name:', colLeftX, nameDesY);
+        text('Des:',  colLeftX, nameDesY + 11);
+        text('Name:  :', colLeftX + sigSlotW, nameDesY);
+        text('Des:',     colLeftX + sigSlotW, nameDesY + 11);
 
-            services.forEach((s, idx) => {
-                const on = !!s.on;
-                // Detail height may push to a 2nd line — measure first
-                doc.font('Helvetica').fontSize(9.5);
-                const detailText = on
-                    ? (s.detail && String(s.detail).trim() ? String(s.detail) : 'Requested')
-                    : 'Not requested';
-                const detailH = doc.heightOfString(detailText, { width: DETAIL_W });
-                const rowH = Math.max(ROW_H, detailH + 12);
+        // ════════════════════════════════════════════════════════════════
+        // SYSTEM INFRASTRUCTURE BOX
+        // ════════════════════════════════════════════════════════════════
+        const sysTop = appBottom + 6;
+        const sysBottom = PAGE_H - M;
+        const sysHeight = sysBottom - sysTop;
 
-                ensureSpace(rowH + 4);
-                const y = doc.y;
+        doc.lineWidth(0.7).rect(M, sysTop, W, sysHeight).stroke();
+        doc.lineWidth(0.5);
 
-                // Zebra background
-                if (idx % 2 === 0) {
-                    doc.save();
-                    doc.rect(MARGIN, y, CONTENT_W, rowH).fill(COLOR.bgSoft);
-                    doc.restore();
-                }
+        // Title
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
+        text('For System Infrastructure Team Only', colLeftX, sysTop + 8);
+        const titleW2 = doc.widthOfString('For System Infrastructure Team Only');
+        horizontalRule(colLeftX, colLeftX + titleW2, sysTop + 21);
 
-                // Status icon (filled circle for enabled, hollow for disabled)
-                doc.save();
-                if (on) {
-                    doc.circle(MARGIN + 12, y + rowH / 2, 7).fill(COLOR.success);
-                    doc.fillColor(COLOR.white).font('Helvetica-Bold').fontSize(9)
-                       .text('✓', MARGIN + 8.5, y + rowH / 2 - 5, { lineBreak: false });
-                } else {
-                    doc.lineWidth(1.2).strokeColor(COLOR.textLight)
-                       .circle(MARGIN + 12, y + rowH / 2, 7).stroke();
-                }
-                doc.restore();
+        let sy = sysTop + 32;
 
-                // Label
-                doc.font('Helvetica-Bold').fontSize(10)
-                   .fillColor(on ? COLOR.text : COLOR.textMuted)
-                   .text(s.label, MARGIN + STATUS_W, y + 6, { width: LABEL_W, lineBreak: false });
+        // 4-row 2-column grid for the DCI fields
+        labeledField('NT User Name',    colLeftX, sy, 80, colWidth - 85, 16, request.ntUserName);
+        labeledField('DG Members',      colRightX, sy, 80, colWidth - 85, 16, request.dgMembers);
 
-                // Detail
-                doc.font('Helvetica').fontSize(9.5)
-                   .fillColor(on ? COLOR.text : COLOR.textLight)
-                   .text(detailText, DETAIL_X, y + 6, { width: DETAIL_W });
+        sy += 22;
+        labeledField('Ex.Display Name', colLeftX, sy, 80, colWidth - 85, 16, request.exchangeDisplayName);
+        labeledField('Mail Size Limit', colRightX, sy, 80, colWidth - 85, 16, request.mailSizeLimit);
 
-                doc.y = y + rowH;
+        sy += 22;
+        labeledField('SMTP',            colLeftX, sy, 80, colWidth - 85, 16, request.smtpAddress);
+        labeledField('Recipent Limit',  colRightX, sy, 80, colWidth - 85, 16, request.recipientLimit || '15 / 15');
+
+        sy += 22;
+        labeledField('Member of (if any)',   colLeftX, sy, 95, colWidth - 100, 16, request.memberOf);
+        labeledField('Mailbox Storage Limit', colRightX, sy, 105, colWidth - 110, 16, request.mailboxStorageLimit || '250 MB');
+
+        // ─── Group Policy Level ─────────────────────────────────────────
+        sy += 28;
+        sectionLabel('Group Policy Level:', colLeftX, sy);
+
+        sy += 16;
+        const gpl = request.groupPolicyLevel || '';
+        const isHighly  = gpl === 'Highly Managed';
+        const isLightly = gpl === 'Lightly Managed' || gpl === 'IT User';
+        const highlyVal  = isHighly  ? (request.ntUserName || '✓') : '';
+        const lightlyVal = isLightly ? `${request.ntUserName || '✓'}${gpl === 'IT User' ? '  (IT User)' : ''}` : '';
+        labeledField('HighlyManagedUsers', colLeftX, sy, 110, colWidth - 115, 16, highlyVal);
+        labeledField('LightlyManagUser',   colRightX, sy, 95, colWidth - 100, 16, lightlyVal);
+
+        // ─── New / Previous Facilities ──────────────────────────────────
+        sy += 22;
+        labelText('New / Previous Facilities ( if any )', colLeftX, sy + 3);
+        const newPrevX = colLeftX + 175;
+        horizontalRule(newPrevX, M + W - 8, sy + 12);
+
+        // ─── Extra Facility / Allegations / Comments / Malfunctioning ───
+        sy += 18;
+        labelText('Extra Facility / Allegations / Comments / Malfunctioning ( if any )', colLeftX, sy + 3);
+        const extraStartX = colLeftX + 290;
+        horizontalRule(extraStartX, M + W - 8, sy + 12);
+        // Two extra free-text lines underneath
+        sy += 18;
+        const extraLine1Y = sy - 5;
+        horizontalRule(colLeftX, M + W - 8, sy + 8);
+        sy += 16;
+        horizontalRule(colLeftX, M + W - 8, sy + 8);
+        // Render the extra facility text on the lines below the label
+        if (request.extraFacility) {
+            doc.font('Helvetica').fontSize(8.5).fillColor('#000');
+            doc.text(String(request.extraFacility), colLeftX + 2, extraLine1Y, {
+                width: W - 16, height: 28, lineGap: 4, ellipsis: true
             });
-
-            // Bottom rule
-            doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + CONTENT_W, doc.y + 2)
-               .lineWidth(0.4).strokeColor(COLOR.border).stroke();
-            doc.y += 12;
-        };
-
-        const remarksBlock = (label, text) => {
-            if (!text) return;
-            ensureSpace(60);
-            const y = doc.y;
-            const padding = 12;
-            doc.font('Helvetica-Bold').fontSize(8).fillColor(COLOR.textMuted)
-               .text(label.toUpperCase(), MARGIN, y, { characterSpacing: 0.5 });
-            doc.y = y + 12;
-
-            const textY = doc.y;
-            doc.font('Helvetica-Oblique').fontSize(10).fillColor(COLOR.text);
-            const textHeight = doc.heightOfString(text, { width: CONTENT_W - padding * 2 });
-            doc.save();
-            doc.rect(MARGIN, textY, 3, textHeight + padding).fill(COLOR.brandLight);
-            doc.rect(MARGIN + 3, textY, CONTENT_W - 3, textHeight + padding).fill(COLOR.bgSoft);
-            doc.fillColor(COLOR.text)
-               .text(text, MARGIN + padding + 3, textY + padding / 2, { width: CONTENT_W - padding * 2 });
-            doc.restore();
-            doc.y = textY + textHeight + padding + 8;
-        };
-
-        const drawApprovalTimeline = () => {
-            const steps = [
-                { role: 'HR Submitted',     ts: request.hrSubmittedAt,        ok: true },
-                { role: 'IT Configured',    ts: request.itSubmittedAt,        ok: !!request.itSubmittedAt },
-                { role: 'HOD Approved',     ts: request.hodApprovedAt,        ok: !!request.hodApprovedAt },
-                { role: 'DCI Submitted',    ts: request.dciSubmittedAt,       ok: !!request.dciSubmittedAt },
-                { role: 'DCI Mgr Decided',  ts: request.dciManagerDecidedAt,  ok: !!request.dciManagerDecidedAt },
-            ];
-            if (request.itHodDecidedAt) {
-                steps.push({ role: 'IT HOD Decided', ts: request.itHodDecidedAt, ok: true });
-            }
-
-            sectionHeading('Approval Flow', 'TIMELINE');
-            ensureSpace(70);
-            const y = doc.y;
-            const stepW = CONTENT_W / steps.length;
-
-            // connector line
-            doc.moveTo(MARGIN + 16, y + 14).lineTo(MARGIN + CONTENT_W - 16, y + 14)
-               .lineWidth(2).strokeColor(COLOR.border).stroke();
-
-            steps.forEach((s, i) => {
-                const cx = MARGIN + stepW * i + stepW / 2;
-                // dot
-                const dotColor = s.ok ? COLOR.success : COLOR.textLight;
-                doc.save();
-                doc.circle(cx, y + 14, 8).fill(dotColor);
-                doc.fillColor(COLOR.white).font('Helvetica-Bold').fontSize(9)
-                   .text(s.ok ? '✓' : String(i + 1), cx - 3, y + 9, { lineBreak: false });
-                doc.restore();
-                // label
-                doc.font('Helvetica-Bold').fontSize(8).fillColor(COLOR.text)
-                   .text(s.role, MARGIN + stepW * i, y + 30, { width: stepW, align: 'center' });
-                doc.font('Helvetica').fontSize(7).fillColor(COLOR.textMuted)
-                   .text(s.ts ? fmtDate(s.ts) : 'Pending', MARGIN + stepW * i, y + 42, { width: stepW, align: 'center' });
-            });
-            doc.y = y + 64;
-        };
-
-        const drawFooterOnAllPages = () => {
-            const range = doc.bufferedPageRange();
-            for (let i = 0; i < range.count; i++) {
-                doc.switchToPage(i);
-                const fy = PAGE.height - 40;
-                doc.save();
-                doc.rect(0, fy, PAGE.width, 40).fill(COLOR.bgSoft);
-                doc.moveTo(0, fy).lineTo(PAGE.width, fy).lineWidth(0.5).strokeColor(COLOR.border).stroke();
-                doc.font('Helvetica').fontSize(8).fillColor(COLOR.textMuted)
-                   .text('Confidential · Generated by IFL Workflow System', MARGIN, fy + 14, { width: CONTENT_W / 2 });
-                doc.font('Helvetica-Bold').fontSize(8).fillColor(COLOR.textMuted)
-                   .text(`Page ${i + 1} of ${range.count}`, MARGIN + CONTENT_W / 2, fy + 14, { width: CONTENT_W / 2, align: 'right' });
-                doc.restore();
-            }
-        };
-
-        // ============================================================
-        // BUILD THE DOCUMENT
-        // ============================================================
-        drawHeaderBand();
-        drawTitleStrip();
-        drawMetaCard();
-
-        // 1. Employee details
-        sectionHeading('Employee Details', 'HR');
-        fieldGrid([
-            { label: 'Full Name',      value: request.fullName },
-            { label: 'Employee ID',    value: request.employeeId },
-            { label: 'Department',     value: request.department },
-            { label: 'Sub-Department', value: request.subDepartment },
-            { label: 'Designation',    value: request.designation },
-            { label: 'Location',       value: request.location || request.projectUnit },
-            { label: 'HOD',            value: request.hod },
-            { label: 'Joining Date',   value: request.joiningDate ? fmtDate(request.joiningDate) : '—' },
-            { label: 'Office Ext.',    value: request.officeExtension },
-            { label: 'Mobile',         value: request.mobilePhone },
-            { label: 'Request Mode',   value: request.requestMode || 'New' },
-            { label: 'Initiated By',   value: request.requesterName || 'HR' }
-        ]);
-
-        // 2. Services requested — vertical list with proper details
-        sectionHeading('Services Requested', 'IT OPS');
-        serviceList([
-            {
-                label: 'Intranet Access',
-                on: request.intranetAccess,
-                detail: 'IFL intranet portal & internal applications.'
-            },
-            {
-                label: 'Internet Access',
-                on: request.internetAccess,
-                detail: request.specificWebsites
-                    ? `Restricted — specific websites only${request.internetPurpose ? '. ' + request.internetPurpose : ''}`
-                    : (request.internetPurpose || 'Open internet access')
-            },
-            {
-                label: 'Email — Incoming',
-                on: request.emailIncoming,
-                detail: request.emailPurpose || 'External incoming mail allowed.'
-            },
-            {
-                label: 'Email — Outgoing',
-                on: request.emailOutgoing,
-                detail: request.emailPurpose || 'External outgoing mail allowed.'
-            },
-            {
-                label: 'Laser Printer',
-                on: request.laserPrinter,
-                detail: request.laserPrinterLocation || 'Default location'
-            },
-            {
-                label: 'Dot-Matrix Printer',
-                on: request.dotMatrixPrinter,
-                detail: request.dotMatrixPrinterLocation || 'Default location'
-            }
-        ]);
-
-        // 3. File share & SharePoint
-        if (request.deptSharePath || request.homeFolderPath || request.iflPortalLink) {
-            sectionHeading('File Share & SharePoint', 'IT OPS');
-            fieldGrid([
-                { label: 'Department Share (S:)',  value: request.deptSharePath },
-                { label: 'Home Folder (Z:)',       value: request.homeFolderPath },
-                { label: 'SharePoint / Portal',    value: request.iflPortalLink },
-                { label: 'SharePoint Role',        value: request.sharepointRole, pill: true }
-            ]);
         }
 
-        // 4. DCI / Identity
-        if (request.ntUserName || request.smtpAddress || request.exchangeDisplayName) {
-            sectionHeading('DCI Configuration — Identity', 'DCI TEAM');
-            fieldGrid([
-                { label: 'NT User Name',         value: request.ntUserName },
-                { label: 'Exchange Display',     value: request.exchangeDisplayName },
-                { label: 'SMTP Address',         value: request.smtpAddress },
-                { label: 'Group Policy',         value: request.groupPolicyLevel, pill: true },
-                { label: 'Member Of',            value: request.memberOf },
-                { label: 'DG Members',           value: request.dgMembers },
-                { label: 'Mail Size Limit',      value: request.mailSizeLimit },
-                { label: 'Recipient Limit',      value: request.recipientLimit },
-                { label: 'Mailbox Storage',      value: request.mailboxStorageLimit },
-                request.extraFacility ? { label: 'Extra Facility', value: request.extraFacility } : null
-            ].filter(Boolean));
-        }
-
-        // 5. Approval flow / timeline
-        drawApprovalTimeline();
-
-        // 6. Remarks blocks
-        if (request.hodRemarks)               remarksBlock('HOD Remarks',                  request.hodRemarks);
-        if (request.dciChangeRequestRemarks)  remarksBlock('DCI Manager — Change Request', request.dciChangeRequestRemarks);
-        if (request.dciRemarks)               remarksBlock('DCI Manager Remarks',          request.dciRemarks);
-        if (request.itHodRemarks)             remarksBlock('IT HOD Remarks',               request.itHodRemarks);
-
-        // 7. Sign-off footer
-        ensureSpace(80);
-        const sy = doc.y + 6;
-        doc.save();
-        doc.roundedRect(MARGIN, sy, CONTENT_W, 70, 6).fill(COLOR.bgSoft);
-        doc.lineWidth(0.5).strokeColor(COLOR.border).roundedRect(MARGIN, sy, CONTENT_W, 70, 6).stroke();
-        doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR.brand)
-           .text('AUTHORIZATION', MARGIN + 14, sy + 12, { characterSpacing: 0.5 });
-        doc.font('Helvetica').fontSize(9).fillColor(COLOR.text)
-           .text(`This Work Order has been digitally generated by the IFL Workflow System after passing all required approval gates. The current approval status is `, MARGIN + 14, sy + 28, { width: CONTENT_W - 28, continued: true })
-           .font('Helvetica-Bold').fillColor(COLOR.brand)
-           .text(`${request.approvalStatus || 'Pending'}`, { continued: true })
-           .font('Helvetica').fillColor(COLOR.text)
-           .text(`. The DCI Implementer is authorized to provision the AD/Exchange account and OPS to complete physical setup.`);
-        doc.restore();
-
-        // Footer on all pages (must be after all content for buffered pages)
-        drawFooterOnAllPages();
+        // ─── Manager / HOD IT signature row at the bottom ───────────────
+        const manY = sysBottom - 28;
+        horizontalRule(colLeftX + 30,       colLeftX + 200,             manY);
+        horizontalRule(M + W - 200,         M + W - 30,                  manY);
+        doc.font('Helvetica').fontSize(9).fillColor('#000');
+        text('Manager', colLeftX + 95,   manY + 5);
+        text('HOD IT',  M + W - 130,     manY + 5);
 
         doc.end();
         stream.on('finish', () => resolve(outputPath));
