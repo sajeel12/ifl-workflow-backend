@@ -129,8 +129,8 @@
             %>
                 <div class="timeline-item">
                     <div class="timeline-dot <%= cls %>"><%= i + 1 %></div>
-                    <div class="timeline-action"><%= ev.summary || ev.actionLabel || ev.action %></div>
-                    <div class="timeline-meta">By <strong><%= ev.actorRole %></strong> · <%= new Date(ev.timestamp).toLocaleString() %></div>
+                    <div class="timeline-action"><%= ev.actionLabel || ev.action %></div>
+                    <div class="timeline-meta"><%= new Date(ev.timestamp).toLocaleString() %></div>
                 </div>
             <% }) %>
         <% } %>

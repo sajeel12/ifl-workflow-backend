@@ -104,16 +104,18 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
                             <td style="padding:30px;color:#323130;font-family:Arial,sans-serif;">
                                 <h2 style="color:#0078D4;margin-top:0;margin-bottom:20px;font-family:Arial,sans-serif;font-size:18px;">${subject}</h2>
 
-                                <!-- Info box -->
+                                <!-- Info box: render details as a bullet list when the
+                                     body starts with "::BULLETS::"; otherwise as a paragraph. -->
                                 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8f9fa;border-left:4px solid #0078D4;margin-bottom:20px;">
                                     <tr>
                                         <td style="padding:15px;">
-                                            <p style="margin:0 0 4px 0;font-weight:600;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;text-transform:uppercase;">REQUESTER</p>
-                                            <p style="margin:0 0 12px 0;font-size:15px;font-weight:600;color:#201f1e;font-family:Arial,sans-serif;">${requesterName || 'Unknown'}</p>
-                                            <p style="margin:0 0 12px 0;font-size:13px;color:#605e5c;font-family:Arial,sans-serif;">${requesterEmail || 'No Email'}</p>
-
-                                            <p style="margin:0 0 4px 0;font-weight:600;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;text-transform:uppercase;">DETAILS</p>
-                                            <p style="margin:0;font-size:14px;line-height:1.5;color:#323130;font-family:Arial,sans-serif;">${requestDetails}</p>
+                                            ${(() => {
+                                                if (typeof requestDetails === 'string' && requestDetails.startsWith('::BULLETS::')) {
+                                                    const items = requestDetails.split('\n').slice(1).filter(Boolean);
+                                                    return `<ul style="margin:0;padding:0 0 0 18px;font-size:14px;line-height:1.6;color:#323130;font-family:Arial,sans-serif;">${items.map(i => `<li style="margin-bottom:4px;">${i}</li>`).join('')}</ul>`;
+                                                }
+                                                return `<p style="margin:0;font-size:14px;line-height:1.5;color:#323130;font-family:Arial,sans-serif;">${requestDetails}</p>`;
+                                            })()}
                                         </td>
                                     </tr>
                                 </table>
@@ -450,84 +452,58 @@ export const sendWorkOrderPDF = async (toEmail, request, pdfPath, ccList = []) =
 };
 
 export const sendOnboardingNotification = async (toEmail, request, actionLink, type) => {
-    let subject = '';
-    let message = '';
-
     const userInfo = `${request.fullName || '—'}${request.designation ? ' (' + request.designation + ')' : ''}`;
     const dept = [request.department, request.subDepartment].filter(Boolean).join(' / ') || '—';
     const reqNo = `#${request.id}`;
 
-    // Build a short, self-explanatory body: who/what/why/next-action
-    const intro = (whatYouDo, whatHappensNext) => [
-        `Request ${reqNo} — ${userInfo}`,
+    // Each stage email is just three bullets: who it's for, what's needed, what's next.
+    // Marker line "::BULLETS::" tells sendApprovalEmail to render the body as <ul><li>.
+    const buildBullets = (action, next) => [
+        '::BULLETS::',
+        `Employee: ${userInfo}`,
         `Department: ${dept}`,
-        `Initiated by: ${request.requesterName || 'HR'}${request.requesterEmail ? ' <' + request.requesterEmail + '>' : ''}`,
-        '',
-        whatYouDo,
-        whatHappensNext ? `\nWhen you submit, ${whatHappensNext}` : ''
+        `Action: ${action}`,
+        `Next: ${next}`
     ].join('\n');
 
+    let subject, body;
     switch (type) {
         case 'IT_OPS':
-            subject = `[Action Required] Configure IT services for ${userInfo} — Req ${reqNo}`;
-            message = intro(
-                'Please configure the requested IT services (intranet, email, printers, file shares, SharePoint).',
-                'the request will move to the Head of Department for review.'
-            );
+            subject = `[Action Required] Configure services — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('Configure intranet, email, printers, file shares.', 'Forwarded to HOD for review.');
             break;
         case 'HOD_REVIEW':
-            subject = `[Approval Needed] Review onboarding request for ${userInfo} — Req ${reqNo}`;
-            message = intro(
-                'IT Operations has configured the services for this employee. Please review and approve or reject.',
-                'the request will move to the DCI Team for identity setup.'
-            );
+            subject = `[Approval Needed] Onboarding review — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('Review configured services and approve or reject.', 'Forwarded to DCI Team.');
             break;
         case 'DCI_INPUT':
-            subject = `[Action Required] Set up DCI / AD identity for ${userInfo} — Req ${reqNo}`;
-            message = intro(
-                'HOD has approved the request. Please configure the AD/Exchange identity (NT user, SMTP, mailbox limits, GPO).',
-                'the request will move to the DCI Manager for technical approval.'
-            );
+            subject = `[Action Required] Set up AD identity — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('Configure NT user, SMTP, mailbox limits, GPO.', 'Forwarded to DCI Manager.');
             break;
         case 'DCI_CHANGES_REQUESTED':
-            subject = `[Changes Requested] DCI Manager wants updates on ${userInfo} — Req ${reqNo}`;
-            message = intro(
-                'The DCI Manager has requested changes to the previously submitted DCI configuration. See remarks on the form and resubmit.',
-                'the request will go back to the DCI Manager for re-review.'
-            );
+            subject = `[Changes Requested] DCI updates needed — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('See remarks on the form and resubmit.', 'Goes back to DCI Manager.');
             break;
         case 'DCI_MANAGER_APPROVAL':
-            subject = `[Approval Needed] DCI Manager review for ${userInfo} — Req ${reqNo}`;
-            message = intro(
-                'The DCI Team has completed the identity configuration. Please approve, reject, or request changes.',
-                'standard requests move to Implementation; high-risk email requests route to IT HOD.'
-            );
+            subject = `[Approval Needed] DCI Manager review — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('Approve, reject, or request changes.', 'Standard → Implementation. Email-risk → IT HOD.');
             break;
         case 'IT_HOD_APPROVAL':
-            subject = `[Approval Needed] IT HOD sign-off — external email for ${userInfo} — Req ${reqNo}`;
-            message = intro(
-                'External email access was requested. Per policy, this needs IT HOD approval before provisioning.',
-                'on approval, the request moves to DCI Implementation.'
-            );
+            subject = `[Approval Needed] IT HOD sign-off — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('Approve external email access.', 'Forwarded to DCI Implementation.');
             break;
         case 'DCI_IMPLEMENTATION':
-            subject = `[Action Required] Provision AD/Exchange account for ${userInfo} — Req ${reqNo}`;
-            message = intro(
-                'All approvals are complete. Please create the AD/Exchange account and upload screenshots as proof.',
-                'the request will move to the OPS Team for desk-side fulfillment.'
-            );
+            subject = `[Action Required] Provision account — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('Create AD/Exchange account and upload proofs.', 'Forwarded to OPS Team.');
             break;
         case 'OPS_ACTION':
-            subject = `[Action Required] Desk setup & checklist for ${userInfo} — Req ${reqNo}`;
-            message = intro(
-                'The account has been provisioned. Please visit the user\'s desk, complete the physical setup checklist, and mark items done.',
-                'the request will be marked as Completed.'
-            );
+            subject = `[Action Required] Desk setup — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('Complete physical setup checklist at user\'s desk.', 'Request will be marked Completed.');
             break;
         default:
-            subject = `[Action Required] Onboarding step for ${userInfo} — Req ${reqNo}`;
-            message = intro('Your input is required to advance this onboarding request.', '');
+            subject = `[Action Required] Onboarding step — ${userInfo} (Req ${reqNo})`;
+            body = buildBullets('Your input is required.', 'Workflow will continue.');
     }
 
-    return sendApprovalEmail(toEmail, subject, message, actionLink, request.requesterName || 'HR', request.requesterEmail || '');
+    return sendApprovalEmail(toEmail, subject, body, actionLink, request.requesterName || 'HR', request.requesterEmail || '');
 };

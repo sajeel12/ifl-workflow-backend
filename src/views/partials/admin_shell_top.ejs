@@ -1,5 +1,17 @@
-<%- include('./header') %>
-<link rel="stylesheet" href="/css/admin.css">
+<%- include('./header', { adminCss: true }) %>
+
+<%
+// Critical inline rules — applied synchronously so even if admin.css is
+// mid-fetch on first hit (or cleared), modal overlays remain hidden and
+// nav SVGs stay at icon-size instead of flashing huge. Defense-in-depth
+// for the FOUC during page-to-page navigation.
+%>
+<style>
+    .modal-overlay, .a-overlay { opacity: 0; pointer-events: none; }
+    .modal-overlay.active, .a-overlay--open { opacity: 1; pointer-events: auto; }
+    .a-nav__icon, .a-header__logo svg, .a-nav svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .a-page, .a-shell { visibility: visible; }
+</style>
 
 <div class="a-page">
 

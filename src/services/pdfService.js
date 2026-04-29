@@ -295,10 +295,10 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         labeledField('Mailbox Storage Limit', colRightX, sy, 105, colWidth - 110, 16, request.mailboxStorageLimit || '250 MB');
 
         // ─── Group Policy Level ─────────────────────────────────────────
-        sy += 28;
+        sy += 22;
         sectionLabel('Group Policy Level:', colLeftX, sy);
 
-        sy += 16;
+        sy += 14;
         const gpl = request.groupPolicyLevel || '';
         const isHighly  = gpl === 'Highly Managed';
         const isLightly = gpl === 'Lightly Managed' || gpl === 'IT User';
@@ -308,32 +308,32 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         labeledField('LightlyManagUser',   colRightX, sy, 95, colWidth - 100, 16, lightlyVal);
 
         // ─── New / Previous Facilities ──────────────────────────────────
-        sy += 22;
+        sy += 20;
         labelText('New / Previous Facilities ( if any )', colLeftX, sy + 3);
         const newPrevX = colLeftX + 175;
         horizontalRule(newPrevX, M + W - 8, sy + 12);
 
         // ─── Extra Facility / Allegations / Comments / Malfunctioning ───
-        sy += 18;
+        sy += 16;
         labelText('Extra Facility / Allegations / Comments / Malfunctioning ( if any )', colLeftX, sy + 3);
         const extraStartX = colLeftX + 290;
         horizontalRule(extraStartX, M + W - 8, sy + 12);
         // Two extra free-text lines underneath
-        sy += 18;
+        sy += 14;
         const extraLine1Y = sy - 5;
         horizontalRule(colLeftX, M + W - 8, sy + 8);
-        sy += 16;
+        sy += 12;
         horizontalRule(colLeftX, M + W - 8, sy + 8);
         // Render the extra facility text on the lines below the label
         if (request.extraFacility) {
             doc.font('Helvetica').fontSize(8.5).fillColor('#000');
             doc.text(String(request.extraFacility), colLeftX + 2, extraLine1Y, {
-                width: W - 16, height: 28, lineGap: 4, ellipsis: true
+                width: W - 16, height: 22, lineGap: 4, ellipsis: true
             });
         }
 
         // ─── Manager / HOD IT signature row at the bottom ───────────────
-        const manY = sysBottom - 28;
+        const manY = sysBottom - 22;
         horizontalRule(colLeftX + 30,       colLeftX + 200,             manY);
         horizontalRule(M + W - 200,         M + W - 30,                  manY);
         doc.font('Helvetica').fontSize(9).fillColor('#000');

@@ -317,7 +317,7 @@ const renderForm = async (req, res, token) => {
     // Simplified Mapping for Visual Stepper
     const steps = [
         { label: 'Initial Request', status: getStepClass('HR') },
-        { label: 'IT Services', status: getStepClass('IT') },
+        { label: 'IT Operations', status: getStepClass('IT') },
         { label: 'Approvals', status: (['HOD', 'DCI', 'DCIManager', 'ITHOD'].includes(role) || request.approvalStatus === 'Approved') ? 'active' : (['DCIImplementer', 'OPS', 'Completed'].includes(request.status) ? 'completed' : '') },
         { label: 'Fulfillment', status: (['DCIImplementer', 'OPS', 'Completed'].includes(role) || request.status === 'Completed') ? 'active' : '' }
     ];

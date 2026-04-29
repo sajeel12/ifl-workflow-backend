@@ -57,7 +57,7 @@
                     <% timeline.forEach((ev, i) => { %>
                         <li class="wf-step <%= i === timeline.length - 1 ? 'is-last' : '' %>">
                             <span class="wf-dot"><%= i + 1 %></span>
-                            <div class="wf-summary"><%= ev.summary %></div>
+                            <div class="wf-summary"><%= ev.actionLabel || ev.action %></div>
                             <div class="wf-time"><%= new Date(ev.timestamp).toLocaleString() %></div>
                         </li>
                     <% }) %>
