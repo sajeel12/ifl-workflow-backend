@@ -10,12 +10,12 @@ import WorkflowApproverConfig from './src/models/WorkflowApproverConfig.js';
 import SystemConfig from './src/models/SystemConfig.js';
 
 const DEFAULT_APPROVER_CONFIGS = [
-    { roleKey: 'IT_OPS',          label: 'IT Operations Team',    description: 'Handles IT configuration in Step 2', workflowStage: 'Step 2 – IT Configuration',       approverEmail: process.env.EMAIL_IT_OPS      || '', approverName: 'IT Operations' },
-    { roleKey: 'DCI_TEAM',        label: 'DCI Team',              description: 'DCI configuration and setup in Step 4', workflowStage: 'Step 4 – DCI Configuration',   approverEmail: process.env.EMAIL_DCI_TEAM    || '', approverName: 'DCI Team' },
-    { roleKey: 'OPS_TEAM',        label: 'OPS Support Team',      description: 'Final OPS verification in Step 7', workflowStage: 'Step 7 – OPS Verification',        approverEmail: process.env.EMAIL_OPS_TEAM    || '', approverName: 'OPS Team' },
-    { roleKey: 'DCI_MANAGER',     label: 'DCI Manager',           description: 'DCI Manager decision in Step 5', workflowStage: 'Step 5 – DCI Manager Decision',      approverEmail: process.env.EMAIL_DCI_MANAGER || '', approverName: 'DCI Manager' },
-    { roleKey: 'IT_HOD',          label: 'IT Head of Department', description: 'IT HOD review in Step 5b (email required)', workflowStage: 'Step 5b – IT HOD Review', approverEmail: process.env.EMAIL_IT_HOD      || '', approverName: 'IT HOD' },
-    { roleKey: 'DCI_IMPLEMENTER', label: 'DCI Implementer',       description: 'Implements DCI changes in Step 6', workflowStage: 'Step 6 – DCI Implementation',     approverEmail: process.env.EMAIL_DCI_IMPLEMENTER || '', approverName: 'DCI Implementer' },
+    { roleKey: 'IT_OPS', label: 'IT Operations Team', description: 'Handles IT configuration in Step 2', workflowStage: 'Step 2 – IT Configuration', approverEmail: process.env.EMAIL_IT_OPS || '', approverName: 'IT Operations' },
+    { roleKey: 'DCI_TEAM', label: 'DCI Team', description: 'DCI configuration and setup in Step 4', workflowStage: 'Step 4 – DCI Configuration', approverEmail: process.env.EMAIL_DCI_TEAM || '', approverName: 'DCI Team' },
+    { roleKey: 'OPS_TEAM', label: 'OPS Support Team', description: 'Final OPS verification in Step 7', workflowStage: 'Step 7 – OPS Verification', approverEmail: process.env.EMAIL_OPS_TEAM || '', approverName: 'OPS Team' },
+    { roleKey: 'DCI_MANAGER', label: 'DCI Manager', description: 'DCI Manager decision in Step 5', workflowStage: 'Step 5 – DCI Manager Decision', approverEmail: process.env.EMAIL_DCI_MANAGER || '', approverName: 'DCI Manager' },
+    { roleKey: 'IT_HOD', label: 'IT Head of Department', description: 'IT HOD review in Step 5b (email required)', workflowStage: 'Step 5b – IT HOD Review', approverEmail: process.env.EMAIL_IT_HOD || '', approverName: 'IT HOD' },
+    { roleKey: 'DCI_IMPLEMENTER', label: 'DCI Implementer', description: 'Implements DCI changes in Step 6', workflowStage: 'Step 6 – DCI Implementation', approverEmail: process.env.EMAIL_DCI_IMPLEMENTER || '', approverName: 'DCI Implementer' },
 ];
 
 const PORT = process.env.PORT || 3000;
@@ -143,13 +143,13 @@ async function startServer() {
                     approvalStatus: 'Approved',
                     createdAt: daysAgo(10),
                     timeline: [
-                        { action: 'Submitted',  actorRole: 'HR',         details: 'Initial onboarding request created',                   timestamp: daysAgo(10) },
-                        { action: 'Configured', actorRole: 'IT',         details: 'IT services configured: email, network, printers',    timestamp: daysAgo(9) },
-                        { action: 'Approved',   actorRole: 'HOD',        details: 'Access approved by HOD',                               timestamp: daysAgo(8) },
-                        { action: 'Submitted',  actorRole: 'DCI',        details: 'DCI configuration submitted for manager review',      timestamp: daysAgo(7) },
-                        { action: 'Approved',   actorRole: 'DCIManager', details: 'DCI Manager approved the configuration',              timestamp: daysAgo(6) },
-                        { action: 'Configured', actorRole: 'DCI',        details: 'AD account provisioned and group policy applied',     timestamp: daysAgo(4) },
-                        { action: 'Approved',   actorRole: 'OPS',        details: 'OPS verified all services — onboarding complete',     timestamp: daysAgo(2) }
+                        { action: 'Submitted', actorRole: 'HR', details: 'Initial onboarding request created', timestamp: daysAgo(10) },
+                        { action: 'Configured', actorRole: 'IT', details: 'IT services configured: email, network, printers', timestamp: daysAgo(9) },
+                        { action: 'Approved', actorRole: 'HOD', details: 'Access approved by HOD', timestamp: daysAgo(8) },
+                        { action: 'Submitted', actorRole: 'DCI', details: 'DCI configuration submitted for manager review', timestamp: daysAgo(7) },
+                        { action: 'Approved', actorRole: 'DCIManager', details: 'DCI Manager approved the configuration', timestamp: daysAgo(6) },
+                        { action: 'Configured', actorRole: 'DCI', details: 'AD account provisioned and group policy applied', timestamp: daysAgo(4) },
+                        { action: 'Approved', actorRole: 'OPS', details: 'OPS verified all services — onboarding complete', timestamp: daysAgo(2) }
                     ]
                 },
                 {
@@ -166,9 +166,9 @@ async function startServer() {
                     approvalStatus: 'Pending',
                     createdAt: daysAgo(3),
                     timeline: [
-                        { action: 'Submitted',  actorRole: 'HR',  details: 'Onboarding initiated for Finance hire', timestamp: daysAgo(3) },
-                        { action: 'Configured', actorRole: 'IT',  details: 'Basic IT services provisioned',         timestamp: daysAgo(2) },
-                        { action: 'Approved',   actorRole: 'HOD', details: 'HOD approved, forwarded to DCI team',   timestamp: hoursAgo(20) }
+                        { action: 'Submitted', actorRole: 'HR', details: 'Onboarding initiated for Finance hire', timestamp: daysAgo(3) },
+                        { action: 'Configured', actorRole: 'IT', details: 'Basic IT services provisioned', timestamp: daysAgo(2) },
+                        { action: 'Approved', actorRole: 'HOD', details: 'HOD approved, forwarded to DCI team', timestamp: hoursAgo(20) }
                     ]
                 },
                 {
@@ -183,9 +183,9 @@ async function startServer() {
                     approvalStatus: 'Rejected',
                     createdAt: daysAgo(14),
                     timeline: [
-                        { action: 'Submitted',  actorRole: 'HR',  details: 'Onboarding request submitted',                      timestamp: daysAgo(14) },
-                        { action: 'Configured', actorRole: 'IT',  details: 'Services configured',                                timestamp: daysAgo(13) },
-                        { action: 'Rejected',   actorRole: 'HOD', details: 'Rejected: duplicate account exists for this person', timestamp: daysAgo(12) }
+                        { action: 'Submitted', actorRole: 'HR', details: 'Onboarding request submitted', timestamp: daysAgo(14) },
+                        { action: 'Configured', actorRole: 'IT', details: 'Services configured', timestamp: daysAgo(13) },
+                        { action: 'Rejected', actorRole: 'HOD', details: 'Rejected: duplicate account exists for this person', timestamp: daysAgo(12) }
                     ]
                 },
                 {
@@ -214,7 +214,7 @@ async function startServer() {
             logger.info(`Seeded ${samples.length} sample onboarding requests with timeline events.`);
         }
 
-        app.listen(PORT, '0.0.0.0', () => {
+        app.listen(PORT, '127.0.0.1', () => {
             logger.info(`Server running on port ${PORT}`);
         });
     } catch (err) {
