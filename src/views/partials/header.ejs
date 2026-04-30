@@ -265,12 +265,22 @@
 
             const getToken = async () => getCachedToken() || await fetchFreshToken();
 
-            // Expose a small helper so other scripts on the page can make
-            // authenticated /api/* calls without re-doing this dance.
+            // Expose helpers so other scripts on the page can make
+            // authenticated /api/* calls or attach the token to plain HTML
+            // form submissions without re-doing the token dance.
             window.iflFetch = async (url, opts = {}) => {
                 const token = await getToken();
                 const headers = Object.assign({}, opts.headers || {}, { 'x-sidecar-token': token });
                 return fetch(url, Object.assign({ credentials: 'include' }, opts, { headers }));
+            };
+            window.iflGetToken = getToken;
+            window.iflGetUser = async () => {
+                try {
+                    const r = await window.iflFetch('/api/auth/me');
+                    if (!r.ok) return null;
+                    const j = await r.json();
+                    return (j && j.user) ? j.user : null;
+                } catch (_) { return null; }
             };
 
             (async () => {

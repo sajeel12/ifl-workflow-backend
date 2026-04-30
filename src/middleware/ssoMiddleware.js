@@ -119,8 +119,19 @@ export const ssoMiddleware = async (req, res, next) => {
             }
         }
 
-        // ─── 2. Try the sidecar HMAC token (used by JS-driven /api calls) ──
-        const rawSidecarToken = (req.headers['x-sidecar-token'] || '').trim();
+        // ─── 2. Try the sidecar HMAC token. The token can arrive on three
+        //        channels in priority order:
+        //   (a) x-sidecar-token request header   — used by AJAX (window.iflFetch)
+        //   (b) x-sidecar-token form body field  — used by HTML form POSTs that
+        //                                          can't add custom headers
+        //   (c) sidecarToken query string        — last-resort for GETs that
+        //                                          can't run JS (rare)
+        const rawSidecarToken = (
+            req.headers['x-sidecar-token']
+            || (req.body && req.body['x-sidecar-token'])
+            || (req.query && req.query.sidecarToken)
+            || ''
+        ).toString().trim();
         if (!rawSidecarToken) {
             // ─── OPTIONAL mode: fall back to mock user ──────────────────
             if (SSO_MODE === 'OPTIONAL') {

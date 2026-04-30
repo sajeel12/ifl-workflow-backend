@@ -483,17 +483,68 @@
         button:disabled { cursor: not-allowed; }
     </style>
     <script>
-        /* Wrap the action-bar form so any submit click shows a spinner and locks the buttons */
+        /* ─── SSO pre-fill: populate requester name/email from /api/auth/me ─
+             on page load. Uses window.iflGetUser() exposed by the SSO badge
+             script in header.ejs. Only fills empty fields so we never clobber
+             values the server already rendered (token-bearing stages). */
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (typeof window.iflGetUser !== 'function') return;
+            try {
+                const u = await window.iflGetUser();
+                if (!u) return;
+                const nameEl  = document.querySelector('input[name="requesterName"]');
+                const emailEl = document.querySelector('input[name="requesterEmail"]');
+                if (nameEl  && !nameEl.value)  nameEl.value  = u.displayName || u.username || '';
+                if (emailEl && !emailEl.value) emailEl.value = u.email || '';
+            } catch (_) { /* badge will surface SSO failure separately */ }
+        });
+
+        /* Wrap the action-bar form so any submit click attaches the SSO
+           sidecar token, shows a spinner and locks the buttons. */
         (function setupSubmitLoaders() {
             const SPINNER_SVG = '<svg class="ifl-spinner" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>';
 
+            // Add a hidden field to the form holding the latest sidecar token,
+            // so server-side ssoMiddleware can authenticate the POST.
+            const ensureTokenField = async (form) => {
+                if (typeof window.iflGetToken !== 'function') return;
+                let hidden = form.querySelector('input[name="x-sidecar-token"]');
+                if (!hidden) {
+                    hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'x-sidecar-token';
+                    form.appendChild(hidden);
+                }
+                try {
+                    hidden.value = await window.iflGetToken();
+                } catch (_) { /* leave value empty; server will return a clear 401 */ }
+            };
+
             document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('form').forEach(form => {
-                    form.addEventListener('submit', (e) => {
+                    form.addEventListener('submit', async (e) => {
                         // Run native validation first; if it fails, don't lock the buttons.
                         if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
 
-                        // Capture the actual submitter so we can preserve `name=value` for action buttons (Approve/Reject)
+                        // We need the sidecar token attached to the body BEFORE
+                        // the browser POSTs. Block the native submit, fetch the
+                        // token, then re-trigger submission.
+                        if (!form.dataset.iflTokenAttached) {
+                            e.preventDefault();
+                            await ensureTokenField(form);
+                            form.dataset.iflTokenAttached = '1';
+                            // Re-fire submission preserving the original submitter
+                            // so name=value pairs from action buttons (Approve/Reject) survive.
+                            const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
+                            if (submitter && typeof submitter.click === 'function') {
+                                submitter.click();
+                            } else {
+                                form.submit();
+                            }
+                            return;
+                        }
+
+                        // Second pass — token attached, real submit proceeds.
                         const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
 
                         // Disable every submit button in the form so the user can't double-click or pick another action
@@ -525,6 +576,8 @@
                                 const ind = btn.querySelector('.ifl-btn-loading-text');
                                 if (ind) ind.remove();
                             });
+                            // Allow a future submission to re-fetch a fresh token
+                            delete form.dataset.iflTokenAttached;
                         }, 30000);
                     });
                 });

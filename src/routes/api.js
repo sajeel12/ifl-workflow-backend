@@ -24,16 +24,18 @@ router.all('/approvals/handle', approvalController.handleApprovalClick);
 router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
 
 // User Onboarding Routes
-// /initiate is gated by SSO so the requester identity comes from AD, not form input.
-// /handle stays unauthenticated — it's reached via one-time email approval tokens
-// (DCI Manager / IT HOD actionable cards) that have their own auth.
-router.get('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
+// GET /initiate renders the HR form openly (same pattern as /admin/hod-panel) —
+// the page's JS resolves SSO identity client-side and pre-fills the form.
+// POST /initiate IS gated by SSO so the requester identity must be authenticated
+// at the moment of submission. The form's submit-handler attaches the sidecar
+// token as a hidden field which ssoMiddleware reads (in addition to the header).
+router.get('/onboarding/initiate', onboardingController.handleRequest);
 router.post('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
 router.get('/onboarding/handle', onboardingController.handleRequest);
 router.post('/onboarding/handle', onboardingController.handleRequest);
 
-// Proof upload is performed by the DCI Implementer in a logged-in browser session,
-// so SSO is required — implementerName is taken from req.user, not the form.
+// Proof upload is performed by the DCI Implementer; the form attaches the
+// sidecar token in the multipart body the same way the HR form does.
 router.post('/onboarding/upload-proof', ssoMiddleware, upload.array('dciProof', 5), onboardingController.handleProofUpload);
 
 // Lookup active onboarding request by employeeId (used by HR form JS)
