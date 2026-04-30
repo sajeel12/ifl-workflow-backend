@@ -128,6 +128,17 @@ export const ssoMiddleware = async (req, res, next) => {
                 logger.info(`[SSO] [OPTIONAL] No sidecar/proxy header; using mock ${req.user.username}`);
                 return next();
             }
+            // Diagnostic — log what we DID receive so we can tell whether
+            // the IIS X-Auth-User injection is reaching Node (and from where).
+            const seenIp = (req.socket && req.socket.remoteAddress) || 'unknown';
+            const seenAuthUser = req.headers['x-auth-user'] || '<missing>';
+            logger.warn(
+                `[SSO] 401 on ${req.method} ${req.originalUrl} | ` +
+                `from=${seenIp} loopback=${isLoopback(req)} ` +
+                `trustProxyHeader=${TRUST_PROXY_HEADER} ` +
+                `x-auth-user="${seenAuthUser}" ` +
+                `x-sidecar-token=<missing>`
+            );
             return res.status(401).json({ error: 'Unauthorized: SSO required. Please open this page from the IFL portal.' });
         }
 
