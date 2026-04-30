@@ -228,16 +228,56 @@
                 attachToHeader();
             }
 
-            // Optional helper: if a sidecar token is available, attach it.
-            const fetchOpts = { credentials: 'include', headers: {} };
-            try {
-                const stash = sessionStorage.getItem('x-sidecar-token');
-                if (stash) fetchOpts.headers['x-sidecar-token'] = stash;
-            } catch (_) { /* sessionStorage may be unavailable */ }
+            // ─── Sidecar SSO flow ─────────────────────────────────────
+            // 1. Grab a signed token from /token.aspx (IIS handles Windows Auth there).
+            // 2. Use that token in the x-sidecar-token header for all /api/* calls
+            //    that go through Node's ssoMiddleware.
+            // 3. Cache the token in sessionStorage so we don't hit token.aspx on
+            //    every request — but treat tokens older than 4 minutes as stale
+            //    (the middleware allows up to 5 minutes; we leave a safety margin).
+            const TOKEN_KEY = 'x-sidecar-token';
+            const TOKEN_TS_KEY = 'x-sidecar-token-ts';
+            const TOKEN_TTL_MS = 4 * 60 * 1000;
 
-            fetch('/api/auth/me', fetchOpts)
-                .then(r => r.ok ? r.json() : null)
-                .then(j => {
+            const getCachedToken = () => {
+                try {
+                    const t = sessionStorage.getItem(TOKEN_KEY);
+                    const ts = parseInt(sessionStorage.getItem(TOKEN_TS_KEY) || '0', 10);
+                    if (t && (Date.now() - ts) < TOKEN_TTL_MS) return t;
+                } catch (_) {}
+                return null;
+            };
+
+            const fetchFreshToken = async () => {
+                // credentials: 'include' is required so the browser sends Windows
+                // creds to /token.aspx via the same origin (IIS).
+                const r = await fetch('/token.aspx', { credentials: 'include', cache: 'no-store' });
+                if (!r.ok) throw new Error('token.aspx ' + r.status);
+                const j = await r.json();
+                if (!j || !j.signature) throw new Error('token.aspx returned no signature');
+                const stash = JSON.stringify(j);
+                try {
+                    sessionStorage.setItem(TOKEN_KEY, stash);
+                    sessionStorage.setItem(TOKEN_TS_KEY, String(Date.now()));
+                } catch (_) {}
+                return stash;
+            };
+
+            const getToken = async () => getCachedToken() || await fetchFreshToken();
+
+            // Expose a small helper so other scripts on the page can make
+            // authenticated /api/* calls without re-doing this dance.
+            window.iflFetch = async (url, opts = {}) => {
+                const token = await getToken();
+                const headers = Object.assign({}, opts.headers || {}, { 'x-sidecar-token': token });
+                return fetch(url, Object.assign({ credentials: 'include' }, opts, { headers }));
+            };
+
+            (async () => {
+                try {
+                    const r = await window.iflFetch('/api/auth/me');
+                    if (!r.ok) throw new Error('auth/me ' + r.status);
+                    const j = await r.json();
                     if (j && j.user) {
                         const u = j.user;
                         const role = u.designation || (j.authMethod || 'SSO');
@@ -245,7 +285,10 @@
                     } else {
                         set('Not signed in', 'SSO required', false);
                     }
-                })
-                .catch(() => set('Not signed in', 'SSO unavailable', false));
+                } catch (err) {
+                    console.warn('[SSO]', err && err.message);
+                    set('Not signed in', 'SSO unavailable', false);
+                }
+            })();
         })();
     </script>
