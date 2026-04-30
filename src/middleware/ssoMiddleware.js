@@ -4,18 +4,22 @@ import crypto from 'crypto';
 
 const SHARED_SECRET = process.env.SSO_SHARED_SECRET || 'IFL_WORKFLOW_SECRET_KEY_2025';
 
-// SSO_MODE controls authentication behavior — useful when local testing
-// without the IIS sidecar producing real x-sidecar-token headers.
+// SSO_MODE controls authentication behavior.
 //
 //   "PROD"      (default) — Real sidecar required. Reject any request without a
-//                           valid token. Production must always run this.
-//   "MOCK"                — Skip the sidecar entirely. Inject a fake user from
-//                           SSO_MOCK_* env vars so devs can hit /initiate
-//                           without IIS in the loop.
-//   "OPTIONAL"            — Try the sidecar; if no header present, fall back
-//                           to the mock user. Lets one backend serve both
-//                           a real-IIS frontend and a local browser.
+//                           valid token or trusted proxy header.
+//   "MOCK"                — Skip everything; inject a dev identity from
+//                           SSO_MOCK_* env vars. For local dev without IIS.
+//   "OPTIONAL"            — Try sidecar/proxy-header; fall back to mock user
+//                           when neither is present.
 const SSO_MODE = (process.env.SSO_MODE || 'PROD').toUpperCase();
+
+// SSO_TRUST_PROXY_HEADER — when set to "true" (default), accept the
+// X-Auth-User header injected by IIS URL Rewrite from {LOGON_USER}. This
+// is what lets browser-navigation requests (no JS-injected token) reach
+// SSO-protected routes. Only safe when Node binds to 127.0.0.1 and the
+// IIS proxy is the sole ingress (port 3000 firewalled externally).
+const TRUST_PROXY_HEADER = String(process.env.SSO_TRUST_PROXY_HEADER || 'true').toLowerCase() !== 'false';
 
 const buildMockUser = () => ({
     username:    process.env.SSO_MOCK_USERNAME    || 'dev.user',
@@ -34,101 +38,132 @@ function verifySignature(username, timestamp, signature) {
     const expectedBuffer = Buffer.from(expectedSignature, 'hex');
     const providedBuffer = Buffer.from(signature, 'hex');
 
-    if (expectedBuffer.length !== providedBuffer.length) {
-        return false;
+    if (expectedBuffer.length !== providedBuffer.length) return false;
+    return crypto.timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
+// Only trust headers like X-Auth-User when the request came from the local
+// IIS proxy. Anything else could be a forged header from a process that
+// reached Node directly (which shouldn't happen if firewalled, but defense
+// in depth).
+function isLoopback(req) {
+    const ip = (req.socket && req.socket.remoteAddress) || '';
+    // Strip IPv6-mapped IPv4 prefix
+    const clean = ip.replace(/^::ffff:/, '');
+    return clean === '127.0.0.1' || clean === '::1' || clean === 'localhost';
+}
+
+// Strip the optional "DOMAIN\" prefix that IIS includes in LOGON_USER.
+function stripDomain(s) {
+    if (!s) return '';
+    const parts = String(s).split('\\');
+    return (parts.length > 1 ? parts[1] : parts[0]).trim();
+}
+
+// Resolve the AD profile + designation for a username and stamp it on req.user.
+async function resolveAndStampUser(req, username) {
+    const userProfile = await findUser(username);
+    if (!userProfile) {
+        logger.warn(`[SSO] Authenticated username "${username}" not found in AD`);
+        return { ok: false, status: 403, error: 'User Access Denied' };
     }
 
-    return crypto.timingSafeEqual(expectedBuffer, providedBuffer);
+    // Temporary designation override — until proper AD-group lookup is wired up.
+    let designation = '';
+    if (userProfile.mail === 'sajeel.dilshad@perception-it.com') {
+        designation = 'HR';
+    }
+    // TODO: replace with real AD-group / designation lookup
+    //   designation = await getDesignation(userProfile.sAMAccountName);
+
+    req.user = {
+        username:    userProfile.sAMAccountName,
+        email:       userProfile.mail,
+        displayName: userProfile.displayName,
+        manager:     userProfile.manager,
+        raw:         userProfile,
+        designation: designation
+    };
+    return { ok: true };
 }
 
 
 export const ssoMiddleware = async (req, res, next) => {
     try {
-        // ─── MOCK mode: skip sidecar entirely, inject a dev identity ───
+        // ─── MOCK mode: skip everything ────────────────────────────────
         if (SSO_MODE === 'MOCK') {
             req.user = buildMockUser();
-            logger.info(`[SSO] [MOCK MODE] Injected ${req.user.username} for ${req.method} ${req.originalUrl}`);
+            logger.info(`[SSO] [MOCK] ${req.user.username} for ${req.method} ${req.originalUrl}`);
             return next();
         }
 
-        const rawSidecarToken = req.headers['x-sidecar-token'] || '';
-        const sidecarToken = rawSidecarToken.trim();
+        // ─── 1. Try the IIS proxy header (X-Auth-User from {LOGON_USER}) ───
+        // This works for browser-navigation requests where JavaScript can't
+        // attach a custom header. The IIS URL Rewrite rule injects the
+        // authenticated Windows user as a trusted header on every proxied
+        // request. We only honor it from a loopback connection so external
+        // forgery isn't possible (assuming Node is firewalled to localhost).
+        const proxyUserRaw = req.headers['x-auth-user'];
+        if (TRUST_PROXY_HEADER && proxyUserRaw && isLoopback(req)) {
+            const username = stripDomain(proxyUserRaw);
+            if (username) {
+                try {
+                    const r = await resolveAndStampUser(req, username);
+                    if (!r.ok) return res.status(r.status).json({ error: r.error });
+                    logger.info(`[SSO] [PROXY-HEADER] ${username} for ${req.method} ${req.originalUrl}`);
+                    return next();
+                } catch (adErr) {
+                    logger.error(`[SSO] AD lookup failed for "${username}": ${adErr.message}`);
+                    return res.status(500).json({ error: 'Authentication Verification Failed' });
+                }
+            }
+        }
 
-        // ─── OPTIONAL mode: fall back to mock user when no sidecar header ───
-        if (!sidecarToken) {
+        // ─── 2. Try the sidecar HMAC token (used by JS-driven /api calls) ──
+        const rawSidecarToken = (req.headers['x-sidecar-token'] || '').trim();
+        if (!rawSidecarToken) {
+            // ─── OPTIONAL mode: fall back to mock user ──────────────────
             if (SSO_MODE === 'OPTIONAL') {
                 req.user = buildMockUser();
-                logger.info(`[SSO] [OPTIONAL MODE] No sidecar token; using mock user ${req.user.username}`);
+                logger.info(`[SSO] [OPTIONAL] No sidecar/proxy header; using mock ${req.user.username}`);
                 return next();
             }
-            return res.status(401).json({ error: 'Unauthorized: Missing Auth Token. Please open this page from the IFL portal — SSO required.' });
+            return res.status(401).json({ error: 'Unauthorized: SSO required. Please open this page from the IFL portal.' });
         }
 
         let authenticatedUser = null;
-
         try {
-            const token = JSON.parse(sidecarToken);
-
+            const token = JSON.parse(rawSidecarToken);
             const now = Math.floor(Date.now() / 1000);
             if (Math.abs(now - token.timestamp) > 300) {
                 logger.warn(`[SSO] Expired token for ${token.username}`);
                 return res.status(401).json({ error: 'Unauthorized: Token Expired' });
             }
-
             if (verifySignature(token.username, token.timestamp, token.signature)) {
                 authenticatedUser = token.username;
             } else {
-                logger.warn(`[SSO] Invalid Signature for ${token.username}`);
+                logger.warn(`[SSO] Invalid signature for ${token.username}`);
                 return res.status(401).json({ error: 'Unauthorized: Invalid Token' });
             }
         } catch (e) {
-            logger.warn(`[SSO] Malformed Sidecar Token: ${e.message}`);
+            logger.warn(`[SSO] Malformed sidecar token: ${e.message}`);
             return res.status(401).json({ error: 'Unauthorized: Invalid Token Format' });
         }
 
-        if (!authenticatedUser) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        const parts = authenticatedUser.split('\\');
-        const username = parts.length > 1 ? parts[1] : parts[0];
-
         try {
-            const userProfile = await findUser(username);
-
-            if (!userProfile) {
-                logger.warn(`[SSO] User in valid token but not in AD: ${username}`);
-                return res.status(403).json({ error: 'User Access Denied' });
-            }
-
-            // Temporary designation override — until proper AD-group lookup is wired up.
-            // Fixed: this used to be `=` (assignment) which silently overwrote every
-            // user's email. Now a strict equality check.
-            let designation = '';
-            if (userProfile.mail === 'sajeel.dilshad@perception-it.com') {
-                designation = 'HR';
-            }
-            // TODO: replace with real AD-group / designation lookup
-            //   designation = await getDesignation(userProfile.sAMAccountName);
-
-            req.user = {
-                username: userProfile.sAMAccountName,
-                email: userProfile.mail,
-                displayName: userProfile.displayName,
-                manager: userProfile.manager,
-                raw: userProfile,
-                designation: designation
-            };
-
-            next();
-        } catch (adError) {
-            logger.error(`[SSO] AD Lookup Failed for ${username}: ${adError.message}`);
+            const username = stripDomain(authenticatedUser);
+            const r = await resolveAndStampUser(req, username);
+            if (!r.ok) return res.status(r.status).json({ error: r.error });
+            logger.info(`[SSO] [SIDECAR] ${username} for ${req.method} ${req.originalUrl}`);
+            return next();
+        } catch (adErr) {
+            logger.error(`[SSO] AD lookup failed: ${adErr.message}`);
             return res.status(500).json({ error: 'Authentication Verification Failed' });
         }
 
     } catch (err) {
-        logger.error(`[SSO] Error in middleware: ${err.message}`);
-        res.status(500).json({ error: 'Internal Authentication Error' });
+        logger.error(`[SSO] Middleware error: ${err.message}`);
+        return res.status(500).json({ error: 'Internal Authentication Error' });
     }
 };
 
