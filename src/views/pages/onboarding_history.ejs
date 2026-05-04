@@ -10,7 +10,7 @@
         </div>
     </div>
     <div class="status-section">
-        <div class="status-badge">REQ #<%= request.id %> | <%= request.status %></div>
+        <div class="status-badge">REQ #<%= request.id %> | <%= typeof statusLabel !== 'undefined' ? statusLabel : request.status %></div>
     </div>
 </header>
 
@@ -101,7 +101,7 @@
                 <div class="label" style="margin-bottom:6px;">Currently Assigned To</div>
                 <div style="font-size:1rem; font-weight:600; color:#0f172a;"><%= currentRecipient && currentRecipient.name ? currentRecipient.name : (currentRecipient && currentRecipient.role ? currentRecipient.role : '—') %></div>
                 <div style="font-size:0.85rem; color:#475569; margin-top:2px;"><%= currentRecipient && currentRecipient.email ? currentRecipient.email : '—' %></div>
-                <div style="font-size:0.75rem; color:#64748b; margin-top:4px;">Stage: <%= request.status %></div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:4px;">Stage: <%= typeof statusLabel !== 'undefined' ? statusLabel : request.status %></div>
             </div>
         </div>
     </div>

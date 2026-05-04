@@ -5,6 +5,7 @@ import OnboardingRequest from '../models/OnboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
 import { Op } from 'sequelize';
 import { humanizeDetails, humanizeDetailsHTML, humanizeAction, narrate } from '../utils/historyFormatter.js';
+import { labelFor as statusLabelFor, ownerFor as statusOwnerFor, colorFor as statusColorFor } from '../utils/workflowLabels.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 
 // Map workflow status -> the role currently responsible for it
@@ -108,8 +109,14 @@ const handleSubmission = async (req, res, token) => {
                 }
             }
 
-            await onboardingService.createRequest(data);
-            return renderSuccess(res, 'Request Submitted', 'The request has been sent to IT Operations for service configuration.');
+            // Step 1: HR/IT initiates the request.
+            const created = await onboardingService.createRequest(data);
+            return renderSuccess(
+                res,
+                'Request Submitted',
+                'Request submitted successfully. The request has been forwarded to IT Operations for service configuration.',
+                { status: 'PendingIT', requestId: created && created.id }
+            );
         } else {
             const context = await onboardingService.getFormContext(token);
             if (!context) return renderError(res, 'Invalid or Expired Token');
@@ -117,35 +124,102 @@ const handleSubmission = async (req, res, token) => {
             const { role, request } = context;
 
             if (role === 'IT') {
+                // Step 2: IT Ops records the configuration.
                 await onboardingService.updateITDetails(token, data);
-                return renderSuccess(res, 'Services Configured', 'The request has been forwarded to the HOD for review.');
+                return renderSuccess(
+                    res,
+                    'Record Submitted',
+                    'Required Services configured and recorded. The request has been forwarded to HOD for review.',
+                    { status: 'PendingHOD', requestId: request.id }
+                );
             }
             else if (role === 'HOD') {
+                // Step 3 (Approve) / Step 4 (Reject).
                 const { action, hodRemarks } = data;
                 await onboardingService.handleHODApproval(token, action, hodRemarks);
-                return renderSuccess(res, `Request ${action}ed`, `The request has been forwarded to the DCI Team. (Action: ${action})`);
+                if (action === 'Reject') {
+                    return renderSuccess(
+                        res,
+                        'Request Rejected',
+                        'Request rejected by HOD. The process has been stopped and notified to the relevant team.',
+                        { status: 'Rejected', requestId: request.id }
+                    );
+                }
+                return renderSuccess(
+                    res,
+                    'Request Approved',
+                    'Approved by HOD. The request has been forwarded to the DCI Team for Window login and access setup.',
+                    { status: 'PendingDCI', requestId: request.id }
+                );
             }
             else if (role === 'DCI') {
+                // Step 5: DCI Team records identity configuration.
                 await onboardingService.updateDCIDetails(token, data);
-                return renderSuccess(res, 'Configuration Saved', 'The request has been forwarded to the DCI Manager for final approval.');
+                return renderSuccess(
+                    res,
+                    'Record Submitted',
+                    'Windows login and required access details have been recorded. The request has been forwarded to the DCI Manager for final approval.',
+                    { status: 'PendingDCIManager', requestId: request.id }
+                );
             }
             else if (role === 'DCIManager') {
+                // Steps 6 / 7 / 8 — decision depends on action and email risk.
                 const { action, dciRemarks } = data;
-                await onboardingService.handleDCIManagerApproval(token, action, dciRemarks);
-                return renderSuccess(res, `Decision Recorded`, `The request has been processed. (Action: ${action})`);
+                const updated = await onboardingService.handleDCIManagerApproval(token, action, dciRemarks);
+                if (action === 'Reject') {
+                    return renderSuccess(
+                        res,
+                        'Request Rejected',
+                        'Request rejected by DCI Manager. The workflow has been stopped and notified to the DCI team.',
+                        { status: 'Rejected', requestId: request.id }
+                    );
+                }
+                if (action === 'RequestChanges') {
+                    return renderSuccess(
+                        res,
+                        'Changes Requested',
+                        'Change request sent back to the DCI Team with your remarks.',
+                        { status: 'PendingDCI', requestId: request.id }
+                    );
+                }
+                // Approve — branches based on whether email approval is needed.
+                if (updated && updated.status === 'PendingITHOD') {
+                    return renderSuccess(
+                        res,
+                        'Approve Request (Email Yes)',
+                        'Approved by DCI Manager. The request has been forwarded to IT HOD for email service authorization.',
+                        { status: 'PendingITHOD', requestId: request.id }
+                    );
+                }
+                return renderSuccess(
+                    res,
+                    'Approved (No Email)',
+                    'Approved by DCI Manager. PDF summary has been generated for record and notification sent for implementation.',
+                    { status: 'PendingDCIImplementation', requestId: request.id }
+                );
             }
             else if (role === 'ITHOD') {
+                // Steps 9 / 10.
                 const { action, itHodRemarks } = data;
                 await onboardingService.handleITHODApproval(token, action, itHodRemarks);
-                return renderSuccess(res, `Decision Recorded`, `The request has been finalized. (Action: ${action})`);
+                if (action === 'Reject') {
+                    return renderSuccess(
+                        res,
+                        'Request Rejected',
+                        'Request rejected by IT HOD. The workflow has been stopped and notified to the relevant team.',
+                        { status: 'Rejected', requestId: request.id }
+                    );
+                }
+                return renderSuccess(
+                    res,
+                    'Request Approved',
+                    'Approved by IT HOD. The request is finalized — PDF summary has been generated for record and notification sent for implementation.',
+                    { status: 'PendingDCIImplementation', requestId: request.id }
+                );
             }
             else if (role === 'OPS') {
-                // OPS action is reached via the email-link token flow (no SSO
-                // middleware), but if the OPS user happens to be signed in via
-                // SSO we prefer that identity over the form-supplied opsName so
-                // it can't be misattributed.
+                // Step 12 — OPS final verification.
                 const opsName = (req.user && (req.user.displayName || req.user.username)) || data.opsName;
-                // Parse checklist from body keys starting with "check_"
                 const checklistData = [];
                 Object.keys(data).forEach(key => {
                     if (key.startsWith('check_')) {
@@ -153,7 +227,12 @@ const handleSubmission = async (req, res, token) => {
                     }
                 });
                 await onboardingService.handleOPSAction(token, checklistData, opsName);
-                return renderSuccess(res, 'Setup Completed', 'The workstation setup has been verified and recorded.');
+                return renderSuccess(
+                    res,
+                    'Mark as Verified',
+                    'Verification completed successfully. The onboarding process has been completed.',
+                    { status: 'Completed', requestId: request.id }
+                );
             }
             else {
                 return renderError(res, 'Action not permitted.');
@@ -180,9 +259,14 @@ export const handleProofUpload = async (req, res) => {
         const implementerName = req.user.displayName || req.user.username;
 
         const filePaths = req.files.map(f => f.path);
-        await onboardingService.handleDCIImplementation(token, filePaths, implementerName);
+        const updated = await onboardingService.handleDCIImplementation(token, filePaths, implementerName);
 
-        return renderSuccess(res, 'Proofs Uploaded', 'Implementation proofs have been submitted. Request forwarded to OPS.');
+        return renderSuccess(
+            res,
+            'Implementation Proof Uploaded',
+            'Implementation proof uploaded successfully. The request has been forwarded to the Operations team for the workstation and profile setup and final verification.',
+            { status: 'PendingOPSAction', requestId: updated && updated.id }
+        );
     } catch (err) {
         return renderError(res, err.message);
     }
@@ -472,7 +556,6 @@ export const renderRoleQueue = async (req, res) => {
 
         const items = rows.map(r => {
             const j = r.toJSON();
-            const stage = STATUS_TO_ROLE[j.status];
             const actionable = ROLE_TO_PENDING_STATUS[safeRole]?.includes(j.status) || false;
             // Build the action URL — actionable rows go to the form via current stage token,
             // historical rows go to the read-only history page.
@@ -487,8 +570,9 @@ export const renderRoleQueue = async (req, res) => {
                 designation: j.designation,
                 initiatorName: j.requesterName || '—',
                 initiatorEmail: j.requesterEmail || '',
-                currentStage: j.status,
-                currentStageLabel: stage ? stage.label : j.status,
+                // Friendly client-nomenclature label, not the raw "PendingHOD" string
+                currentStage: statusLabelFor(j.status),
+                currentStageLabel: statusOwnerFor(j.status),
                 lastUpdated: j.updatedAt,
                 actionable,
                 url
@@ -618,7 +702,8 @@ export const renderHistory = async (req, res) => {
             title: `Onboarding History - ${request.fullName || request.employeeId}`,
             request,
             timeline,
-            currentRecipient
+            currentRecipient,
+            statusLabel: statusLabelFor(request.status)
         });
     } catch (err) {
         logger.error(`[Onboarding History] ${err.message}`);
@@ -626,15 +711,33 @@ export const renderHistory = async (req, res) => {
     }
 };
 
-const renderSuccess = (res, title, message) => {
-    return res.render('pages/message', {
+/**
+ * Render the post-action success / confirmation page.
+ *
+ * @param {object} res
+ * @param {string} title       - Heading shown to the user
+ * @param {string} message     - One-sentence confirmation (per client's nomenclature)
+ * @param {object} [next]      - Optional next-status info for the resulting-status panel
+ * @param {string} [next.status]   - Internal status string the request just transitioned to
+ *                                   (e.g. 'PendingHOD'). The view shows the friendly label.
+ * @param {number|string} [next.requestId] - Request reference number to display
+ */
+const renderSuccess = (res, title, message, next = {}) => {
+    const view = {
         title: 'Success',
         heading: title,
         titleClass: 'success',
         icon: '✅',
         iconClass: 'success-icon',
         message: message
-    });
+    };
+    if (next.status) {
+        view.nextStatus      = statusLabelFor(next.status);
+        view.nextOwner       = statusOwnerFor(next.status);
+        view.nextStatusColor = statusColorFor(next.status);
+    }
+    if (next.requestId) view.requestRef = next.requestId;
+    return res.render('pages/message', view);
 };
 
 const renderError = (res, message) => {

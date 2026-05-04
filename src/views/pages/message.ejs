@@ -1,26 +1,89 @@
 <%- include('../partials/header') %>
-    <header class="app-header"
-        style="background: #0078D4; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1); color: white;">
-        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
-            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
-            <div class="app-title">
-                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Ibrahim Fibres Limited</h1>
-                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">Workflow System</p>
-            </div>
+<header class="app-header"
+    style="background: #0078D4; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1); color: white;">
+    <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
+        <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
+        <div class="app-title">
+            <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Ibrahim Fibres Limited</h1>
+            <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">Workflow System</p>
         </div>
-    </header>
-    <div class="message-container">
-        <% if (locals.icon) { %>
-            <div class="message-icon <%= locals.iconClass ? iconClass : '' %>"><%- icon %></div>
-            <% } %>
-
-                <h2 class="message-title <%= locals.titleClass ? titleClass : '' %>">
-                    <%= heading %>
-                </h2>
-                <p class="message-text"><%- message %></p>
-
-                <% if (locals.metaHtml) { %>
-                    <%- metaHtml %>
-                        <% } %>
     </div>
-    <%- include('../partials/footer') %>
+</header>
+
+<style>
+    /* Resulting-status panel — shows what the request just transitioned to
+       and who currently owns it. Mirrors the client's nomenclature table. */
+    .next-stage-card {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 18px 20px;
+        margin: 24px auto 0;
+        max-width: 480px;
+        text-align: left;
+    }
+    .next-stage-card .nsc-label {
+        font-size: 0.72rem; font-weight: 700; color: #64748B;
+        letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .next-stage-card .nsc-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 8px 0; border-bottom: 1px solid #E2E8F0;
+    }
+    .next-stage-card .nsc-row:last-child { border-bottom: none; }
+    .next-stage-card .nsc-value { font-weight: 600; color: #0F172A; font-size: 0.95rem; }
+
+    .nsc-pill {
+        display: inline-block; padding: 4px 12px; border-radius: 999px;
+        font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em;
+    }
+    .nsc-pill--warning { background: #FEF3C7; color: #B45309; }
+    .nsc-pill--success { background: #DCFCE7; color: #15803D; }
+    .nsc-pill--danger  { background: #FEE2E2; color: #B91C1C; }
+    .nsc-pill--info    { background: #DBEAFE; color: #1D4ED8; }
+    .nsc-pill--default { background: #F1F5F9; color: #475569; }
+</style>
+
+<div class="message-container">
+    <% if (locals.icon) { %>
+        <div class="message-icon <%= locals.iconClass ? iconClass : '' %>"><%- icon %></div>
+    <% } %>
+
+    <h2 class="message-title <%= locals.titleClass ? titleClass : '' %>">
+        <%= heading %>
+    </h2>
+    <p class="message-text"><%- message %></p>
+
+    <%
+    // Resulting-status panel: shows the new status + the role that now owns
+    // the request. Driven by `locals.nextStatus` and `locals.nextOwner` so
+    // any controller call can pass these to surface the "what's next" info.
+    %>
+    <% if (locals.nextStatus) { %>
+        <div class="next-stage-card">
+            <div class="nsc-row">
+                <span class="nsc-label">Resulting Status</span>
+                <span class="nsc-pill nsc-pill--<%= locals.nextStatusColor || 'info' %>">
+                    <%= locals.nextStatus %>
+                </span>
+            </div>
+            <% if (locals.nextOwner) { %>
+                <div class="nsc-row">
+                    <span class="nsc-label">Currently With</span>
+                    <span class="nsc-value"><%= locals.nextOwner %></span>
+                </div>
+            <% } %>
+            <% if (locals.requestRef) { %>
+                <div class="nsc-row">
+                    <span class="nsc-label">Request</span>
+                    <span class="nsc-value">#<%= locals.requestRef %></span>
+                </div>
+            <% } %>
+        </div>
+    <% } %>
+
+    <% if (locals.metaHtml) { %>
+        <%- metaHtml %>
+    <% } %>
+</div>
+<%- include('../partials/footer') %>

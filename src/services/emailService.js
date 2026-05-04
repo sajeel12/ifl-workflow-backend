@@ -469,39 +469,39 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
     let subject, body;
     switch (type) {
         case 'IT_OPS':
-            subject = `[Action Required] Configure services — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — IT Configuration`;
             body = buildBullets('Configure intranet, email, printers, file shares.', 'Forwarded to HOD for review.');
             break;
         case 'HOD_REVIEW':
-            subject = `[Approval Needed] Onboarding review — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — HOD Approval`;
             body = buildBullets('Review configured services and approve or reject.', 'Forwarded to DCI Team.');
             break;
         case 'DCI_INPUT':
-            subject = `[Action Required] Set up AD identity — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — DCI Setup`;
             body = buildBullets('Configure NT user, SMTP, mailbox limits, GPO.', 'Forwarded to DCI Manager.');
             break;
         case 'DCI_CHANGES_REQUESTED':
-            subject = `[Changes Requested] DCI updates needed — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — Changes Requested`;
             body = buildBullets('See remarks on the form and resubmit.', 'Goes back to DCI Manager.');
             break;
         case 'DCI_MANAGER_APPROVAL':
-            subject = `[Approval Needed] DCI Manager review — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — Manager Review`;
             body = buildBullets('Approve, reject, or request changes.', 'Standard → Implementation. Email-risk → IT HOD.');
             break;
         case 'IT_HOD_APPROVAL':
-            subject = `[Approval Needed] IT HOD sign-off — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — IT HOD Sign-off`;
             body = buildBullets('Approve external email access.', 'Forwarded to DCI Implementation.');
             break;
         case 'DCI_IMPLEMENTATION':
-            subject = `[Action Required] Provision account — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — Account Provisioning`;
             body = buildBullets('Create AD/Exchange account and upload proofs.', 'Forwarded to OPS Team.');
             break;
         case 'OPS_ACTION':
-            subject = `[Action Required] Desk setup — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — Desk Setup`;
             body = buildBullets('Complete physical setup checklist at user\'s desk.', 'Request will be marked Completed.');
             break;
         default:
-            subject = `[Action Required] Onboarding step — ${userInfo} (Req ${reqNo})`;
+            subject = `Onboarding ${reqNo} — Action Required`;
             body = buildBullets('Your input is required.', 'Workflow will continue.');
     }
 

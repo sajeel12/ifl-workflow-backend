@@ -74,6 +74,14 @@
            so we drop ours so the two badges share the right side cleanly. */
         .a-header > .sso-badge { margin-left: 12px; }
 
+        /* In the onboarding-form header (.app-header uses justify-content:
+           space-between with a left brand-section and a right status-section),
+           the SSO badge would compete with .status-section for the right edge
+           and overlap it. Drop the auto-margin and add a small gap instead so
+           the two pills sit side-by-side on the right. */
+        .app-header { gap: 12px; }
+        .app-header > .sso-badge { margin-left: 12px; }
+
         .logo {
             height: 48px;
             padding: 6px;
@@ -207,10 +215,15 @@
                 badge.querySelector('.sso-meta').textContent = meta || 'SSO';
             };
 
-            // Move the badge into the host header bar (admin or form).
-            // Falls back to a fixed top-right position only if neither header is present.
+            // Move the badge into the host header bar so it doesn't float.
+            //   .a-header   → admin shell
+            //   .app-header → onboarding form / message pages
+            //   body > .header → fallback for any page that uses the legacy class
+            // Falls back to a fixed top-right position only if no header is present.
             const attachToHeader = () => {
-                const host = document.querySelector('.a-header') || document.querySelector('body > .header');
+                const host = document.querySelector('.a-header')
+                          || document.querySelector('.app-header')
+                          || document.querySelector('body > .header');
                 if (host) {
                     badge.style.position = 'static';
                     badge.style.top = badge.style.right = badge.style.zIndex = '';
