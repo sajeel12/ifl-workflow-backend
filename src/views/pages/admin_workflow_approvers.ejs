@@ -3,21 +3,86 @@
   <!-- Page header -->
   <div class="a-page-hd">
     <h1 class="a-page-hd__title">Workflow Approver Configuration</h1>
-    <p class="a-page-hd__sub">Set Primary & Secondary approvers for each workflow step. If Primary doesn't respond within 2 days, notifications route to Secondary automatically.</p>
+    <p class="a-page-hd__sub">Configure approvers globally (Default) or per-location. Onboarding requests automatically use the override matching the employee's location, falling back to the global default when no override exists.</p>
   </div>
 
   <!-- Info banner -->
   <div class="a-banner a-banner--info">
     <span class="a-banner__icon">ℹ</span>
     <div>
-      <strong>Fallback:</strong> Primary is used first. After 2 days without response, Secondary takes over and Primary is marked expired.
-      <strong>Cross-backup:</strong> DCI Manager ↔ IT HOD cover each other when their own slots are blank.
-      The <strong>HOD</strong> is resolved per-employee from HRMS and is not listed here.
+      <strong>Fallback:</strong> Primary first; after 2 days, Secondary takes over.
+      <strong>Cross-backup:</strong> DCI Manager ↔ IT HOD cover each other.
+      <strong>Per-location:</strong> overrides apply only when an employee's <em>location</em> matches; otherwise the Default config is used.
     </div>
   </div>
 
-  <!-- Approver cards -->
-  <div class="a-approver-grid">
+  <!-- ── Location selector ───────────────────────────────────── -->
+  <style>
+    .loc-bar {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      background: #fff; border: 1px solid var(--a-border); border-radius: 10px;
+      padding: 14px 18px; margin: 16px 0 22px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      align-items: center;
+    }
+    .loc-bar__label {
+      font-size: .78rem; font-weight: 700; color: var(--a-text-muted);
+      text-transform: uppercase; letter-spacing: .04em; margin-right: 4px;
+    }
+    .loc-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 999px;
+      background: var(--a-surface-2); color: var(--a-text);
+      border: 1px solid var(--a-border); cursor: pointer;
+      font-size: .85rem; font-weight: 500;
+      transition: all .15s ease;
+      user-select: none;
+    }
+    .loc-chip:hover { background: var(--a-bg-hover); border-color: var(--a-brand); }
+    .loc-chip.is-active {
+      background: var(--a-brand); color: #fff; border-color: var(--a-brand);
+      box-shadow: 0 2px 6px rgba(0, 120, 212, .25);
+    }
+    .loc-chip__star { font-size: .9rem; opacity: .85; }
+    .loc-chip--default { font-weight: 700; }
+    .loc-loading-spin {
+      width: 12px; height: 12px; border: 2px solid var(--a-border);
+      border-top-color: var(--a-brand); border-radius: 50%;
+      animation: spin .7s linear infinite; display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .a-card-override-badge {
+      display: inline-block; font-size: .68rem; font-weight: 700;
+      padding: 2px 8px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: .04em;
+      margin-left: 8px;
+    }
+    .a-card-override-badge.is-override { background: #dbeafe; color: #1d4ed8; }
+    .a-card-override-badge.is-default  { background: #f1f5f9; color: #64748b; }
+    .a-clear-override-btn {
+      background: transparent; border: 1px solid var(--a-red);
+      color: var(--a-red); padding: 6px 12px;
+      border-radius: var(--a-radius-sm); cursor: pointer;
+      font-size: .78rem; font-weight: 600;
+    }
+    .a-clear-override-btn:hover { background: var(--a-red-bg); }
+  </style>
+
+  <div class="loc-bar" id="locBar">
+    <span class="loc-bar__label">Configure for</span>
+    <span class="loc-chip loc-chip--default is-active" data-location=""
+          onclick="selectLocation(this, '')">
+      <span class="loc-chip__star">★</span> Default <span style="opacity:.7;font-weight:500;">(All Locations)</span>
+    </span>
+    <span class="loc-loading-spin" id="locLoadingSpin" style="display:none;"></span>
+  </div>
+
+  <div id="locContextNote" style="margin:0 0 14px;font-size:.85rem;color:var(--a-text-muted);">
+    Editing the <strong>Default</strong> config — used when no per-location override exists.
+  </div>
+
+  <!-- Approver cards (initial render = global defaults; JS replaces innerHTML on location switch) -->
+  <div class="a-approver-grid" id="approverGrid">
     <% approvers.forEach(function(ap) { %>
     <div class="a-approver-card" data-id="<%= ap.id %>">
 
@@ -333,7 +398,22 @@ function onInput(id, el) {
   document.getElementById('st-' + id).textContent = '';
 }
 
-async function save(id) {
+// ── Location state ─────────────────────────────────────────
+// '' === Default / global config. Anything else = per-location override.
+let currentLocation = '';
+let cardCache = []; // Last loaded items array, used to look up roleKey by id when saving
+
+async function save(idOrIndex) {
+  // For default location we keep the original behavior — id is the
+  // WorkflowApproverConfig.id and we PUT to /workflow-approvers/:id.
+  if (!currentLocation) {
+    return saveGlobal(idOrIndex);
+  }
+  // Per-location → upsert by (roleKey, location).
+  return saveLocation(idOrIndex);
+}
+
+async function saveGlobal(id) {
   const email          = document.getElementById('email-'  + id).value.trim();
   const name           = document.getElementById('name-'   + id).value.trim();
   const secondaryEmail = document.getElementById('semail-' + id).value.trim();
@@ -377,6 +457,245 @@ async function save(id) {
   }
 }
 
+async function saveLocation(id) {
+  const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+  const roleKey = card && card.dataset.rolekey;
+  if (!roleKey) { showToast('err', 'Internal error — missing roleKey'); return; }
+
+  const email          = document.getElementById('email-'  + id).value.trim();
+  const name           = document.getElementById('name-'   + id).value.trim();
+  const secondaryEmail = document.getElementById('semail-' + id).value.trim();
+  const secondaryName  = document.getElementById('sname-'  + id).value.trim();
+  const active         = document.getElementById('active-' + id).checked;
+  const btn            = card.querySelector('.btn');
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
+  if (secondaryEmail && !emailRe.test(secondaryEmail)) { setStatus(id, 'err', 'Invalid secondary email'); return; }
+
+  btn.disabled = true;
+  setStatus(id, 'ing', 'Saving…');
+
+  try {
+    const res = await fetch('/admin/workflow-approvers/by-location', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roleKey,
+        location: currentLocation,
+        approverEmail:  email,
+        approverName:   name,
+        secondaryEmail: secondaryEmail,
+        secondaryName:  secondaryName,
+        isActive: active
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      setStatus(id, 'ok', 'Saved ✓');
+      showToast('ok', data.message || 'Override saved');
+      // Reload to reflect the new override status (badge, clear button)
+      await loadApproversForLocation(currentLocation);
+    } else {
+      setStatus(id, 'err', data.error || 'Failed');
+      showToast('err', data.error || 'Save failed');
+    }
+  } catch {
+    setStatus(id, 'err', 'Network error');
+    showToast('err', 'Network error. Please retry.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function clearOverride(id) {
+  if (!currentLocation) return;
+  const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+  const roleKey = card && card.dataset.rolekey;
+  if (!roleKey) return;
+  if (!confirm(`Clear "${roleKey}" override for "${currentLocation}"? Will fall back to the Default config.`)) return;
+
+  try {
+    const res = await fetch('/admin/workflow-approvers/by-location', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roleKey,
+        location: currentLocation,
+        approverEmail: '',
+        approverName: '',
+        secondaryEmail: '',
+        secondaryName: '',
+        isActive: true
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('ok', data.message || 'Override cleared');
+      await loadApproversForLocation(currentLocation);
+    } else {
+      showToast('err', data.error || 'Failed to clear');
+    }
+  } catch {
+    showToast('err', 'Network error.');
+  }
+}
+
+// ── Location chips (loaded from /admin/locations) ──────────
+async function initLocationChips() {
+  try {
+    const r = await fetch('/admin/locations');
+    const j = await r.json();
+    if (!j.success || !Array.isArray(j.data)) return;
+    const bar = document.getElementById('locBar');
+    const spin = document.getElementById('locLoadingSpin');
+    j.data.forEach(loc => {
+      const chip = document.createElement('span');
+      chip.className = 'loc-chip';
+      chip.dataset.location = loc;
+      chip.textContent = loc;
+      chip.addEventListener('click', () => selectLocation(chip, loc));
+      bar.insertBefore(chip, spin);
+    });
+  } catch (e) {
+    console.warn('[approvers] could not load locations:', e);
+  }
+}
+
+function selectLocation(chipEl, loc) {
+  document.querySelectorAll('.loc-chip').forEach(c => c.classList.remove('is-active'));
+  chipEl.classList.add('is-active');
+  currentLocation = loc;
+  const note = document.getElementById('locContextNote');
+  note.innerHTML = loc
+    ? `Editing override for <strong>${escapeHTML(loc)}</strong> — empty cards inherit from the Default config. Save to create an override; clear to remove it.`
+    : 'Editing the <strong>Default</strong> config — used when no per-location override exists.';
+  loadApproversForLocation(loc);
+}
+
+async function loadApproversForLocation(loc) {
+  const grid = document.getElementById('approverGrid');
+  const spin = document.getElementById('locLoadingSpin');
+  spin.style.display = 'inline-block';
+  try {
+    const url = '/admin/workflow-approvers/by-location' + (loc ? `?location=${encodeURIComponent(loc)}` : '');
+    const r = await fetch(url);
+    const j = await r.json();
+    if (!j.success) { showToast('err', j.error || 'Failed to load'); return; }
+    cardCache = j.data;
+    grid.innerHTML = j.data.map((ap, i) => renderCardHTML(ap, i)).join('');
+  } catch (e) {
+    console.error(e);
+    showToast('err', 'Network error.');
+  } finally {
+    spin.style.display = 'none';
+  }
+}
+
+function escapeHTML(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Render a card identical in structure to the EJS one.
+// In default mode we use ap.id (the real DB primary key) so that
+// saveGlobal() can PUT to /workflow-approvers/:id correctly.
+// In location mode we use the array index — save goes via roleKey instead.
+function renderCardHTML(ap, i) {
+  const id = currentLocation ? i : ap.id;
+  const isDefault = !currentLocation;
+  const badgeHTML = isDefault
+    ? ''
+    : (ap.isOverride
+        ? '<span class="a-card-override-badge is-override">Override</span>'
+        : '<span class="a-card-override-badge is-default">Inherits default</span>');
+  const clearBtnHTML = (!isDefault && ap.isOverride)
+    ? `<button class="a-clear-override-btn" onclick="clearOverride(${id})">Clear Override</button>`
+    : '';
+  return `
+    <div class="a-approver-card" data-id="${id}" data-rolekey="${escapeHTML(ap.roleKey)}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+        <div>
+          <div style="font-weight:700;font-size:.95rem;color:var(--a-text);margin-bottom:5px;">
+            ${escapeHTML(ap.label)}${badgeHTML}
+          </div>
+          ${ap.workflowStage ? `<span class="a-stage">${escapeHTML(ap.workflowStage)}</span>` : ''}
+        </div>
+        <label class="a-toggle" title="Enable / disable this role">
+          <input type="checkbox" id="active-${id}" ${ap.isActive ? 'checked' : ''} style="display:none" onchange="onToggle(${id})">
+          <div class="a-pill ${ap.isActive ? 'a-pill--on' : ''}" id="pill-${id}"></div>
+          <span class="a-toggle__text" id="pill-lbl-${id}">${ap.isActive ? 'Active' : 'Inactive'}</span>
+        </label>
+      </div>
+      ${ap.description ? `<p style="font-size:.83rem;color:var(--a-text-muted);margin:0 0 16px;line-height:1.55;">${escapeHTML(ap.description)}</p>` : ''}
+      <div class="approver-section" style="margin-bottom:14px;">
+        <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-weight:700;font-size:.78rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Primary Approver</span>
+          ${ap.primaryExpiredAt ? '<span style="font-size:.7rem;background:var(--a-red-bg);color:var(--a-red);padding:2px 8px;border-radius:var(--a-radius-sm);font-weight:600;">EXPIRED</span>' : ''}
+        </div>
+        <div class="a-field" style="margin-bottom:8px;">
+          <input type="text" id="psearch-${id}" class="a-input"
+                 placeholder="🔍 Search employee directory (auto-fills primary)…"
+                 autocomplete="off"
+                 oninput="onApproverSearch(${id}, 'primary', this.value)"
+                 onkeydown="onApproverKey(event)"
+                 onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(${id}, 'primary', this.value.trim())">
+        </div>
+        <div class="a-field-row">
+          <div class="a-field" style="margin:0;">
+            <label class="a-label">Primary Email</label>
+            <input type="email" id="email-${id}" class="a-input ${!ap.approverEmail ? 'a-input--warn' : ''}"
+                   value="${escapeHTML(ap.approverEmail || '')}"
+                   placeholder="primary@company.com"
+                   oninput="onInput(${id}, this)">
+          </div>
+          <div class="a-field" style="margin:0;">
+            <label class="a-label">Primary Name</label>
+            <input type="text" id="name-${id}" class="a-input"
+                   value="${escapeHTML(ap.approverName || '')}"
+                   placeholder="Team / Person Name">
+          </div>
+        </div>
+      </div>
+      <div class="approver-section" style="padding-top:12px;border-top:1px dashed var(--a-border);">
+        <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-weight:700;font-size:.78rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Secondary (Fallback)</span>
+          <span style="font-size:.7rem;color:var(--a-text-muted);">Activates after 2 days</span>
+        </div>
+        <div class="a-field" style="margin-bottom:8px;">
+          <input type="text" id="ssearch-${id}" class="a-input"
+                 placeholder="🔍 Search employee directory (auto-fills secondary)…"
+                 autocomplete="off"
+                 oninput="onApproverSearch(${id}, 'secondary', this.value)"
+                 onkeydown="onApproverKey(event)"
+                 onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(${id}, 'secondary', this.value.trim())">
+        </div>
+        <div class="a-field-row">
+          <div class="a-field" style="margin:0;">
+            <label class="a-label">Secondary Email</label>
+            <input type="email" id="semail-${id}" class="a-input"
+                   value="${escapeHTML(ap.secondaryEmail || '')}"
+                   placeholder="secondary@company.com"
+                   oninput="document.getElementById('st-' + ${id}).textContent = '';">
+          </div>
+          <div class="a-field" style="margin:0;">
+            <label class="a-label">Secondary Name</label>
+            <input type="text" id="sname-${id}" class="a-input"
+                   value="${escapeHTML(ap.secondaryName || '')}"
+                   placeholder="Team / Person Name">
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--a-border);gap:8px;">
+        <button class="btn btn-primary" style="padding:8px 22px;" onclick="save(${id})">${isDefault ? 'Save' : (ap.isOverride ? 'Update Override' : 'Save Override')}</button>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${clearBtnHTML}
+          <span class="a-save-status" id="st-${id}"></span>
+        </div>
+      </div>
+    </div>`;
+}
+
 function setStatus(id, cls, txt) {
   const el = document.getElementById('st-' + id);
   el.className = 'a-save-status a-save-status--' + cls;
@@ -395,5 +714,6 @@ function showToast(cls, msg) {
 
 document.addEventListener('DOMContentLoaded', () => {
   FloatSuggest.init();
+  initLocationChips();
 });
 </script>

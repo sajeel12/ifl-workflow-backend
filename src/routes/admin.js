@@ -22,7 +22,12 @@ router.post('/update-sync-config', adminController.updateSyncConfig);// Departme
 router.get('/departments', adminController.getDepartments);
 router.post('/assign-department-hod', adminController.assignDepartmentHod);
 
-// Workflow Approver Configuration
+// Workflow Approver Configuration (per-location) — must be before /:id wildcard
+router.get('/locations',                       adminController.getLocations);
+router.get('/workflow-approvers/by-location',  adminController.getApproversForLocation);
+router.put('/workflow-approvers/by-location',  adminController.upsertApproverForLocation);
+
+// Workflow Approver Configuration (global) — /:id wildcard AFTER specific routes
 router.get('/workflow-approvers/api', adminController.getWorkflowApprovers);
 router.put('/workflow-approvers/:id', adminController.updateWorkflowApprover);
 

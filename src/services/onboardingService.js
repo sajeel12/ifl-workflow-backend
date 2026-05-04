@@ -60,7 +60,7 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
                 currentStageToken: newToken
             });
             await logTimelineEvent(request.id, 'DCI Manager Requested Changes', 'DCIManager', remarks);
-            const dciEmail = await RecipientService.get('DCI_TEAM');
+            const dciEmail = await RecipientService.get('DCI_TEAM', { location: request.location });
             await sendStageEmail(dciEmail, request, newToken, 'DCI_CHANGES_REQUESTED');
             return request;
         }
@@ -76,7 +76,7 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
                 dciManagerDecidedAt: new Date()
             });
             await logTimelineEvent(request.id, 'DCI Manager Approved (High Risk)', 'DCIManager', remarks);
-            const itHodEmail = await RecipientService.get('IT_HOD');
+            const itHodEmail = await RecipientService.get('IT_HOD', { location: request.location });
             await sendStageEmail(itHodEmail, request, newToken, 'IT_HOD_APPROVAL');
         } else {
             // Move to Implementation Phase
@@ -90,7 +90,7 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
             });
             await logTimelineEvent(request.id, 'DCI Manager Approved', 'DCIManager', remarks);
             await generateAndStorePDF(request); // PDF serves as Work Order
-            const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER');
+            const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER', { location: request.location });
             await sendStageEmail(implementerEmail, request, newToken, 'DCI_IMPLEMENTATION');
         }
         return request;
@@ -129,7 +129,7 @@ export const handleITHODApproval = async (token, action, remarks = null) => {
         });
         await logTimelineEvent(request.id, 'IT HOD Approved', 'ITHOD', remarks);
         await generateAndStorePDF(request);
-        const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER');
+        const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER', { location: request.location });
         await sendStageEmail(implementerEmail, request, newToken, 'DCI_IMPLEMENTATION');
 
         return request;
@@ -154,7 +154,7 @@ export const handleDCIImplementation = async (token, filePaths, implementerName)
             currentStageToken: newToken
         });
         await logTimelineEvent(request.id, 'DCI Implementation Completed', 'DCIImplementer', `Implemented by ${implementerName}`);
-        const opsEmail = await RecipientService.get('OPS_TEAM');
+        const opsEmail = await RecipientService.get('OPS_TEAM', { location: request.location });
         await sendStageEmail(opsEmail, request, newToken, 'OPS_ACTION');
         return request;
     } catch (err) {
@@ -211,8 +211,8 @@ const sendCompletionNotification = async (request) => {
 
     // Fallback: use DCI Manager + OPS Team as default recipients
     if (recipients.length === 0) {
-        const dciMgr = await RecipientService.get('DCI_MANAGER');
-        const opsTeam = await RecipientService.get('OPS_TEAM');
+        const dciMgr = await RecipientService.get('DCI_MANAGER', { location: request.location });
+        const opsTeam = await RecipientService.get('OPS_TEAM', { location: request.location });
         recipients = [dciMgr, opsTeam].filter(Boolean);
     }
 
@@ -269,7 +269,7 @@ export const createRequest = async (data) => {
             ? `Initiated by ${data.requesterName}${data.requesterEmail ? ' <' + data.requesterEmail + '>' : ''}`
             : 'Initial submission';
         await logTimelineEvent(request.id, 'Request Initiated', 'HR', initiatorLabel);
-        const itEmail = await RecipientService.get('IT_OPS');
+        const itEmail = await RecipientService.get('IT_OPS', { location: request.location });
         await sendStageEmail(itEmail, request, token, 'IT_OPS');
         return request;
     } catch (err) {
@@ -293,7 +293,7 @@ export const updateITDetails = async (token, data) => {
         });
         await logTimelineEvent(request.id, 'IT Services Configured', 'IT', JSON.stringify(data));
         // In real app, look up HOD email based on employeeId/Dep
-        const hodEmail = await RecipientService.get('HOD', { employeeId: request.employeeId });
+        const hodEmail = await RecipientService.get('HOD', { employeeId: request.employeeId, location: request.location });
         await sendStageEmail(hodEmail, request, newToken, 'HOD_REVIEW');
         return request;
     } catch (err) {
@@ -323,7 +323,7 @@ export const handleHODApproval = async (token, action, remarks) => {
             hodApprovedAt: new Date()
         });
         await logTimelineEvent(request.id, 'HOD Approved', 'HOD', remarks);
-        const dciEmail = await RecipientService.get('DCI_TEAM');
+        const dciEmail = await RecipientService.get('DCI_TEAM', { location: request.location });
         await sendStageEmail(dciEmail, request, newToken, 'DCI_INPUT');
         return request;
     } catch (err) {
@@ -346,7 +346,7 @@ export const updateDCIDetails = async (token, data) => {
             dciSubmittedAt: new Date()
         });
         await logTimelineEvent(request.id, 'DCI Configuration Submitted', 'DCI', JSON.stringify(data));
-        const dciManagerEmail = await RecipientService.get('DCI_MANAGER');
+        const dciManagerEmail = await RecipientService.get('DCI_MANAGER', { location: request.location });
         await sendStageEmail(dciManagerEmail, request, newToken, 'DCI_MANAGER_APPROVAL');
         return request;
     } catch (err) {
@@ -366,10 +366,10 @@ const generateAndStorePDF = async (request) => {
         // Email the Work Order PDF to the DCI Manager for record-keeping.
         // CC the IT HOD only if their approval was part of this request.
         try {
-            const dciManagerEmail = await RecipientService.get('DCI_MANAGER');
+            const dciManagerEmail = await RecipientService.get('DCI_MANAGER', { location: request.location });
             const ccList = [];
             if (request.itHodDecidedAt) {
-                const itHodEmail = await RecipientService.get('IT_HOD');
+                const itHodEmail = await RecipientService.get('IT_HOD', { location: request.location });
                 if (itHodEmail && itHodEmail !== dciManagerEmail) ccList.push(itHodEmail);
             }
             await emailService.sendWorkOrderPDF(dciManagerEmail, request, outputPath, ccList);

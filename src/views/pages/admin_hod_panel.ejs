@@ -22,7 +22,7 @@
 
       <!-- ── Individual View ── -->
       <div id="view-individual">
-        <div class="a-search">
+        <div class="a-search" style="flex-wrap:wrap;">
           <!-- Main search: no wrapper div needed, FloatSuggest handles positioning -->
           <input type="text" id="searchInput" class="a-input"
                  placeholder="Search employees by name, ID, department or email…"
@@ -32,17 +32,27 @@
                  onfocus="if(!FloatSuggest.isOpen() && this.value.trim().length>=2) _mainSuggestFetch(this.value.trim())">
           <button class="btn btn-secondary" onclick="clearMainSearch()">Clear</button>
           <button class="btn btn-primary"   onclick="loadEmployees(1)">Search</button>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+            <label style="font-size:.78rem;font-weight:600;color:var(--a-text-muted);white-space:nowrap;">Show</label>
+            <select id="pageSizeSelect" class="a-input" style="width:auto;min-width:70px;padding:7px 10px;" onchange="onPageSizeChange()">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <label style="font-size:.78rem;font-weight:600;color:var(--a-text-muted);white-space:nowrap;">per page</label>
+          </div>
         </div>
 
         <div class="table-container">
           <table>
             <thead>
               <tr>
-                <th>ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Email</th><th>HOD Status</th><th>Actions</th>
+                <th>ID</th><th>Name</th><th>Department</th><th>Designation</th><th>Location</th><th>Email</th><th>HOD Status</th><th>Actions</th>
               </tr>
             </thead>
             <tbody id="employeeTableBody">
-              <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--a-text-muted);">Loading employees…</td></tr>
+              <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--a-text-muted);">Loading employees…</td></tr>
             </tbody>
           </table>
         </div>
@@ -505,25 +515,31 @@ function renderDepartmentTable(departments, q = '') {
 /* ================================================================
    EMPLOYEES TABLE
 ================================================================ */
+function onPageSizeChange() {
+  const sel = document.getElementById('pageSizeSelect');
+  pagination.limit = parseInt(sel.value, 10);
+  loadEmployees(1);
+}
+
 async function loadEmployees(page = 1) {
   const query = document.getElementById('searchInput').value;
   const tbody = document.getElementById('employeeTableBody');
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--a-text-muted);">Searching…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--a-text-muted);">Searching…</td></tr>';
   try {
     const res  = await fetch(`/admin/employees?q=${encodeURIComponent(query)}&page=${page}&limit=${pagination.limit}`);
     const json = await res.json();
     if (json.success) {
       currentEmployees = json.data;
-      pagination = json.pagination;
+      pagination = { ...json.pagination, limit: pagination.limit };
       renderTable(json.data, query);
       renderPagination();
-    } else tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--a-red);">${json.error}</td></tr>`;
-  } catch { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--a-red);">Network Error</td></tr>`; }
+    } else tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--a-red);">${json.error}</td></tr>`;
+  } catch { tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--a-red);">Network Error</td></tr>`; }
 }
 
 function renderTable(employees, q = '') {
   const tbody = document.getElementById('employeeTableBody');
-  if (!employees.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--a-text-muted);">No employees found.</td></tr>'; return; }
+  if (!employees.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--a-text-muted);">No employees found.</td></tr>'; return; }
   tbody.innerHTML = employees.map(emp => {
     const badge = emp.hodId
       ? `<span class="badge assigned" title="${emp.hodId}">${emp.hodName || emp.hodId}</span>`
@@ -539,6 +555,7 @@ function renderTable(employees, q = '') {
       <td>${highlight(emp.name, q)}</td>
       <td>${highlight(emp.department || '—', q)}</td>
       <td>${emp.designation || '—'}</td>
+      <td>${emp.location || '—'}</td>
       <td style="color:var(--a-text-muted);">${highlight(emp.email || '—', q)}</td>
       <td>${badge}</td>
       <td><div style="display:flex;gap:5px;flex-wrap:wrap;">${actions}</div></td>
@@ -549,15 +566,37 @@ function renderTable(employees, q = '') {
 function renderPagination() {
   const info  = document.getElementById('paginationInfo');
   const btns  = document.getElementById('paginationButtons');
+
+  // Sync the page-size dropdown to match current limit
+  const sel = document.getElementById('pageSizeSelect');
+  if (sel) sel.value = String(pagination.limit);
+
+  if (!pagination.total) {
+    info.innerText = 'No records found';
+    document.getElementById('stats').innerText = '0 employees';
+    btns.innerHTML = '';
+    return;
+  }
+
   const start = (pagination.page - 1) * pagination.limit + 1;
   const end   = Math.min(pagination.page * pagination.limit, pagination.total);
-  if (!pagination.total) { info.innerText = 'No records found'; document.getElementById('stats').innerText = '0 employees'; btns.innerHTML = ''; return; }
-  info.innerText = `Showing ${start}–${end} of ${pagination.total} employees`;
+  const tp    = pagination.totalPages || 1;
+
+  info.innerText = `Showing ${start}–${end} of ${pagination.total} employees  ·  Page ${pagination.page} of ${tp}`;
   document.getElementById('stats').innerText = `${pagination.total} employees`;
-  let html = `<button class="page-btn" ${pagination.page===1?'disabled':''} onclick="loadEmployees(${pagination.page-1})">← Prev</button>`;
-  const s = Math.max(1, pagination.page - 2), e = Math.min(pagination.totalPages, s + 4);
-  for (let i = s; i <= e; i++) html += `<button class="page-btn ${i===pagination.page?'active':''}" onclick="loadEmployees(${i})">${i}</button>`;
-  html += `<button class="page-btn" ${pagination.page===pagination.totalPages?'disabled':''} onclick="loadEmployees(${pagination.page+1})">Next →</button>`;
+
+  let html = `<button class="page-btn" ${pagination.page <= 1 ? 'disabled' : ''} onclick="loadEmployees(1)" title="First page">«</button>`;
+  html += `<button class="page-btn" ${pagination.page <= 1 ? 'disabled' : ''} onclick="loadEmployees(${pagination.page - 1})">← Prev</button>`;
+
+  const s = Math.max(1, pagination.page - 2);
+  const e = Math.min(tp, s + 4);
+  for (let i = s; i <= e; i++) {
+    html += `<button class="page-btn ${i === pagination.page ? 'active' : ''}" onclick="loadEmployees(${i})">${i}</button>`;
+  }
+
+  html += `<button class="page-btn" ${pagination.page >= tp ? 'disabled' : ''} onclick="loadEmployees(${pagination.page + 1})">Next →</button>`;
+  html += `<button class="page-btn" ${pagination.page >= tp ? 'disabled' : ''} onclick="loadEmployees(${tp})" title="Last page">»</button>`;
+
   btns.innerHTML = html;
 }
 
@@ -664,10 +703,11 @@ function renderDetailsContent(editMode) {
     <div style="grid-column:1/-1;display:flex;align-items:center;gap:14px;margin-bottom:8px;padding-bottom:16px;border-bottom:1px solid var(--a-border);">
       <div class="a-avatar">${(emp.name||'?').charAt(0).toUpperCase()}</div>
       <div><div style="font-size:1.1rem;font-weight:700;">${emp.name||'Unknown'}</div>
-      <div style="font-size:.8rem;color:var(--a-text-muted);">${emp.designation||'No Designation'} · ${emp.mainDept||'No Department'}</div></div>
+      <div style="font-size:.8rem;color:var(--a-text-muted);">${emp.designation||'No Designation'} · ${emp.mainDept||'No Department'}${emp.location ? ' · ' + emp.location : ''}</div></div>
     </div>`);
+  const alwaysShowKeys = ['employeeId','name','email','designation','mainDept','location','status','hodId'];
   groups.forEach(g => {
-    const visible = g.keys.filter(k => (emp[k] != null && emp[k] !== '') || editMode);
+    const visible = g.keys.filter(k => alwaysShowKeys.includes(k) || (emp[k] != null && emp[k] !== '') || editMode);
     if (!visible.length) return;
     html.push(`<div style="grid-column:1/-1;font-size:.7rem;font-weight:700;color:var(--a-text-faint);text-transform:uppercase;letter-spacing:.08em;margin-top:10px;margin-bottom:4px;">${g.title}</div>`);
     visible.forEach(key => {

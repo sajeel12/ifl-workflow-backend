@@ -1,6 +1,7 @@
 import Employee from '../models/Employee.js';
 import SyncLog from '../models/SyncLog.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
+import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import SystemConfig from '../models/SystemConfig.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
@@ -148,7 +149,7 @@ class AdminController {
                 limit: limitInt,
                 offset: offset,
                 order: [['name', 'ASC']],
-                attributes: ['employeeId', 'name', 'designation', 'mainDept', 'hodId', 'email']
+                attributes: ['employeeId', 'name', 'designation', 'mainDept', 'hodId', 'email', 'location']
             });
 
             const results = [];
@@ -164,6 +165,7 @@ class AdminController {
                     name: emp.name,
                     designation: emp.designation,
                     department: emp.mainDept,
+                    location: emp.location,
                     email: emp.email,
                     hodId: emp.hodId,
                     hodName: hodName
@@ -374,6 +376,180 @@ class AdminController {
         } catch (error) {
             console.error('Error fetching approvers:', error);
             res.status(500).json({ success: false, error: 'Failed to fetch approver configs' });
+        }
+    }
+
+    /**
+     * API: Distinct list of employee locations.
+     * Used by the admin Workflow Approvers panel to populate the location
+     * picker so admins can configure per-location approvers.
+     */
+    async getLocations(req, res) {
+        try {
+            const rows = await Employee.findAll({
+                attributes: ['location'],
+                where: { location: { [Op.ne]: null } },
+                group: ['location'],
+                order: [['location', 'ASC']]
+            });
+            const locations = rows
+                .map(r => (r.location || '').trim())
+                .filter(Boolean);
+            // Deduplicate (some DBs may return duplicates depending on collation)
+            const unique = Array.from(new Set(locations));
+            return res.json({ success: true, data: unique });
+        } catch (error) {
+            console.error('Error fetching locations:', error);
+            return res.status(500).json({ success: false, error: 'Failed to fetch locations' });
+        }
+    }
+
+    /**
+     * API: Get the merged approver config for a given location.
+     *
+     * Returns one row per role with the resolved Primary/Secondary for that
+     * location: if a per-location override exists, it's used; otherwise the
+     * row falls back to the global config and gets isOverride=false so the
+     * UI can render a "(default)" badge.
+     *
+     * Query: ?location=Lahore  (omit or "DEFAULT" to manage the global config)
+     */
+    async getApproversForLocation(req, res) {
+        try {
+            const location = (req.query.location || '').trim();
+            const isDefault = !location || location.toUpperCase() === 'DEFAULT';
+
+            const globals = await WorkflowApproverConfig.findAll({ order: [['id', 'ASC']] });
+
+            // Default ("All Locations") view → just return the globals.
+            // Crucially we include `id` (WorkflowApproverConfig.id) so the
+            // re-rendered cards on the client can PUT to /workflow-approvers/:id.
+            if (isDefault) {
+                const data = globals.map(g => ({
+                    id:               g.id,
+                    roleKey:          g.roleKey,
+                    label:            g.label,
+                    description:      g.description,
+                    workflowStage:    g.workflowStage,
+                    approverEmail:    g.approverEmail,
+                    approverName:     g.approverName,
+                    secondaryEmail:   g.secondaryEmail,
+                    secondaryName:    g.secondaryName,
+                    primaryExpiredAt: g.primaryExpiredAt,
+                    isActive:         g.isActive,
+                    isOverride:       false,
+                    overrideId:       null,
+                    location:         null
+                }));
+                return res.json({ success: true, location: null, data });
+            }
+
+            // Specific location → merge per-role with override-if-exists.
+            const overrides = await WorkflowApproverLocationOverride.findAll({
+                where: { location }
+            });
+            const overrideByRole = new Map(overrides.map(o => [o.roleKey, o]));
+
+            const data = globals.map(g => {
+                const o = overrideByRole.get(g.roleKey);
+                if (o) {
+                    return {
+                        roleKey:          g.roleKey,
+                        label:            g.label,
+                        description:      g.description,
+                        workflowStage:    g.workflowStage,
+                        approverEmail:    o.approverEmail,
+                        approverName:     o.approverName,
+                        secondaryEmail:   o.secondaryEmail,
+                        secondaryName:    o.secondaryName,
+                        primaryExpiredAt: o.primaryExpiredAt,
+                        isActive:         o.isActive,
+                        isOverride:       true,
+                        overrideId:       o.id,
+                        location
+                    };
+                }
+                return {
+                    roleKey:          g.roleKey,
+                    label:            g.label,
+                    description:      g.description,
+                    workflowStage:    g.workflowStage,
+                    // Show the global value as a "ghost" so admins know what would be used.
+                    approverEmail:    g.approverEmail,
+                    approverName:     g.approverName,
+                    secondaryEmail:   g.secondaryEmail,
+                    secondaryName:    g.secondaryName,
+                    primaryExpiredAt: null,
+                    isActive:         g.isActive,
+                    isOverride:       false,
+                    overrideId:       null,
+                    location
+                };
+            });
+
+            return res.json({ success: true, location, data });
+        } catch (error) {
+            console.error('Error fetching per-location approvers:', error);
+            return res.status(500).json({ success: false, error: 'Failed to fetch approvers' });
+        }
+    }
+
+    /**
+     * API: Upsert a per-(role, location) approver override.
+     *
+     * Body: { roleKey, location, approverEmail, approverName, secondaryEmail,
+     *         secondaryName, isActive }
+     * If all four email/name fields are blank AND isActive is true, we DELETE
+     * the override row instead — falling back to the global config silently.
+     */
+    async upsertApproverForLocation(req, res) {
+        try {
+            const { roleKey, location } = req.body || {};
+            if (!roleKey || !location || !location.trim()) {
+                return res.status(400).json({ success: false, error: 'roleKey and location are required' });
+            }
+
+            const approverEmail  = (req.body.approverEmail  || '').trim() || null;
+            const approverName   = (req.body.approverName   || '').trim() || null;
+            const secondaryEmail = (req.body.secondaryEmail || '').trim() || null;
+            const secondaryName  = (req.body.secondaryName  || '').trim() || null;
+            const isActive       = req.body.isActive !== undefined ? Boolean(req.body.isActive) : true;
+
+            // Verify the global role exists; we won't accept overrides for
+            // unknown roleKeys to keep the data clean.
+            const globalCfg = await WorkflowApproverConfig.findOne({ where: { roleKey } });
+            if (!globalCfg) {
+                return res.status(404).json({ success: false, error: `Unknown roleKey "${roleKey}"` });
+            }
+
+            // No useful override content → drop any existing row.
+            if (!approverEmail && !approverName && !secondaryEmail && !secondaryName) {
+                const deleted = await WorkflowApproverLocationOverride.destroy({ where: { roleKey, location: location.trim() } });
+                return res.json({
+                    success: true,
+                    message: deleted
+                        ? `Cleared override for "${roleKey}" at "${location}". Will use global default.`
+                        : `No override existed for "${roleKey}" at "${location}".`,
+                    deleted: !!deleted
+                });
+            }
+
+            const [row, created] = await WorkflowApproverLocationOverride.findOrCreate({
+                where: { roleKey, location: location.trim() },
+                defaults: { approverEmail, approverName, secondaryEmail, secondaryName, isActive }
+            });
+            if (!created) {
+                await row.update({ approverEmail, approverName, secondaryEmail, secondaryName, isActive });
+            }
+
+            return res.json({
+                success: true,
+                message: `${created ? 'Created' : 'Updated'} approver override for "${roleKey}" at "${location}".`,
+                data: row
+            });
+        } catch (error) {
+            console.error('Error upserting per-location approver:', error);
+            return res.status(500).json({ success: false, error: 'Failed to save override', details: error.message });
         }
     }
 

@@ -7,6 +7,7 @@ import OffboardingRequest from './src/models/OffboardingRequest.js';
 import TimelineEvent from './src/models/TimelineEvent.js';
 import SyncLog from './src/models/SyncLog.js';
 import WorkflowApproverConfig from './src/models/WorkflowApproverConfig.js';
+import WorkflowApproverLocationOverride from './src/models/WorkflowApproverLocationOverride.js';
 import SystemConfig from './src/models/SystemConfig.js';
 
 const DEFAULT_APPROVER_CONFIGS = [

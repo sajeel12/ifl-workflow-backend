@@ -1,8 +1,20 @@
 import logger from '../utils/logger.js';
 import HRMSService from './hrmsService.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
+import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * Resolve the per-(role, location) approver row, or return null if no
+ * override exists for this location.
+ */
+async function findLocationOverride(roleKey, location) {
+    if (!location) return null;
+    return WorkflowApproverLocationOverride.findOne({
+        where: { roleKey, location, isActive: true }
+    });
+}
 
 const RecipientService = {
     /**
@@ -30,11 +42,13 @@ const RecipientService = {
                     source = cfg ? 'DB_Fallback' : 'ENV_Fallback';
                 }
             } else {
-                const cfg = await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
+                // Try location-specific override first, fall back to global config.
+                const override = await findLocationOverride(roleKey, context.location);
+                const cfg = override || await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
 
                 if (cfg && cfg.approverEmail) {
                     recipientEmail = cfg.approverEmail;
-                    source = 'DB';
+                    source = override ? `DB_LOC[${context.location}]` : 'DB';
                 } else {
                     const envFallbacks = {
                         IT_OPS:          process.env.EMAIL_IT_OPS,
@@ -88,7 +102,14 @@ const RecipientService = {
                 return { email, name: '', isFallback: false, source: 'HRMS' };
             }
 
-            const cfg = await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
+            // Try the per-location override first. If one exists and is active,
+            // it completely replaces the global config for THIS request — both
+            // primary/secondary AND the lastAssignedAt tracking happen on the
+            // override row, so the 2-day fallback timer is location-scoped.
+            const override = await findLocationOverride(roleKey, context.location);
+            const cfg = override || await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
+            const usingOverride = !!override;
+            const sourceTag = usingOverride ? `LOC[${context.location}]` : 'GLOBAL';
 
             if (!cfg) {
                 const email = await RecipientService.get(roleKey, context);
@@ -104,22 +125,24 @@ const RecipientService = {
             // If primary expired, mark it and use secondary
             if (primaryStale && cfg.secondaryEmail) {
                 await cfg.update({ primaryExpiredAt: now });
-                logger.info(`[RecipientService] Primary expired for ${roleKey} — using secondary ${cfg.secondaryEmail}`);
-                return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, 'DB_Secondary', roleKey);
+                logger.info(`[RecipientService] Primary expired for ${roleKey}/${sourceTag} — using secondary ${cfg.secondaryEmail}`);
+                return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, `DB_Secondary_${sourceTag}`, roleKey);
             }
 
             // If primary missing and already expired, use secondary
             if ((!cfg.approverEmail || cfg.primaryExpiredAt) && cfg.secondaryEmail) {
-                return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, 'DB_Secondary', roleKey);
+                return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, `DB_Secondary_${sourceTag}`, roleKey);
             }
 
-            // Special-case cross-backup for DCI_MANAGER ↔ IT_HOD
+            // Special-case cross-backup for DCI_MANAGER ↔ IT_HOD — cross-backup
+            // looks at the same location's override first, then global config.
             if ((roleKey === 'DCI_MANAGER' || roleKey === 'IT_HOD') && !cfg.approverEmail && !cfg.secondaryEmail) {
                 const backupRole = roleKey === 'DCI_MANAGER' ? 'IT_HOD' : 'DCI_MANAGER';
-                const backup = await WorkflowApproverConfig.findOne({ where: { roleKey: backupRole, isActive: true } });
+                const backupOverride = await findLocationOverride(backupRole, context.location);
+                const backup = backupOverride || await WorkflowApproverConfig.findOne({ where: { roleKey: backupRole, isActive: true } });
                 if (backup?.approverEmail) {
-                    logger.info(`[RecipientService] ${roleKey} empty — using ${backupRole} as cross-backup`);
-                    return RecipientService._applyTestMode(backup.approverEmail, backup.approverName || '', true, 'DB_CrossBackup', roleKey);
+                    logger.info(`[RecipientService] ${roleKey}/${sourceTag} empty — using ${backupRole} as cross-backup`);
+                    return RecipientService._applyTestMode(backup.approverEmail, backup.approverName || '', true, `DB_CrossBackup_${sourceTag}`, roleKey);
                 }
             }
 
@@ -128,7 +151,7 @@ const RecipientService = {
                 if (context.requestId) {
                     await cfg.update({ lastAssignedAt: now, primaryExpiredAt: null });
                 }
-                return RecipientService._applyTestMode(cfg.approverEmail, cfg.approverName || '', false, 'DB_Primary', roleKey);
+                return RecipientService._applyTestMode(cfg.approverEmail, cfg.approverName || '', false, `DB_Primary_${sourceTag}`, roleKey);
             }
 
             // Nothing configured — env fallback via plain get()
