@@ -30,7 +30,7 @@ export const STATUS_OWNER = {
     PendingDCIManager:        { label: 'DCI Manager',             roleKey: 'DCI_MANAGER' },
     PendingITHOD:             { label: 'IT HOD',                  roleKey: 'IT_HOD' },
     PendingDCIImplementation: { label: 'DCI Implementation Team', roleKey: 'DCI_IMPLEMENTER' },
-    PendingOPSAction:         { label: 'IT OPS Team',             roleKey: 'OPS_TEAM' },
+    PendingOPSAction:         { label: 'IT Operations',           roleKey: 'IT_OPS' },
     Completed:                { label: '—',                       roleKey: null },
     Rejected:                 { label: 'Closed',                  roleKey: null },
     Draft:                    { label: 'HR / IT Requestor',       roleKey: null }

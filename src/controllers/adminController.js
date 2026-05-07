@@ -21,8 +21,14 @@ const STATUS_TO_RESEND = {
     PendingDCIManager: { roleKey: 'DCI_MANAGER', type: 'DCI_MANAGER_APPROVAL' },
     PendingITHOD: { roleKey: 'IT_HOD', type: 'IT_HOD_APPROVAL' },
     PendingDCIImplementation: { roleKey: 'DCI_IMPLEMENTER', type: 'DCI_IMPLEMENTATION' },
-    PendingOPSAction: { roleKey: 'OPS_TEAM', type: 'OPS_ACTION' }
+    // Step 12 routes back to IT_OPS — same group as Step 2 per client requirement.
+    PendingOPSAction: { roleKey: 'IT_OPS', type: 'OPS_ACTION' }
 };
+
+// Per client policy, only the IT Operations role is split by location.
+// All other roles use the global default everywhere. The admin UI hides
+// non-location-aware roles from the per-location editor.
+const LOCATION_AWARE_ROLES = new Set(['IT_OPS']);
 
 // State to remember current config (would usually be in DB)
 let currentCronConfig = {
@@ -355,11 +361,31 @@ class AdminController {
 
     /**
      * View: Render Workflow Approvers Panel
+     *
+     * The page also renders an in-card location dropdown for the IT Operations
+     * role (only that role is location-aware per client policy), so we pre-load
+     * the list of distinct employee locations alongside the approver rows.
      */
     async renderWorkflowApproversPanel(req, res) {
         try {
-            const approvers = await WorkflowApproverConfig.findAll({ order: [['id', 'ASC']] });
-            res.render('pages/admin_workflow_approvers', { activeTab: 'approvers', approvers });
+            const [approvers, locationRows] = await Promise.all([
+                WorkflowApproverConfig.findAll({ order: [['id', 'ASC']] }),
+                Employee.findAll({
+                    attributes: ['location'],
+                    where: { location: { [Op.ne]: null } },
+                    group: ['location'],
+                    order: [['location', 'ASC']],
+                    raw: true
+                })
+            ]);
+            const locations = Array.from(new Set(
+                locationRows.map(r => (r.location || '').trim()).filter(Boolean)
+            ));
+            res.render('pages/admin_workflow_approvers', {
+                activeTab: 'approvers',
+                approvers,
+                locations
+            });
         } catch (error) {
             console.error('Error loading approvers panel:', error);
             res.status(500).send('Failed to load approvers panel');
@@ -444,13 +470,16 @@ class AdminController {
                 return res.json({ success: true, location: null, data });
             }
 
-            // Specific location → merge per-role with override-if-exists.
+            // Specific location selected → only the location-aware roles
+            // (currently just IT_OPS) are editable per-location. Other roles
+            // are filtered out so the UI only shows the cards that matter.
+            const editableGlobals = globals.filter(g => LOCATION_AWARE_ROLES.has(g.roleKey));
             const overrides = await WorkflowApproverLocationOverride.findAll({
-                where: { location }
+                where: { location, roleKey: { [Op.in]: Array.from(LOCATION_AWARE_ROLES) } }
             });
             const overrideByRole = new Map(overrides.map(o => [o.roleKey, o]));
 
-            const data = globals.map(g => {
+            const data = editableGlobals.map(g => {
                 const o = overrideByRole.get(g.roleKey);
                 if (o) {
                     return {
@@ -487,7 +516,12 @@ class AdminController {
                 };
             });
 
-            return res.json({ success: true, location, data });
+            return res.json({
+                success: true,
+                location,
+                data,
+                locationAwareRoles: Array.from(LOCATION_AWARE_ROLES)
+            });
         } catch (error) {
             console.error('Error fetching per-location approvers:', error);
             return res.status(500).json({ success: false, error: 'Failed to fetch approvers' });
@@ -507,6 +541,14 @@ class AdminController {
             const { roleKey, location } = req.body || {};
             if (!roleKey || !location || !location.trim()) {
                 return res.status(400).json({ success: false, error: 'roleKey and location are required' });
+            }
+            // Defense-in-depth: reject overrides for non-location-aware roles
+            // even if a stale UI tries to send one. Only IT_OPS is location-split.
+            if (!LOCATION_AWARE_ROLES.has(roleKey)) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Role "${roleKey}" is not configured per-location. Only IT Operations supports location-specific overrides.`
+                });
             }
 
             const approverEmail  = (req.body.approverEmail  || '').trim() || null;

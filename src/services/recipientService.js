@@ -5,12 +5,19 @@ import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocation
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
+// Per-client policy: only the IT Operations team is split by location.
+// All other roles (DCI Team, DCI Manager, IT HOD, DCI Implementer) operate
+// from a single global pool. Requests against the override table for any
+// other roleKey are ignored even if rows exist — keeps the model honest.
+const LOCATION_AWARE_ROLES = new Set(['IT_OPS']);
+
 /**
  * Resolve the per-(role, location) approver row, or return null if no
- * override exists for this location.
+ * override exists for this location AND this role is location-aware.
  */
 async function findLocationOverride(roleKey, location) {
     if (!location) return null;
+    if (!LOCATION_AWARE_ROLES.has(roleKey)) return null;
     return WorkflowApproverLocationOverride.findOne({
         where: { roleKey, location, isActive: true }
     });

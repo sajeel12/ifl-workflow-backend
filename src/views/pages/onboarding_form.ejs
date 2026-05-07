@@ -419,7 +419,9 @@
                                                                 class="btn btn-danger">Reject Request</button>
                                                             <button type="submit" name="action" value="RequestChanges"
                                                                 class="btn btn-secondary"
-                                                                onclick="return confirm('Send this request back to the DCI Team for changes?');">
+                                                                data-ifl-confirm="Send this request back to the DCI Team for changes?"
+                                                                data-ifl-confirm-title="Request changes"
+                                                                data-ifl-confirm-ok="Send back">
                                                                 Request Changes
                                                             </button>
                                                             <button type="submit" name="action" value="Approve"
@@ -526,6 +528,26 @@
                         // Run native validation first; if it fails, don't lock the buttons.
                         if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
 
+                        const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
+
+                        // If the submitter declares a confirm prompt via data-attrs,
+                        // run our custom IflDialog.confirm BEFORE doing any other work.
+                        const confirmMsg = submitter && submitter.dataset.iflConfirm;
+                        if (confirmMsg && !form.dataset.iflConfirmed) {
+                            e.preventDefault();
+                            const ok = await IflDialog.confirm(confirmMsg, {
+                                title:   submitter.dataset.iflConfirmTitle  || undefined,
+                                okText:  submitter.dataset.iflConfirmOk     || 'Confirm',
+                                danger:  submitter.dataset.iflConfirmDanger === '1'
+                            });
+                            if (!ok) return;
+                            form.dataset.iflConfirmed = '1';
+                            // Re-fire so the rest of the handler proceeds normally.
+                            if (submitter && typeof submitter.click === 'function') submitter.click();
+                            else form.submit();
+                            return;
+                        }
+
                         // We need the sidecar token attached to the body BEFORE
                         // the browser POSTs. Block the native submit, fetch the
                         // token, then re-trigger submission.
@@ -535,7 +557,6 @@
                             form.dataset.iflTokenAttached = '1';
                             // Re-fire submission preserving the original submitter
                             // so name=value pairs from action buttons (Approve/Reject) survive.
-                            const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
                             if (submitter && typeof submitter.click === 'function') {
                                 submitter.click();
                             } else {
@@ -544,8 +565,8 @@
                             return;
                         }
 
-                        // Second pass — token attached, real submit proceeds.
-                        const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
+                        // Second pass — confirm passed, token attached, real submit proceeds.
+                        // (`submitter` was captured at the top of this handler.)
 
                         // Disable every submit button in the form so the user can't double-click or pick another action
                         form.querySelectorAll('button[type="submit"]').forEach(btn => {
@@ -607,7 +628,7 @@
                     const empId = empIdInput.value.trim();
 
                     if (!empId) {
-                        alert('Please enter an Employee ID');
+                        IflDialog.warning('Please enter an Employee ID');
                         empIdInput.focus();
                         return;
                     }
@@ -652,7 +673,7 @@
                             if (existRes.ok) {
                                 const existData = await existRes.json();
                                 if (existData && existData.existingRequestId) {
-                                    alert('An onboarding request for this employee is already in progress. Please wait for it to complete before initiating a new one.');
+                                    IflDialog.warning('An onboarding request for this employee is already in progress. Please wait for it to complete before initiating a new one.', { title: 'Already in progress' });
                                     // Reset the field so HR doesn't try to submit anyway
                                     empIdInput.value = '';
                                     empIdInput.focus();
@@ -661,7 +682,7 @@
                             }
                         } catch (_) { /* non-fatal */ }
                     } catch (err) {
-                        alert(err.message);
+                        IflDialog.error(err.message || 'Could not look up the employee.');
                     } finally {
                         btn.textContent = originalText;
                         btn.disabled = false;

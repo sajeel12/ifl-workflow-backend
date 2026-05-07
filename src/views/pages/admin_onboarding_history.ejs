@@ -288,7 +288,7 @@ async function loadTimeline(id, name, empId) {
     const json = await res.json();
 
     if (!json.success) {
-      alert('Error loading timeline');
+      IflDialog.error('Could not load the timeline for this request.');
       return;
     }
 
@@ -317,7 +317,7 @@ async function loadTimeline(id, name, empId) {
     openModal();
   } catch (e) {
     console.error(e);
-    alert('Error loading timeline');
+    IflDialog.error('Could not load the timeline for this request.');
   }
 }
 
@@ -337,16 +337,16 @@ async function resendStageEmail() {
     });
     const json = await res.json();
     if (!res.ok || !json.success) {
-      alert(json.error || 'Failed to resend email');
+      IflDialog.error(json.error || 'Failed to resend email.');
       return;
     }
-    alert(json.message || 'Action email re-sent successfully.');
+    IflDialog.success(json.message || 'Action email re-sent successfully.');
     if (overrideEl) overrideEl.value = '';
     // Refresh the modal so the new "Email Regenerated" timeline event appears
     await loadTimeline(currentModalRequestId);
   } catch (e) {
     console.error(e);
-    alert('Network error while resending email.');
+    IflDialog.error('Network error while resending email.');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = original; }
   }

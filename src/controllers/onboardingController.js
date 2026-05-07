@@ -16,7 +16,8 @@ const STATUS_TO_ROLE = {
     PendingDCIManager: { key: 'DCI_MANAGER', label: 'DCI Manager' },
     PendingITHOD: { key: 'IT_HOD', label: 'IT HOD' },
     PendingDCIImplementation: { key: 'DCI_IMPLEMENTER', label: 'DCI Implementer' },
-    PendingOPSAction: { key: 'OPS_TEAM', label: 'OPS Team' },
+    // Step 12 owner is IT Operations (same group as Step 2) per client requirement.
+    PendingOPSAction: { key: 'IT_OPS', label: 'IT Operations' },
     Completed: { key: null, label: 'Completed' },
     Rejected: { key: null, label: 'Closed (Rejected)' }
 };
@@ -481,14 +482,17 @@ const renderForm = async (req, res, token) => {
 };
 
 // Map a role key to the request statuses it owns/can act on
+// IT Operations now owns BOTH Step 2 (PendingIT) and Step 12 (PendingOPSAction)
+// per client requirement — the same user who configured the services initially
+// is also responsible for verifying after desk setup. OPS_TEAM is no longer a
+// separate queue; OPS-routed designations fall back into IT_OPS.
 const ROLE_TO_PENDING_STATUS = {
-    IT_OPS: ['PendingIT'],
+    IT_OPS: ['PendingIT', 'PendingOPSAction'],
     HOD: ['PendingHOD'],
     DCI_TEAM: ['PendingDCI'],
     DCI_MANAGER: ['PendingDCIManager'],
     IT_HOD: ['PendingITHOD'],
-    DCI_IMPLEMENTER: ['PendingDCIImplementation'],
-    OPS_TEAM: ['PendingOPSAction']
+    DCI_IMPLEMENTER: ['PendingDCIImplementation']
 };
 
 const ROLE_TO_HISTORY_STATUS = {
@@ -497,12 +501,12 @@ const ROLE_TO_HISTORY_STATUS = {
     DCI_TEAM: ['PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
     DCI_MANAGER: ['PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
     IT_HOD: ['PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
-    DCI_IMPLEMENTER: ['PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
-    OPS_TEAM: ['PendingOPSAction', 'Completed', 'Rejected']
+    DCI_IMPLEMENTER: ['PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected']
 };
 
 // Map AD designation strings (or workflow role keys) → queue role key.
 // Lets users land on the queue page automatically without picking a role.
+// All OPS-flavoured designations resolve to IT_OPS (single combined queue).
 const DESIGNATION_TO_ROLE = {
     HR: 'IT_OPS', // HR initiates, doesn't have a queue. Default landing role for them is informational.
     'IT OPS': 'IT_OPS',
@@ -519,9 +523,10 @@ const DESIGNATION_TO_ROLE = {
     'IT_HOD': 'IT_HOD',
     'DCI IMPLEMENTER': 'DCI_IMPLEMENTER',
     'DCI_IMPLEMENTER': 'DCI_IMPLEMENTER',
-    'OPS': 'OPS_TEAM',
-    'OPS TEAM': 'OPS_TEAM',
-    'OPS_TEAM': 'OPS_TEAM'
+    // OPS-routed designations now collapse into IT_OPS
+    'OPS': 'IT_OPS',
+    'OPS TEAM': 'IT_OPS',
+    'OPS_TEAM': 'IT_OPS'
 };
 
 /**

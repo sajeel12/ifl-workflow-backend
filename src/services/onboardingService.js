@@ -154,7 +154,10 @@ export const handleDCIImplementation = async (token, filePaths, implementerName)
             currentStageToken: newToken
         });
         await logTimelineEvent(request.id, 'DCI Implementation Completed', 'DCIImplementer', `Implemented by ${implementerName}`);
-        const opsEmail = await RecipientService.get('OPS_TEAM', { location: request.location });
+        // Per client requirement: the IT Ops user who handled Step 2 is also
+        // responsible for Step 12 (post-desk-setup verification), so routing
+        // for OPS verification uses IT_OPS — not a separate OPS_TEAM group.
+        const opsEmail = await RecipientService.get('IT_OPS', { location: request.location });
         await sendStageEmail(opsEmail, request, newToken, 'OPS_ACTION');
         return request;
     } catch (err) {
@@ -194,7 +197,7 @@ export const handleOPSAction = async (token, checklistData, opsName) => {
 /**
  * Send final completion notification to admin-configured recipient list.
  * Recipients are stored in SystemConfig under key `completion_notification_recipients`.
- * Falls back to DCI_MANAGER + OPS_TEAM recipients if not configured.
+ * Falls back to DCI_MANAGER + IT_OPS recipients if not configured.
  */
 const sendCompletionNotification = async (request) => {
     let recipients = [];
@@ -209,11 +212,11 @@ const sendCompletionNotification = async (request) => {
         logger.warn(`[Onboarding] Could not load completion recipients config: ${e.message}`);
     }
 
-    // Fallback: use DCI Manager + OPS Team as default recipients
+    // Fallback: use DCI Manager + IT Operations (which now also covers OPS verification)
     if (recipients.length === 0) {
         const dciMgr = await RecipientService.get('DCI_MANAGER', { location: request.location });
-        const opsTeam = await RecipientService.get('OPS_TEAM', { location: request.location });
-        recipients = [dciMgr, opsTeam].filter(Boolean);
+        const itOps = await RecipientService.get('IT_OPS', { location: request.location });
+        recipients = [dciMgr, itOps].filter(Boolean);
     }
 
     if (recipients.length === 0) {

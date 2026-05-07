@@ -82,8 +82,9 @@
         body: JSON.stringify({ enabled, expression })
       });
       const json = await res.json();
-      json.success ? alert(json.message) : alert(`Error: ${json.error}`);
-    } catch { alert('Network error while updating config'); }
+      if (json.success) IflDialog.success(json.message || 'Schedule updated.');
+      else IflDialog.error(json.error || 'Failed to update schedule.');
+    } catch { IflDialog.error('Network error while updating config.'); }
     finally { btn.disabled = false; btn.innerText = 'Save Schedule'; }
   }
 
@@ -93,8 +94,16 @@
     try {
       const res = await fetch('/admin/sync-now', { method:'POST', headers:{'Content-Type':'application/json'} });
       const json = await res.json();
-      if (json.success) { alert(json.message); window.location.reload(); }
-      else { alert(`Error: ${json.error}`); btn.disabled = false; btn.innerText = '↺ Force Sync Now'; }
-    } catch { alert('Network error'); btn.disabled = false; btn.innerText = '↺ Force Sync Now'; }
+      if (json.success) {
+        await IflDialog.success(json.message || 'Sync completed.');
+        window.location.reload();
+      } else {
+        IflDialog.error(json.error || 'Sync failed.');
+        btn.disabled = false; btn.innerText = '↺ Force Sync Now';
+      }
+    } catch {
+      IflDialog.error('Network error. Please retry.');
+      btn.disabled = false; btn.innerText = '↺ Force Sync Now';
+    }
   }
 </script>

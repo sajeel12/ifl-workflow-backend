@@ -12,53 +12,42 @@
     <div>
       <strong>Fallback:</strong> Primary first; after 2 days, Secondary takes over.
       <strong>Cross-backup:</strong> DCI Manager ↔ IT HOD cover each other.
-      <strong>Per-location:</strong> overrides apply only when an employee's <em>location</em> matches; otherwise the Default config is used.
+      <strong>Per-location:</strong> only the <em>IT Operations</em> role supports location-based overrides
+      (the IT Ops user who configures services in Step 2 also handles the OPS verification in Step 12).
+      All other roles (DCI Team, DCI Manager, IT HOD, DCI Implementer) are configured globally and apply
+      to every location.
     </div>
   </div>
 
-  <!-- ── Location selector ───────────────────────────────────── -->
+  <!-- ── Card-scoped styles for the IT-Ops location picker ─────── -->
   <style>
-    .loc-bar {
-      display: flex; flex-wrap: wrap; gap: 10px;
-      background: #fff; border: 1px solid var(--a-border); border-radius: 10px;
-      padding: 14px 18px; margin: 16px 0 22px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-      align-items: center;
+    .itops-loc-row {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--a-surface-2);
+      border: 1px solid var(--a-border);
+      border-radius: var(--a-radius-sm);
+      padding: 10px 12px;
+      margin-bottom: 14px;
     }
-    .loc-bar__label {
-      font-size: .78rem; font-weight: 700; color: var(--a-text-muted);
-      text-transform: uppercase; letter-spacing: .04em; margin-right: 4px;
+    .itops-loc-row__label {
+      font-size: .72rem; font-weight: 700; color: var(--a-text-muted);
+      letter-spacing: .04em; text-transform: uppercase; flex: 0 0 auto;
     }
-    .loc-chip {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 7px 14px; border-radius: 999px;
-      background: var(--a-surface-2); color: var(--a-text);
-      border: 1px solid var(--a-border); cursor: pointer;
-      font-size: .85rem; font-weight: 500;
-      transition: all .15s ease;
-      user-select: none;
+    .itops-loc-select {
+      flex: 1; min-width: 160px;
+      padding: 7px 10px;
+      border: 1px solid var(--a-border); border-radius: var(--a-radius-sm);
+      background: #fff; color: var(--a-text); font-size: .88rem;
     }
-    .loc-chip:hover { background: var(--a-bg-hover); border-color: var(--a-brand); }
-    .loc-chip.is-active {
-      background: var(--a-brand); color: #fff; border-color: var(--a-brand);
-      box-shadow: 0 2px 6px rgba(0, 120, 212, .25);
-    }
-    .loc-chip__star { font-size: .9rem; opacity: .85; }
-    .loc-chip--default { font-weight: 700; }
-    .loc-loading-spin {
-      width: 12px; height: 12px; border: 2px solid var(--a-border);
-      border-top-color: var(--a-brand); border-radius: 50%;
-      animation: spin .7s linear infinite; display: inline-block;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .a-card-override-badge {
+    .itops-loc-select:focus { outline: 2px solid var(--a-brand); outline-offset: -1px; }
+    .itops-scope-badge {
       display: inline-block; font-size: .68rem; font-weight: 700;
       padding: 2px 8px; border-radius: 999px;
       text-transform: uppercase; letter-spacing: .04em;
-      margin-left: 8px;
+      margin-left: 8px; flex: 0 0 auto;
     }
-    .a-card-override-badge.is-override { background: #dbeafe; color: #1d4ed8; }
-    .a-card-override-badge.is-default  { background: #f1f5f9; color: #64748b; }
+    .itops-scope-badge.is-override { background: #dbeafe; color: #1d4ed8; }
+    .itops-scope-badge.is-default  { background: #f1f5f9; color: #64748b; }
     .a-clear-override-btn {
       background: transparent; border: 1px solid var(--a-red);
       color: var(--a-red); padding: 6px 12px;
@@ -68,23 +57,12 @@
     .a-clear-override-btn:hover { background: var(--a-red-bg); }
   </style>
 
-  <div class="loc-bar" id="locBar">
-    <span class="loc-bar__label">Configure for</span>
-    <span class="loc-chip loc-chip--default is-active" data-location=""
-          onclick="selectLocation(this, '')">
-      <span class="loc-chip__star">★</span> Default <span style="opacity:.7;font-weight:500;">(All Locations)</span>
-    </span>
-    <span class="loc-loading-spin" id="locLoadingSpin" style="display:none;"></span>
-  </div>
-
-  <div id="locContextNote" style="margin:0 0 14px;font-size:.85rem;color:var(--a-text-muted);">
-    Editing the <strong>Default</strong> config — used when no per-location override exists.
-  </div>
-
-  <!-- Approver cards (initial render = global defaults; JS replaces innerHTML on location switch) -->
+  <!-- Approver cards — one per role, server-rendered with the GLOBAL config.
+       The IT Operations card has an extra in-card location dropdown that
+       client-side switches between Default + per-location overrides. -->
   <div class="a-approver-grid" id="approverGrid">
     <% approvers.forEach(function(ap) { %>
-    <div class="a-approver-card" data-id="<%= ap.id %>">
+    <div class="a-approver-card" data-id="<%= ap.id %>" data-rolekey="<%= ap.roleKey %>">
 
       <!-- Card header -->
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
@@ -107,6 +85,25 @@
       <!-- Description -->
       <% if (ap.description) { %>
       <p style="font-size:.83rem;color:var(--a-text-muted);margin:0 0 16px;line-height:1.55;"><%= ap.description %></p>
+      <% } %>
+
+      <%
+      // Only the IT Operations card gets the in-card location picker.
+      // Selecting a location swaps Primary/Secondary fields to that
+      // location's override (or shows the global default if none exists).
+      %>
+      <% if (ap.roleKey === 'IT_OPS' && typeof locations !== 'undefined' && locations.length) { %>
+        <div class="itops-loc-row" data-itops-card-id="<%= ap.id %>">
+          <span class="itops-loc-row__label">Configure for</span>
+          <select id="itops-loc-<%= ap.id %>" class="itops-loc-select"
+                  onchange="onItOpsLocationChange(<%= ap.id %>)">
+            <option value="">★ Default (All Locations)</option>
+            <% locations.forEach(function(loc) { %>
+              <option value="<%= loc %>"><%= loc %></option>
+            <% }); %>
+          </select>
+          <span id="itops-scope-<%= ap.id %>" class="itops-scope-badge is-default">Default</span>
+        </div>
       <% } %>
 
       <!-- ── PRIMARY ── -->
@@ -398,19 +395,28 @@ function onInput(id, el) {
   document.getElementById('st-' + id).textContent = '';
 }
 
-// ── Location state ─────────────────────────────────────────
-// '' === Default / global config. Anything else = per-location override.
-let currentLocation = '';
-let cardCache = []; // Last loaded items array, used to look up roleKey by id when saving
+// ── In-card scope (IT Operations only) ─────────────────────────
+// itOpsScope[id] holds the location string currently being edited for that
+// IT_OPS card. Empty string === "Default" (global config). DCI/HOD/etc. cards
+// don't track scope at all — they're always global.
+const itOpsScope = {};
+// Global-config snapshot per IT_OPS card so we can restore the defaults when
+// the user flips back to "Default" without re-fetching.
+const itOpsGlobalSnapshot = {};
 
-async function save(idOrIndex) {
-  // For default location we keep the original behavior — id is the
-  // WorkflowApproverConfig.id and we PUT to /workflow-approvers/:id.
-  if (!currentLocation) {
-    return saveGlobal(idOrIndex);
-  }
-  // Per-location → upsert by (roleKey, location).
-  return saveLocation(idOrIndex);
+function escapeHTML(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Single entry-point for the Save button on every card. IT_OPS cards branch
+// on the per-card scope; all other roles always save globally.
+async function save(id) {
+  const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+  const roleKey = card && card.dataset.rolekey;
+  const scope = itOpsScope[id] || '';
+  if (roleKey === 'IT_OPS' && scope) return saveItOpsOverride(id, scope);
+  return saveGlobal(id);
 }
 
 async function saveGlobal(id) {
@@ -429,7 +435,7 @@ async function saveGlobal(id) {
   setStatus(id, 'ing', 'Saving…');
 
   try {
-    const res  = await fetch('/admin/workflow-approvers/' + id, {
+    const res = await fetch('/admin/workflow-approvers/' + id, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -445,6 +451,11 @@ async function saveGlobal(id) {
       setStatus(id, 'ok', 'Saved ✓');
       showToast('ok', data.message || 'Approver updated successfully');
       document.getElementById('email-' + id).classList.toggle('a-input--warn', !email);
+      // Refresh the IT-Ops global snapshot so the "Default" view is current.
+      const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+      if (card && card.dataset.rolekey === 'IT_OPS') {
+        itOpsGlobalSnapshot[id] = { approverEmail: email, approverName: name, secondaryEmail, secondaryName, isActive: active };
+      }
     } else {
       setStatus(id, 'err', data.error || 'Failed');
       showToast('err', data.error || 'Save failed');
@@ -457,17 +468,14 @@ async function saveGlobal(id) {
   }
 }
 
-async function saveLocation(id) {
-  const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
-  const roleKey = card && card.dataset.rolekey;
-  if (!roleKey) { showToast('err', 'Internal error — missing roleKey'); return; }
-
+// Save an IT_OPS override for a specific location.
+async function saveItOpsOverride(id, location) {
   const email          = document.getElementById('email-'  + id).value.trim();
   const name           = document.getElementById('name-'   + id).value.trim();
   const secondaryEmail = document.getElementById('semail-' + id).value.trim();
   const secondaryName  = document.getElementById('sname-'  + id).value.trim();
   const active         = document.getElementById('active-' + id).checked;
-  const btn            = card.querySelector('.btn');
+  const btn            = document.querySelector(`.a-approver-card[data-id="${id}"] .btn`);
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
@@ -481,8 +489,8 @@ async function saveLocation(id) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        roleKey,
-        location: currentLocation,
+        roleKey: 'IT_OPS',
+        location,
         approverEmail:  email,
         approverName:   name,
         secondaryEmail: secondaryEmail,
@@ -494,8 +502,8 @@ async function saveLocation(id) {
     if (data.success) {
       setStatus(id, 'ok', 'Saved ✓');
       showToast('ok', data.message || 'Override saved');
-      // Reload to reflect the new override status (badge, clear button)
-      await loadApproversForLocation(currentLocation);
+      // Re-load to refresh the scope badge ("Override" instead of "Inherits default").
+      await loadItOpsForLocation(id, location);
     } else {
       setStatus(id, 'err', data.error || 'Failed');
       showToast('err', data.error || 'Save failed');
@@ -508,31 +516,29 @@ async function saveLocation(id) {
   }
 }
 
-async function clearOverride(id) {
-  if (!currentLocation) return;
-  const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
-  const roleKey = card && card.dataset.rolekey;
-  if (!roleKey) return;
-  if (!confirm(`Clear "${roleKey}" override for "${currentLocation}"? Will fall back to the Default config.`)) return;
-
+// Clear an IT_OPS override (revert this location to the global default).
+async function clearItOpsOverride(id) {
+  const location = itOpsScope[id];
+  if (!location) return;
+  const ok = await IflDialog.confirm(
+    `Clear the IT Operations override for "${location}"? Future requests from this location will use the Default config.`,
+    { title: 'Clear override', okText: 'Clear Override', danger: true }
+  );
+  if (!ok) return;
   try {
     const res = await fetch('/admin/workflow-approvers/by-location', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        roleKey,
-        location: currentLocation,
-        approverEmail: '',
-        approverName: '',
-        secondaryEmail: '',
-        secondaryName: '',
+        roleKey: 'IT_OPS', location,
+        approverEmail: '', approverName: '', secondaryEmail: '', secondaryName: '',
         isActive: true
       })
     });
     const data = await res.json();
     if (data.success) {
       showToast('ok', data.message || 'Override cleared');
-      await loadApproversForLocation(currentLocation);
+      await loadItOpsForLocation(id, location);
     } else {
       showToast('err', data.error || 'Failed to clear');
     }
@@ -541,159 +547,112 @@ async function clearOverride(id) {
   }
 }
 
-// ── Location chips (loaded from /admin/locations) ──────────
-async function initLocationChips() {
-  try {
-    const r = await fetch('/admin/locations');
-    const j = await r.json();
-    if (!j.success || !Array.isArray(j.data)) return;
-    const bar = document.getElementById('locBar');
-    const spin = document.getElementById('locLoadingSpin');
-    j.data.forEach(loc => {
-      const chip = document.createElement('span');
-      chip.className = 'loc-chip';
-      chip.dataset.location = loc;
-      chip.textContent = loc;
-      chip.addEventListener('click', () => selectLocation(chip, loc));
-      bar.insertBefore(chip, spin);
-    });
-  } catch (e) {
-    console.warn('[approvers] could not load locations:', e);
+// Triggered when the in-card location dropdown changes.
+async function onItOpsLocationChange(id) {
+  const sel = document.getElementById('itops-loc-' + id);
+  if (!sel) return;
+  const location = sel.value || '';
+
+  // Cache the global snapshot the first time we leave Default so we can
+  // restore it cheaply if the user picks Default again.
+  if (!itOpsGlobalSnapshot[id]) {
+    itOpsGlobalSnapshot[id] = {
+      approverEmail:  document.getElementById('email-'  + id).value,
+      approverName:   document.getElementById('name-'   + id).value,
+      secondaryEmail: document.getElementById('semail-' + id).value,
+      secondaryName:  document.getElementById('sname-'  + id).value,
+      isActive:       document.getElementById('active-' + id).checked
+    };
   }
+
+  itOpsScope[id] = location;
+
+  if (!location) {
+    // Default — restore the global snapshot, no fetch needed.
+    applyItOpsCardData(id, itOpsGlobalSnapshot[id], { isOverride: false, isDefault: true });
+    return;
+  }
+  await loadItOpsForLocation(id, location);
 }
 
-function selectLocation(chipEl, loc) {
-  document.querySelectorAll('.loc-chip').forEach(c => c.classList.remove('is-active'));
-  chipEl.classList.add('is-active');
-  currentLocation = loc;
-  const note = document.getElementById('locContextNote');
-  note.innerHTML = loc
-    ? `Editing override for <strong>${escapeHTML(loc)}</strong> — empty cards inherit from the Default config. Save to create an override; clear to remove it.`
-    : 'Editing the <strong>Default</strong> config — used when no per-location override exists.';
-  loadApproversForLocation(loc);
-}
-
-async function loadApproversForLocation(loc) {
-  const grid = document.getElementById('approverGrid');
-  const spin = document.getElementById('locLoadingSpin');
-  spin.style.display = 'inline-block';
+async function loadItOpsForLocation(id, location) {
+  setStatus(id, 'ing', 'Loading…');
   try {
-    const url = '/admin/workflow-approvers/by-location' + (loc ? `?location=${encodeURIComponent(loc)}` : '');
-    const r = await fetch(url);
+    const r = await fetch('/admin/workflow-approvers/by-location?location=' + encodeURIComponent(location));
     const j = await r.json();
-    if (!j.success) { showToast('err', j.error || 'Failed to load'); return; }
-    cardCache = j.data;
-    grid.innerHTML = j.data.map((ap, i) => renderCardHTML(ap, i)).join('');
+    if (!j.success || !Array.isArray(j.data)) {
+      showToast('err', j.error || 'Failed to load location config');
+      return;
+    }
+    const itOps = j.data.find(x => x.roleKey === 'IT_OPS');
+    if (!itOps) {
+      showToast('err', 'IT Operations row not found in response');
+      return;
+    }
+    applyItOpsCardData(id, itOps, { isOverride: !!itOps.isOverride, isDefault: false });
+    setStatus(id, '', '');
   } catch (e) {
     console.error(e);
     showToast('err', 'Network error.');
-  } finally {
-    spin.style.display = 'none';
+    setStatus(id, 'err', 'Load failed');
   }
 }
 
-function escapeHTML(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-// Render a card identical in structure to the EJS one.
-// In default mode we use ap.id (the real DB primary key) so that
-// saveGlobal() can PUT to /workflow-approvers/:id correctly.
-// In location mode we use the array index — save goes via roleKey instead.
-function renderCardHTML(ap, i) {
-  const id = currentLocation ? i : ap.id;
-  const isDefault = !currentLocation;
-  const badgeHTML = isDefault
-    ? ''
-    : (ap.isOverride
-        ? '<span class="a-card-override-badge is-override">Override</span>'
-        : '<span class="a-card-override-badge is-default">Inherits default</span>');
-  const clearBtnHTML = (!isDefault && ap.isOverride)
-    ? `<button class="a-clear-override-btn" onclick="clearOverride(${id})">Clear Override</button>`
-    : '';
-  return `
-    <div class="a-approver-card" data-id="${id}" data-rolekey="${escapeHTML(ap.roleKey)}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
-        <div>
-          <div style="font-weight:700;font-size:.95rem;color:var(--a-text);margin-bottom:5px;">
-            ${escapeHTML(ap.label)}${badgeHTML}
-          </div>
-          ${ap.workflowStage ? `<span class="a-stage">${escapeHTML(ap.workflowStage)}</span>` : ''}
-        </div>
-        <label class="a-toggle" title="Enable / disable this role">
-          <input type="checkbox" id="active-${id}" ${ap.isActive ? 'checked' : ''} style="display:none" onchange="onToggle(${id})">
-          <div class="a-pill ${ap.isActive ? 'a-pill--on' : ''}" id="pill-${id}"></div>
-          <span class="a-toggle__text" id="pill-lbl-${id}">${ap.isActive ? 'Active' : 'Inactive'}</span>
-        </label>
-      </div>
-      ${ap.description ? `<p style="font-size:.83rem;color:var(--a-text-muted);margin:0 0 16px;line-height:1.55;">${escapeHTML(ap.description)}</p>` : ''}
-      <div class="approver-section" style="margin-bottom:14px;">
-        <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span style="font-weight:700;font-size:.78rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Primary Approver</span>
-          ${ap.primaryExpiredAt ? '<span style="font-size:.7rem;background:var(--a-red-bg);color:var(--a-red);padding:2px 8px;border-radius:var(--a-radius-sm);font-weight:600;">EXPIRED</span>' : ''}
-        </div>
-        <div class="a-field" style="margin-bottom:8px;">
-          <input type="text" id="psearch-${id}" class="a-input"
-                 placeholder="🔍 Search employee directory (auto-fills primary)…"
-                 autocomplete="off"
-                 oninput="onApproverSearch(${id}, 'primary', this.value)"
-                 onkeydown="onApproverKey(event)"
-                 onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(${id}, 'primary', this.value.trim())">
-        </div>
-        <div class="a-field-row">
-          <div class="a-field" style="margin:0;">
-            <label class="a-label">Primary Email</label>
-            <input type="email" id="email-${id}" class="a-input ${!ap.approverEmail ? 'a-input--warn' : ''}"
-                   value="${escapeHTML(ap.approverEmail || '')}"
-                   placeholder="primary@company.com"
-                   oninput="onInput(${id}, this)">
-          </div>
-          <div class="a-field" style="margin:0;">
-            <label class="a-label">Primary Name</label>
-            <input type="text" id="name-${id}" class="a-input"
-                   value="${escapeHTML(ap.approverName || '')}"
-                   placeholder="Team / Person Name">
-          </div>
-        </div>
-      </div>
-      <div class="approver-section" style="padding-top:12px;border-top:1px dashed var(--a-border);">
-        <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span style="font-weight:700;font-size:.78rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Secondary (Fallback)</span>
-          <span style="font-size:.7rem;color:var(--a-text-muted);">Activates after 2 days</span>
-        </div>
-        <div class="a-field" style="margin-bottom:8px;">
-          <input type="text" id="ssearch-${id}" class="a-input"
-                 placeholder="🔍 Search employee directory (auto-fills secondary)…"
-                 autocomplete="off"
-                 oninput="onApproverSearch(${id}, 'secondary', this.value)"
-                 onkeydown="onApproverKey(event)"
-                 onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(${id}, 'secondary', this.value.trim())">
-        </div>
-        <div class="a-field-row">
-          <div class="a-field" style="margin:0;">
-            <label class="a-label">Secondary Email</label>
-            <input type="email" id="semail-${id}" class="a-input"
-                   value="${escapeHTML(ap.secondaryEmail || '')}"
-                   placeholder="secondary@company.com"
-                   oninput="document.getElementById('st-' + ${id}).textContent = '';">
-          </div>
-          <div class="a-field" style="margin:0;">
-            <label class="a-label">Secondary Name</label>
-            <input type="text" id="sname-${id}" class="a-input"
-                   value="${escapeHTML(ap.secondaryName || '')}"
-                   placeholder="Team / Person Name">
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--a-border);gap:8px;">
-        <button class="btn btn-primary" style="padding:8px 22px;" onclick="save(${id})">${isDefault ? 'Save' : (ap.isOverride ? 'Update Override' : 'Save Override')}</button>
-        <div style="display:flex;align-items:center;gap:10px;">
-          ${clearBtnHTML}
-          <span class="a-save-status" id="st-${id}"></span>
-        </div>
-      </div>
-    </div>`;
+// Push a data object into the IT_OPS card's input fields and update its
+// scope badge / save-button label / clear-button visibility.
+function applyItOpsCardData(id, ap, { isOverride, isDefault }) {
+  if (!ap) return;
+  document.getElementById('email-'  + id).value = ap.approverEmail  || '';
+  document.getElementById('name-'   + id).value = ap.approverName   || '';
+  document.getElementById('semail-' + id).value = ap.secondaryEmail || '';
+  document.getElementById('sname-'  + id).value = ap.secondaryName  || '';
+  // Active toggle reflects the live row's state
+  const active = document.getElementById('active-' + id);
+  if (active && typeof ap.isActive === 'boolean') {
+    active.checked = ap.isActive;
+    document.getElementById('pill-' + id).classList.toggle('a-pill--on', ap.isActive);
+    document.getElementById('pill-lbl-' + id).textContent = ap.isActive ? 'Active' : 'Inactive';
+  }
+  // Scope badge
+  const badge = document.getElementById('itops-scope-' + id);
+  if (badge) {
+    if (isDefault) {
+      badge.className = 'itops-scope-badge is-default';
+      badge.textContent = 'Default';
+    } else if (isOverride) {
+      badge.className = 'itops-scope-badge is-override';
+      badge.textContent = 'Override';
+    } else {
+      badge.className = 'itops-scope-badge is-default';
+      badge.textContent = 'Inherits default';
+    }
+  }
+  // Save button label + Clear-Override button
+  const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+  if (card) {
+    const saveBtn = card.querySelector('.btn.btn-primary');
+    if (saveBtn) {
+      const span = saveBtn.querySelector('.ifl-btn-original') || saveBtn;
+      const txt = isDefault ? 'Save' : (isOverride ? 'Update Override' : 'Save Override');
+      span.textContent = txt;
+    }
+    let clearBtn = card.querySelector('.a-clear-override-btn');
+    if (!isDefault && isOverride) {
+      if (!clearBtn) {
+        const stEl = document.getElementById('st-' + id);
+        clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'a-clear-override-btn';
+        clearBtn.textContent = 'Clear Override';
+        clearBtn.onclick = () => clearItOpsOverride(id);
+        if (stEl && stEl.parentNode) stEl.parentNode.insertBefore(clearBtn, stEl);
+      }
+    } else if (clearBtn) {
+      clearBtn.remove();
+    }
+  }
+  // Reset the warn ring on email
+  document.getElementById('email-' + id).classList.toggle('a-input--warn', !ap.approverEmail);
 }
 
 function setStatus(id, cls, txt) {

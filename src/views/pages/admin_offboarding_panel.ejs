@@ -193,13 +193,13 @@
     const reqId   = document.getElementById('modalManagerReqId').value;
     const agentId = document.getElementById('modalAgentSelect').value;
     const remarks = document.getElementById('modalManagerRemarks').value;
-    if (!agentId) { alert('Please select an agent'); return; }
+    if (!agentId) { IflDialog.warning('Please select an agent.'); return; }
     try {
       const res = await fetch('/api/offboarding/approve', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:reqId, assignedSystemAgentId:agentId, managerRemarks:remarks }) });
       const data = await res.json();
-      if (data.success) { document.getElementById('managerApprovalModal').classList.remove('active'); loadManagerRequests(); }
-      else alert(data.error);
-    } catch { alert('Network Error'); }
+      if (data.success) { document.getElementById('managerApprovalModal').classList.remove('active'); loadManagerRequests(); IflDialog.success('Request approved and forwarded.'); }
+      else IflDialog.error(data.error || 'Failed to approve.');
+    } catch { IflDialog.error('Network error. Please retry.'); }
   }
 
   async function loadSystemRequests() {
@@ -235,9 +235,9 @@
     try {
       const res = await fetch('/api/offboarding/complete-task', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:reqId, adRevoked:adCheck, physicalAccessRevoked:physCheck, checklistNotes:notes }) });
       const data = await res.json();
-      if (data.success) { document.getElementById('systemTaskModal').classList.remove('active'); loadSystemRequests(); }
-      else alert(data.error);
-    } catch { alert('Network Error'); }
+      if (data.success) { document.getElementById('systemTaskModal').classList.remove('active'); loadSystemRequests(); IflDialog.success('Task completed.'); }
+      else IflDialog.error(data.error || 'Failed to complete task.');
+    } catch { IflDialog.error('Network error. Please retry.'); }
   }
 
   async function loadHistoryRequests() {

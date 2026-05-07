@@ -173,6 +173,79 @@
         .comment-box.error {
             border-left: 4px solid #D13438;
         }
+
+        /* ─── IflDialog — global custom alert/confirm modal ─────────────── */
+        .ifld-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 4000;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.18s ease;
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .ifld-backdrop.is-open { opacity: 1; pointer-events: auto; }
+        .ifld-dialog {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.35);
+            padding: 28px 28px 22px;
+            min-width: 320px; max-width: 440px;
+            transform: translateY(8px) scale(0.97);
+            transition: transform 0.18s ease;
+            text-align: center;
+        }
+        .ifld-backdrop.is-open .ifld-dialog { transform: translateY(0) scale(1); }
+        .ifld-icon {
+            width: 56px; height: 56px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 14px;
+            font-size: 26px;
+        }
+        .ifld-icon svg { width: 28px; height: 28px; stroke-width: 2; }
+        .ifld-icon--info    { background: #DBEAFE; color: #1D4ED8; }
+        .ifld-icon--success { background: #DCFCE7; color: #15803D; }
+        .ifld-icon--warning { background: #FEF3C7; color: #B45309; }
+        .ifld-icon--error   { background: #FEE2E2; color: #B91C1C; }
+        .ifld-icon--confirm { background: #FEF3C7; color: #B45309; }
+        .ifld-title {
+            font-size: 1.08rem; font-weight: 700;
+            color: #0F172A; margin: 0 0 6px;
+        }
+        .ifld-message {
+            font-size: 0.92rem; color: #334155;
+            line-height: 1.5; margin: 0 0 22px;
+            white-space: pre-line; word-wrap: break-word;
+        }
+        .ifld-actions {
+            display: flex; gap: 8px; justify-content: flex-end;
+            border-top: 1px solid #E2E8F0; padding-top: 14px;
+        }
+        .ifld-actions.is-single { justify-content: center; }
+        .ifld-btn {
+            padding: 9px 20px; border-radius: 8px;
+            font-size: 0.88rem; font-weight: 600;
+            cursor: pointer; border: 1px solid transparent;
+            transition: background 0.12s, transform 0.06s;
+            min-width: 80px;
+            font-family: inherit;
+        }
+        .ifld-btn:active { transform: scale(0.97); }
+        .ifld-btn-cancel {
+            background: #F1F5F9; color: #475569;
+            border-color: #E2E8F0;
+        }
+        .ifld-btn-cancel:hover { background: #E2E8F0; }
+        .ifld-btn-confirm {
+            background: #0078D4; color: #fff;
+        }
+        .ifld-btn-confirm:hover { background: #006bb8; }
+        .ifld-btn-confirm.is-danger {
+            background: #DC2626;
+        }
+        .ifld-btn-confirm.is-danger:hover { background: #B91C1C; }
     </style>
 
     <%
@@ -313,5 +386,133 @@
                     set('Not signed in', 'SSO unavailable', false);
                 }
             })();
+        })();
+    </script>
+
+    <!-- ─── Global custom dialog (alert / confirm replacement) ─────────────
+         API:
+             await IflDialog.alert('message', { title?, variant? });
+             const ok = await IflDialog.confirm('message', { title?, okText?, cancelText?, danger? });
+             IflDialog.success('Saved');   IflDialog.error('Network error');
+         All return Promises. Pages can also keep using window.alert(...) —
+         it's transparently delegated to IflDialog.alert. window.confirm is
+         intentionally NOT overridden (it has to stay sync for legacy inline
+         handlers); confirm call-sites are migrated to IflDialog.confirm.
+    -->
+    <div id="iflDialogBackdrop" class="ifld-backdrop" role="dialog" aria-hidden="true">
+      <div class="ifld-dialog" role="document">
+        <div class="ifld-icon ifld-icon--info" id="iflDialogIcon"></div>
+        <h3 class="ifld-title" id="iflDialogTitle"></h3>
+        <p class="ifld-message" id="iflDialogMessage"></p>
+        <div class="ifld-actions" id="iflDialogActions">
+          <button type="button" class="ifld-btn ifld-btn-cancel" id="iflDialogCancel">Cancel</button>
+          <button type="button" class="ifld-btn ifld-btn-confirm" id="iflDialogConfirm">OK</button>
+        </div>
+      </div>
+    </div>
+    <script>
+        (function () {
+            const ICONS = {
+                info:    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+                success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+                warning: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+                error:   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+                confirm: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+            };
+            const DEFAULT_TITLES = {
+                info:    'Information',
+                success: 'Success',
+                warning: 'Warning',
+                error:   'Error',
+                confirm: 'Are you sure?'
+            };
+
+            const backdrop = document.getElementById('iflDialogBackdrop');
+            const iconEl   = document.getElementById('iflDialogIcon');
+            const titleEl  = document.getElementById('iflDialogTitle');
+            const msgEl    = document.getElementById('iflDialogMessage');
+            const actEl    = document.getElementById('iflDialogActions');
+            const cancelBtn  = document.getElementById('iflDialogCancel');
+            const confirmBtn = document.getElementById('iflDialogConfirm');
+
+            let currentResolve = null;
+            let currentMode = null;
+            let escListener = null;
+
+            function close(result) {
+                backdrop.classList.remove('is-open');
+                backdrop.setAttribute('aria-hidden', 'true');
+                if (escListener) {
+                    document.removeEventListener('keydown', escListener);
+                    escListener = null;
+                }
+                if (currentResolve) {
+                    const r = currentResolve; currentResolve = null;
+                    r(result);
+                }
+            }
+
+            function show(mode, message, opts) {
+                opts = opts || {};
+                const variant = opts.variant || (mode === 'confirm' ? 'confirm' : 'info');
+                const title = opts.title != null ? opts.title : DEFAULT_TITLES[variant];
+
+                iconEl.className = 'ifld-icon ifld-icon--' + variant;
+                iconEl.innerHTML = ICONS[variant] || ICONS.info;
+
+                titleEl.textContent = title || '';
+                titleEl.style.display = title ? '' : 'none';
+                msgEl.textContent = String(message == null ? '' : message);
+
+                if (mode === 'confirm') {
+                    actEl.classList.remove('is-single');
+                    cancelBtn.style.display = '';
+                    cancelBtn.textContent  = opts.cancelText || 'Cancel';
+                    confirmBtn.textContent = opts.okText || 'OK';
+                    confirmBtn.classList.toggle('is-danger', !!opts.danger);
+                } else {
+                    actEl.classList.add('is-single');
+                    cancelBtn.style.display = 'none';
+                    confirmBtn.textContent = opts.okText || 'OK';
+                    confirmBtn.classList.remove('is-danger');
+                }
+
+                currentMode = mode;
+                backdrop.setAttribute('aria-hidden', 'false');
+                requestAnimationFrame(() => backdrop.classList.add('is-open'));
+                setTimeout(() => confirmBtn.focus(), 50);
+
+                escListener = (e) => {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        close(mode === 'confirm' ? false : undefined);
+                    } else if (e.key === 'Enter' && mode !== 'confirm') {
+                        e.preventDefault();
+                        close(undefined);
+                    }
+                };
+                document.addEventListener('keydown', escListener);
+
+                return new Promise(resolve => { currentResolve = resolve; });
+            }
+
+            confirmBtn.addEventListener('click', () => close(currentMode === 'confirm' ? true : undefined));
+            cancelBtn.addEventListener('click',  () => close(false));
+            backdrop.addEventListener('mousedown', (e) => {
+                if (e.target === backdrop) close(currentMode === 'confirm' ? false : undefined);
+            });
+
+            window.IflDialog = {
+                alert:   (msg, opts) => show('alert',   msg, opts),
+                confirm: (msg, opts) => show('confirm', msg, opts),
+                success: (msg, opts) => show('alert', msg, Object.assign({ variant: 'success' }, opts)),
+                error:   (msg, opts) => show('alert', msg, Object.assign({ variant: 'error'   }, opts)),
+                warning: (msg, opts) => show('alert', msg, Object.assign({ variant: 'warning' }, opts))
+            };
+
+            // Transparent override of legacy alert(...) calls. window.confirm
+            // is left as the browser default — confirm sites must migrate to
+            // IflDialog.confirm explicitly because the new API is async.
+            window.alert = (msg) => { IflDialog.alert(msg); };
         })();
     </script>

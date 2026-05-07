@@ -636,7 +636,7 @@ async function submitAssignment(e) {
   e.preventDefault();
   const targetVal = document.getElementById('selectedEmpId').value;
   const hodId     = document.getElementById('selectedHodId').value;
-  if (!hodId) { alert('Please select an HOD from the suggestions.'); return; }
+  if (!hodId) { IflDialog.warning('Please select an HOD from the suggestions.'); return; }
   const btn = document.getElementById('btnConfirmAssign');
   btn.disabled = true; btn.innerText = 'Assigning…';
   const endpoint = assignmentContext.type === 'department' ? '/admin/assign-department-hod' : '/admin/assign-hod';
@@ -647,18 +647,28 @@ async function submitAssignment(e) {
     const res  = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const json = await res.json();
     if (json.success) { closeModal(); assignmentContext.type === 'department' ? loadDepartments() : loadEmployees(pagination.page); }
-    else alert(`Error: ${json.error}`);
-  } catch { alert('Network error'); }
+    else IflDialog.error(json.error || 'Failed to assign HOD.');
+  } catch { IflDialog.error('Network error. Please retry.'); }
   finally { btn.disabled = false; btn.innerText = 'Confirm Assignment'; }
 }
 
 async function removeHod(empId, empName) {
-  if (!confirm(`Remove HOD assignment from ${empName}?`)) return;
+  const ok = await IflDialog.confirm(`Remove HOD assignment from ${empName}?`, {
+    title: 'Remove HOD',
+    okText: 'Remove',
+    danger: true
+  });
+  if (!ok) return;
   try {
     const res  = await fetch('/admin/remove-hod', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ employeeId: empId }) });
     const json = await res.json();
-    json.success ? loadEmployees() : alert(`Error: ${json.error}`);
-  } catch { alert('Network error'); }
+    if (json.success) {
+      loadEmployees();
+      IflDialog.success(`HOD assignment removed from ${empName}.`);
+    } else {
+      IflDialog.error(json.error || 'Could not remove HOD assignment.');
+    }
+  } catch { IflDialog.error('Network error. Please retry.'); }
 }
 
 /* ================================================================
@@ -736,8 +746,14 @@ async function saveEmployeeDetails(e) {
   try {
     const res  = await fetch(`/admin/employee/${empId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
     const json = await res.json();
-    json.success ? (closeDetailsModal(), loadEmployees()) : alert(`Error: ${json.error}`);
-  } catch { alert('Network error'); }
+    if (json.success) {
+      closeDetailsModal();
+      loadEmployees();
+      IflDialog.success('Employee details saved.');
+    } else {
+      IflDialog.error(json.error || 'Could not save employee details.');
+    }
+  } catch { IflDialog.error('Network error. Please retry.'); }
   finally { btn.disabled = false; btn.innerText = 'Save Changes'; }
 }
 
