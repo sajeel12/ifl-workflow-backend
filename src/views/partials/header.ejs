@@ -360,15 +360,16 @@
         }
     </style>
 
-    <% // Pages that include this partial via {adminCss: true} (the admin shell) // get admin.css loaded inside <head>
-        so its rules apply before any body
-        // content paints. Without this, modal-overlay defaults to visible and
-        // nav SVGs render at their natural large size for the first frame —
-        // a classic FOUC glitch during page navigation.
-        %>
-        <% if (typeof adminCss !=='undefined' && adminCss) { %>
-            <link rel="stylesheet" href="/css/admin.css">
-            <% } %>
+    <%#
+        Pages that include this partial via {adminCss: true} (the admin shell)
+        get admin.css loaded inside <head> so its rules apply before any body
+        content paints. Without this, modal-overlay defaults to visible and
+        nav SVGs render at their natural large size for the first frame —
+        a classic FOUC glitch during page navigation.
+    %>
+    <% if (typeof adminCss !== 'undefined' && adminCss) { %>
+        <link rel="stylesheet" href="/css/admin.css">
+    <% } %>
 </head>
 
 <body>

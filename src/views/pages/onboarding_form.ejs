@@ -1,6 +1,62 @@
 <%- include('../partials/header', { title: 'IT Onboarding Workflow' }) %>
     <link rel="stylesheet" href="/css/modern.css">
 
+    <%
+    // When an action token is present (email-link click), the form must be
+    // hidden until the SSO email is verified against the expected approver.
+    // The body starts in "is-verifying" state; the verification JS lifts
+    // this once the check passes — or the rejection screen replaces it.
+    %>
+    <% if (token && typeof expectedAssigneeEmail !== 'undefined' && expectedAssigneeEmail) { %>
+    <style>
+        body.ifl-is-verifying > *:not(#iflVerifyOverlay) { visibility: hidden !important; }
+        #iflVerifyOverlay {
+            position: fixed; inset: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+            z-index: 9999;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            transition: opacity 0.25s ease;
+        }
+        #iflVerifyOverlay.is-fading-out { opacity: 0; pointer-events: none; }
+        #iflVerifyOverlay .iflv-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 40px 48px;
+            box-shadow: 0 12px 40px -8px rgba(15, 76, 129, 0.18);
+            display: flex; flex-direction: column; align-items: center; gap: 18px;
+            min-width: 320px;
+        }
+        #iflVerifyOverlay .iflv-spinner {
+            width: 56px; height: 56px;
+            border: 4px solid #e0f2fe;
+            border-top-color: #0078D4;
+            border-radius: 50%;
+            animation: iflv-spin 0.8s linear infinite;
+        }
+        @keyframes iflv-spin { to { transform: rotate(360deg); } }
+        #iflVerifyOverlay .iflv-title { font-size: 1.05rem; font-weight: 700; color: #0F172A; margin: 0; }
+        #iflVerifyOverlay .iflv-sub   { font-size: 0.88rem; color: #64748B; margin: 0; line-height: 1.5; text-align: center; max-width: 320px; }
+        #iflVerifyOverlay .iflv-logo  { height: 44px; opacity: 0.92; margin-bottom: 4px; }
+    </style>
+    <script>
+        // Apply the cloak immediately (before DOM parses further) so the form
+        // never paints for an unauthorized viewer.
+        document.documentElement.style.background = 'linear-gradient(135deg,#f8fafc,#e0f2fe)';
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.classList.add('ifl-is-verifying');
+        });
+    </script>
+    <div id="iflVerifyOverlay">
+        <div class="iflv-card">
+            <img src="/logo.png" alt="IFL" class="iflv-logo" onerror="this.style.display='none'">
+            <div class="iflv-spinner"></div>
+            <h3 class="iflv-title">Verifying your access…</h3>
+            <p class="iflv-sub">Please wait while we confirm you are the intended recipient of this action.</p>
+        </div>
+    </div>
+    <% } %>
+
     <!-- Header is now outside the constrained container to allow full width -->
     <header class="app-header">
         <div class="brand-section">
@@ -490,35 +546,77 @@
              script in header.ejs. Only fills empty fields so we never clobber
              values the server already rendered (token-bearing stages). */
         document.addEventListener('DOMContentLoaded', async () => {
-            if (typeof window.iflGetUser !== 'function') return;
+            const expected = <%- JSON.stringify(typeof expectedAssigneeEmail !== 'undefined' && expectedAssigneeEmail ? expectedAssigneeEmail : null) %>;
+            const overlay  = document.getElementById('iflVerifyOverlay');
+
+            // Helper: dismiss the verification cloak (only present when expected != null)
+            const liftCloak = () => {
+                document.body.classList.remove('ifl-is-verifying');
+                if (overlay) {
+                    overlay.classList.add('is-fading-out');
+                    setTimeout(() => overlay.remove(), 260);
+                }
+            };
+
+            // Helper: replace the entire page with the rejection card
+            const showRejection = (expectedEmail, actualLabel) => {
+                document.body.classList.remove('ifl-is-verifying');
+                if (overlay) overlay.remove();
+                document.body.innerHTML = `
+                  <div style="max-width:560px;margin:80px auto;padding:36px;background:#fff;border:1px solid #fee2e2;border-radius:14px;text-align:center;font-family:'Segoe UI',sans-serif;box-shadow:0 12px 40px -8px rgba(220,38,38,.18);">
+                    <div style="width:72px;height:72px;border-radius:50%;background:#fee2e2;color:#b91c1c;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 18px;">⛔</div>
+                    <h2 style="color:#b91c1c;margin:0 0 14px;font-size:1.15rem;">This page is authorized only for the intended recipient</h2>
+                    <p style="color:#475569;line-height:1.55;margin:0 0 14px;">
+                      This action link was sent to <strong>${expectedEmail}</strong>.<br>
+                      You are signed in as <strong>${actualLabel}</strong>, so you cannot act on this request.
+                    </p>
+                    <p style="color:#64748b;font-size:.9rem;">If you need to handle it on someone's behalf, please contact your administrator.</p>
+                  </div>`;
+            };
+
+            // No expected email → not an SSO-gated stage (e.g. HR initiate). Lift any cloak and exit.
+            if (!expected) {
+                liftCloak();
+                // Still attempt the standard pre-fill below
+                try {
+                    if (typeof window.iflGetUser === 'function') {
+                        const u = await window.iflGetUser();
+                        if (u) {
+                            const nameEl  = document.querySelector('input[name="requesterName"]');
+                            const emailEl = document.querySelector('input[name="requesterEmail"]');
+                            if (nameEl  && !nameEl.value)  nameEl.value  = u.displayName || u.username || '';
+                            if (emailEl && !emailEl.value) emailEl.value = u.email || '';
+                        }
+                    }
+                } catch (_) {}
+                return;
+            }
+
+            // Expected email present → mandatory SSO verification
+            if (typeof window.iflGetUser !== 'function') {
+                showRejection(expected, 'an unverified user (SSO not available on this device)');
+                return;
+            }
             try {
                 const u = await window.iflGetUser();
-                if (!u) return;
+                if (!u || !u.email) {
+                    showRejection(expected, 'an unverified user');
+                    return;
+                }
+                if (u.email.toLowerCase().trim() !== expected.toLowerCase().trim()) {
+                    showRejection(expected, u.email || u.username);
+                    return;
+                }
+                // Verified! Pre-fill any empty requester fields and reveal the form.
                 const nameEl  = document.querySelector('input[name="requesterName"]');
                 const emailEl = document.querySelector('input[name="requesterEmail"]');
                 if (nameEl  && !nameEl.value)  nameEl.value  = u.displayName || u.username || '';
                 if (emailEl && !emailEl.value) emailEl.value = u.email || '';
-
-                /* ─── Forwarded-email soft check (UX) ─────────────────────
-                     If the server told us an expected approver email for this
-                     stage and the SSO user differs, show a full-page warning
-                     immediately — without waiting for the user to attempt a
-                     submit. Hard enforcement still runs server-side at POST. */
-                const expected = <%- JSON.stringify(typeof expectedAssigneeEmail !== 'undefined' && expectedAssigneeEmail ? expectedAssigneeEmail : null) %>;
-                const actual = (u.email || '').toLowerCase().trim();
-                if (expected && actual && expected.toLowerCase().trim() !== actual) {
-                    document.body.innerHTML = `
-                      <div style="max-width:560px;margin:80px auto;padding:32px;background:#fff;border:1px solid #fee2e2;border-radius:12px;text-align:center;font-family:'Segoe UI',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.08);">
-                        <div style="width:64px;height:64px;border-radius:50%;background:#fee2e2;color:#b91c1c;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 16px;">⛔</div>
-                        <h2 style="color:#b91c1c;margin:0 0 12px;">This page is authorized only for the intended recipient</h2>
-                        <p style="color:#475569;line-height:1.55;margin:0 0 14px;">
-                          This action link was sent to <strong>${expected}</strong>.<br>
-                          You are signed in as <strong>${u.email || u.username}</strong>, so you cannot act on this request.
-                        </p>
-                        <p style="color:#64748b;font-size:.9rem;">If you need to handle it on someone's behalf, please contact your administrator.</p>
-                      </div>`;
-                }
-            } catch (_) { /* badge will surface SSO failure separately */ }
+                liftCloak();
+            } catch (e) {
+                // SSO call failed for some reason (token.aspx unreachable, network, etc.)
+                showRejection(expected, 'an unverified user (SSO check failed)');
+            }
         });
 
         /* Wrap the action-bar form so any submit click attaches the SSO
