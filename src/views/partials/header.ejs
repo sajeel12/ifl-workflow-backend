@@ -48,39 +48,73 @@
             white-space: nowrap;
             max-width: 240px;
         }
+
         .sso-badge .sso-avatar {
-            width: 26px; height: 26px; border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
             background: rgba(255, 255, 255, 0.25);
-            color: #fff; font-weight: 700; font-size: 11px;
-            display: flex; align-items: center; justify-content: center;
-            text-transform: uppercase; flex: 0 0 auto;
+            color: #fff;
+            font-weight: 700;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-transform: uppercase;
+            flex: 0 0 auto;
         }
+
         .sso-badge .sso-text {
-            display: flex; flex-direction: column; line-height: 1.15;
-            min-width: 0; overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.15;
+            min-width: 0;
+            overflow: hidden;
         }
+
         .sso-badge .sso-name {
             font-weight: 600;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
+
         .sso-badge .sso-meta {
-            font-size: 10.5px; opacity: 0.85;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 10.5px;
+            opacity: 0.85;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
-        .sso-badge.is-anonymous .sso-avatar { background: rgba(255, 255, 255, 0.15); }
-        .sso-badge.is-anonymous .sso-name { font-weight: 500; opacity: 0.85; }
+
+        .sso-badge.is-anonymous .sso-avatar {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .sso-badge.is-anonymous .sso-name {
+            font-weight: 500;
+            opacity: 0.85;
+        }
+
         /* When inside the admin header, sit next to the existing "Admin" pill,
            not on top of it — the .a-header__badge already has margin-left:auto,
            so we drop ours so the two badges share the right side cleanly. */
-        .a-header > .sso-badge { margin-left: 12px; }
+        .a-header>.sso-badge {
+            margin-left: 12px;
+        }
 
         /* In the onboarding-form header (.app-header uses justify-content:
            space-between with a left brand-section and a right status-section),
            the SSO badge would compete with .status-section for the right edge
            and overlap it. Drop the auto-margin and add a small gap instead so
            the two pills sit side-by-side on the right. */
-        .app-header { gap: 12px; }
-        .app-header > .sso-badge { margin-left: 12px; }
+        .app-header {
+            gap: 12px;
+        }
+
+        .app-header>.sso-badge {
+            margin-left: 12px;
+        }
 
         .logo {
             height: 48px;
@@ -176,88 +210,165 @@
 
         /* ─── IflDialog — global custom alert/confirm modal ─────────────── */
         .ifld-backdrop {
-            position: fixed; inset: 0;
+            position: fixed;
+            inset: 0;
             background: rgba(15, 23, 42, 0.55);
-            display: flex; align-items: center; justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             z-index: 4000;
-            opacity: 0; pointer-events: none;
+            opacity: 0;
+            pointer-events: none;
             transition: opacity 0.18s ease;
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
         }
-        .ifld-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+        .ifld-backdrop.is-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
         .ifld-dialog {
             background: #fff;
             border-radius: 12px;
             box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.35);
             padding: 28px 28px 22px;
-            min-width: 320px; max-width: 440px;
+            min-width: 320px;
+            max-width: 440px;
             transform: translateY(8px) scale(0.97);
             transition: transform 0.18s ease;
             text-align: center;
         }
-        .ifld-backdrop.is-open .ifld-dialog { transform: translateY(0) scale(1); }
+
+        .ifld-backdrop.is-open .ifld-dialog {
+            transform: translateY(0) scale(1);
+        }
+
         .ifld-icon {
-            width: 56px; height: 56px; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             margin: 0 auto 14px;
             font-size: 26px;
         }
-        .ifld-icon svg { width: 28px; height: 28px; stroke-width: 2; }
-        .ifld-icon--info    { background: #DBEAFE; color: #1D4ED8; }
-        .ifld-icon--success { background: #DCFCE7; color: #15803D; }
-        .ifld-icon--warning { background: #FEF3C7; color: #B45309; }
-        .ifld-icon--error   { background: #FEE2E2; color: #B91C1C; }
-        .ifld-icon--confirm { background: #FEF3C7; color: #B45309; }
+
+        .ifld-icon svg {
+            width: 28px;
+            height: 28px;
+            stroke-width: 2;
+        }
+
+        .ifld-icon--info {
+            background: #DBEAFE;
+            color: #1D4ED8;
+        }
+
+        .ifld-icon--success {
+            background: #DCFCE7;
+            color: #15803D;
+        }
+
+        .ifld-icon--warning {
+            background: #FEF3C7;
+            color: #B45309;
+        }
+
+        .ifld-icon--error {
+            background: #FEE2E2;
+            color: #B91C1C;
+        }
+
+        .ifld-icon--confirm {
+            background: #FEF3C7;
+            color: #B45309;
+        }
+
         .ifld-title {
-            font-size: 1.08rem; font-weight: 700;
-            color: #0F172A; margin: 0 0 6px;
+            font-size: 1.08rem;
+            font-weight: 700;
+            color: #0F172A;
+            margin: 0 0 6px;
         }
+
         .ifld-message {
-            font-size: 0.92rem; color: #334155;
-            line-height: 1.5; margin: 0 0 22px;
-            white-space: pre-line; word-wrap: break-word;
+            font-size: 0.92rem;
+            color: #334155;
+            line-height: 1.5;
+            margin: 0 0 22px;
+            white-space: pre-line;
+            word-wrap: break-word;
         }
+
         .ifld-actions {
-            display: flex; gap: 8px; justify-content: flex-end;
-            border-top: 1px solid #E2E8F0; padding-top: 14px;
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            border-top: 1px solid #E2E8F0;
+            padding-top: 14px;
         }
-        .ifld-actions.is-single { justify-content: center; }
+
+        .ifld-actions.is-single {
+            justify-content: center;
+        }
+
         .ifld-btn {
-            padding: 9px 20px; border-radius: 8px;
-            font-size: 0.88rem; font-weight: 600;
-            cursor: pointer; border: 1px solid transparent;
+            padding: 9px 20px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
             transition: background 0.12s, transform 0.06s;
             min-width: 80px;
             font-family: inherit;
         }
-        .ifld-btn:active { transform: scale(0.97); }
+
+        .ifld-btn:active {
+            transform: scale(0.97);
+        }
+
         .ifld-btn-cancel {
-            background: #F1F5F9; color: #475569;
+            background: #F1F5F9;
+            color: #475569;
             border-color: #E2E8F0;
         }
-        .ifld-btn-cancel:hover { background: #E2E8F0; }
-        .ifld-btn-confirm {
-            background: #0078D4; color: #fff;
+
+        .ifld-btn-cancel:hover {
+            background: #E2E8F0;
         }
-        .ifld-btn-confirm:hover { background: #006bb8; }
+
+        .ifld-btn-confirm {
+            background: #0078D4;
+            color: #fff;
+        }
+
+        .ifld-btn-confirm:hover {
+            background: #006bb8;
+        }
+
         .ifld-btn-confirm.is-danger {
             background: #DC2626;
         }
-        .ifld-btn-confirm.is-danger:hover { background: #B91C1C; }
+
+        .ifld-btn-confirm.is-danger:hover {
+            background: #B91C1C;
+        }
     </style>
 
-    <%
-    // Pages that include this partial via {adminCss: true} (the admin shell)
-    // get admin.css loaded inside <head> so its rules apply before any body
-    // content paints. Without this, modal-overlay defaults to visible and
-    // nav SVGs render at their natural large size for the first frame —
-    // a classic FOUC glitch during page navigation.
-    %>
-    <% if (typeof adminCss !== 'undefined' && adminCss) { %>
-        <link rel="stylesheet" href="/css/admin.css">
-    <% } %>
+    <% // Pages that include this partial via {adminCss: true} (the admin shell) // get admin.css loaded inside <head>
+        so its rules apply before any body
+        // content paints. Without this, modal-overlay defaults to visible and
+        // nav SVGs render at their natural large size for the first frame —
+        // a classic FOUC glitch during page navigation.
+        %>
+        <% if (typeof adminCss !=='undefined' && adminCss) { %>
+            <link rel="stylesheet" href="/css/admin.css">
+            <% } %>
 </head>
 
 <body>
@@ -295,8 +406,8 @@
             // Falls back to a fixed top-right position only if no header is present.
             const attachToHeader = () => {
                 const host = document.querySelector('.a-header')
-                          || document.querySelector('.app-header')
-                          || document.querySelector('body > .header');
+                    || document.querySelector('.app-header')
+                    || document.querySelector('body > .header');
                 if (host) {
                     badge.style.position = 'static';
                     badge.style.top = badge.style.right = badge.style.zIndex = '';
@@ -330,7 +441,7 @@
                     const t = sessionStorage.getItem(TOKEN_KEY);
                     const ts = parseInt(sessionStorage.getItem(TOKEN_TS_KEY) || '0', 10);
                     if (t && (Date.now() - ts) < TOKEN_TTL_MS) return t;
-                } catch (_) {}
+                } catch (_) { }
                 return null;
             };
 
@@ -345,7 +456,7 @@
                 try {
                     sessionStorage.setItem(TOKEN_KEY, stash);
                     sessionStorage.setItem(TOKEN_TS_KEY, String(Date.now()));
-                } catch (_) {}
+                } catch (_) { }
                 return stash;
             };
 
@@ -376,7 +487,7 @@
                     const j = await r.json();
                     if (j && j.user) {
                         const u = j.user;
-                        const role = u.designation || (j.authMethod || 'SSO');
+                        const role = u.designation;
                         set(u.displayName || u.username || u.email, role, true);
                     } else {
                         set('Not signed in', 'SSO required', false);
@@ -400,39 +511,39 @@
          handlers); confirm call-sites are migrated to IflDialog.confirm.
     -->
     <div id="iflDialogBackdrop" class="ifld-backdrop" role="dialog" aria-hidden="true">
-      <div class="ifld-dialog" role="document">
-        <div class="ifld-icon ifld-icon--info" id="iflDialogIcon"></div>
-        <h3 class="ifld-title" id="iflDialogTitle"></h3>
-        <p class="ifld-message" id="iflDialogMessage"></p>
-        <div class="ifld-actions" id="iflDialogActions">
-          <button type="button" class="ifld-btn ifld-btn-cancel" id="iflDialogCancel">Cancel</button>
-          <button type="button" class="ifld-btn ifld-btn-confirm" id="iflDialogConfirm">OK</button>
+        <div class="ifld-dialog" role="document">
+            <div class="ifld-icon ifld-icon--info" id="iflDialogIcon"></div>
+            <h3 class="ifld-title" id="iflDialogTitle"></h3>
+            <p class="ifld-message" id="iflDialogMessage"></p>
+            <div class="ifld-actions" id="iflDialogActions">
+                <button type="button" class="ifld-btn ifld-btn-cancel" id="iflDialogCancel">Cancel</button>
+                <button type="button" class="ifld-btn ifld-btn-confirm" id="iflDialogConfirm">OK</button>
+            </div>
         </div>
-      </div>
     </div>
     <script>
         (function () {
             const ICONS = {
-                info:    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+                info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
                 success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
                 warning: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-                error:   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+                error: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
                 confirm: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
             };
             const DEFAULT_TITLES = {
-                info:    'Information',
+                info: 'Information',
                 success: 'Success',
                 warning: 'Warning',
-                error:   'Error',
+                error: 'Error',
                 confirm: 'Are you sure?'
             };
 
             const backdrop = document.getElementById('iflDialogBackdrop');
-            const iconEl   = document.getElementById('iflDialogIcon');
-            const titleEl  = document.getElementById('iflDialogTitle');
-            const msgEl    = document.getElementById('iflDialogMessage');
-            const actEl    = document.getElementById('iflDialogActions');
-            const cancelBtn  = document.getElementById('iflDialogCancel');
+            const iconEl = document.getElementById('iflDialogIcon');
+            const titleEl = document.getElementById('iflDialogTitle');
+            const msgEl = document.getElementById('iflDialogMessage');
+            const actEl = document.getElementById('iflDialogActions');
+            const cancelBtn = document.getElementById('iflDialogCancel');
             const confirmBtn = document.getElementById('iflDialogConfirm');
 
             let currentResolve = null;
@@ -467,7 +578,7 @@
                 if (mode === 'confirm') {
                     actEl.classList.remove('is-single');
                     cancelBtn.style.display = '';
-                    cancelBtn.textContent  = opts.cancelText || 'Cancel';
+                    cancelBtn.textContent = opts.cancelText || 'Cancel';
                     confirmBtn.textContent = opts.okText || 'OK';
                     confirmBtn.classList.toggle('is-danger', !!opts.danger);
                 } else {
@@ -497,16 +608,16 @@
             }
 
             confirmBtn.addEventListener('click', () => close(currentMode === 'confirm' ? true : undefined));
-            cancelBtn.addEventListener('click',  () => close(false));
+            cancelBtn.addEventListener('click', () => close(false));
             backdrop.addEventListener('mousedown', (e) => {
                 if (e.target === backdrop) close(currentMode === 'confirm' ? false : undefined);
             });
 
             window.IflDialog = {
-                alert:   (msg, opts) => show('alert',   msg, opts),
+                alert: (msg, opts) => show('alert', msg, opts),
                 confirm: (msg, opts) => show('confirm', msg, opts),
                 success: (msg, opts) => show('alert', msg, Object.assign({ variant: 'success' }, opts)),
-                error:   (msg, opts) => show('alert', msg, Object.assign({ variant: 'error'   }, opts)),
+                error: (msg, opts) => show('alert', msg, Object.assign({ variant: 'error' }, opts)),
                 warning: (msg, opts) => show('alert', msg, Object.assign({ variant: 'warning' }, opts))
             };
 
