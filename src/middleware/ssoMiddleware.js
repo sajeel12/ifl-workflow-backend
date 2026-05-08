@@ -1,4 +1,3 @@
-import { findUser } from '../services/adService.js';
 import logger from '../utils/logger.js';
 import crypto from 'crypto';
 
@@ -14,11 +13,10 @@ const SHARED_SECRET = process.env.SSO_SHARED_SECRET || 'IFL_WORKFLOW_SECRET_KEY_
 //                           when neither is present.
 const SSO_MODE = (process.env.SSO_MODE || 'PROD').toUpperCase();
 
-// SSO_TRUST_PROXY_HEADER — when set to "true" (default), accept the
-// X-Auth-User header injected by IIS URL Rewrite from {LOGON_USER}. This
-// is what lets browser-navigation requests (no JS-injected token) reach
-// SSO-protected routes. Only safe when Node binds to 127.0.0.1 and the
-// IIS proxy is the sole ingress (port 3000 firewalled externally).
+// SSO_TRUST_PROXY_HEADER — when "true" (default), accept the X-Auth-User
+// header injected by IIS URL Rewrite from {LOGON_USER}. Lets browser-navigation
+// requests (no JS to add headers) reach SSO-protected routes. Only safe when
+// Node binds to 127.0.0.1 and the IIS proxy is the sole ingress.
 const TRUST_PROXY_HEADER = String(process.env.SSO_TRUST_PROXY_HEADER || 'true').toLowerCase() !== 'false';
 
 const buildMockUser = () => ({
@@ -30,25 +28,43 @@ const buildMockUser = () => ({
     designation: process.env.SSO_MOCK_DESIGNATION || 'HR'
 });
 
-function verifySignature(username, timestamp, signature) {
-    const data = `${username}|${timestamp}`;
-    const hmac = crypto.createHmac('sha256', SHARED_SECRET);
-    hmac.update(data);
-    const expectedSignature = hmac.digest('hex');
-    const expectedBuffer = Buffer.from(expectedSignature, 'hex');
-    const providedBuffer = Buffer.from(signature, 'hex');
+// HMAC-SHA256 signer used to verify the signed payload from token.aspx.
+function hmac(data) {
+    const h = crypto.createHmac('sha256', SHARED_SECRET);
+    h.update(data);
+    return h.digest('hex');
+}
 
-    if (expectedBuffer.length !== providedBuffer.length) return false;
-    return crypto.timingSafeEqual(expectedBuffer, providedBuffer);
+function timingSafeEqualHex(aHex, bHex) {
+    const a = Buffer.from(aHex, 'hex');
+    const b = Buffer.from(bHex, 'hex');
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+}
+
+// Verify a sidecar token signature. The token.aspx page can sign two payload
+// shapes:
+//   (v2 / current)   "username|timestamp|email|displayName"
+//   (v1 / legacy)    "username|timestamp"
+// We accept either so the upgrade is non-breaking.
+function verifyTokenSignature(token) {
+    if (!token || !token.signature || !token.username || token.timestamp == null) return false;
+    const username  = String(token.username);
+    const ts        = String(token.timestamp);
+    const email     = typeof token.email       === 'string' ? token.email       : '';
+    const display   = typeof token.displayName === 'string' ? token.displayName : '';
+
+    const v2 = hmac(`${username}|${ts}|${email}|${display}`);
+    if (timingSafeEqualHex(v2, token.signature)) return true;
+
+    const v1 = hmac(`${username}|${ts}`);
+    return timingSafeEqualHex(v1, token.signature);
 }
 
 // Only trust headers like X-Auth-User when the request came from the local
-// IIS proxy. Anything else could be a forged header from a process that
-// reached Node directly (which shouldn't happen if firewalled, but defense
-// in depth).
+// IIS proxy. External forgery is blocked by both this check and the firewall.
 function isLoopback(req) {
     const ip = (req.socket && req.socket.remoteAddress) || '';
-    // Strip IPv6-mapped IPv4 prefix
     const clean = ip.replace(/^::ffff:/, '');
     return clean === '127.0.0.1' || clean === '::1' || clean === 'localhost';
 }
@@ -60,31 +76,43 @@ function stripDomain(s) {
     return (parts.length > 1 ? parts[1] : parts[0]).trim();
 }
 
-// Resolve the AD profile + designation for a username and stamp it on req.user.
-async function resolveAndStampUser(req, username) {
-    const userProfile = await findUser(username);
-    if (!userProfile) {
-        logger.warn(`[SSO] Authenticated username "${username}" not found in AD`);
-        return { ok: false, status: 403, error: 'User Access Denied' };
-    }
+// Build req.user from the verified sidecar token. AD lookup is intentionally
+// NOT performed here — per client policy Node does not bind to AD directly.
+// Identity data is sourced from token.aspx (which runs on the IIS/SharePoint
+// host and queries AD locally).
+function userFromToken(token) {
+    const username = stripDomain(token.username);
+    const email = (typeof token.email === 'string' ? token.email : '').trim();
+    const displayName = (typeof token.displayName === 'string' ? token.displayName : '').trim() || username;
 
     // Temporary designation override — until proper AD-group lookup is wired up.
     let designation = '';
-    if (userProfile.mail === 'sajeel.dilshad@perception-it.com') {
-        designation = 'HR';
-    }
-    // TODO: replace with real AD-group / designation lookup
-    //   designation = await getDesignation(userProfile.sAMAccountName);
+    if (email && email.toLowerCase() === 'sajeel.dilshad@perception-it.com') designation = 'HR';
 
-    req.user = {
-        username:    userProfile.sAMAccountName,
-        email:       userProfile.mail,
-        displayName: userProfile.displayName,
-        manager:     userProfile.manager,
-        raw:         userProfile,
-        designation: designation
+    return {
+        username,
+        email,
+        displayName,
+        manager: null,
+        raw: { source: 'sidecar-token' },
+        designation
     };
-    return { ok: true };
+}
+
+// Build req.user from the IIS proxy header. Only username is available here —
+// no email/displayName, since those come from token.aspx. Pages that need the
+// full profile (form pre-fills, badge) hydrate via /api/auth/me using the
+// sidecar token, which is fired client-side as soon as JS runs.
+function userFromProxyHeader(rawHeader) {
+    const username = stripDomain(rawHeader);
+    return {
+        username,
+        email: '',
+        displayName: username,
+        manager: null,
+        raw: { source: 'proxy-header' },
+        designation: ''
+    };
 }
 
 
@@ -97,91 +125,70 @@ export const ssoMiddleware = async (req, res, next) => {
             return next();
         }
 
-        // ─── 1. Try the IIS proxy header (X-Auth-User from {LOGON_USER}) ───
-        // This works for browser-navigation requests where JavaScript can't
-        // attach a custom header. The IIS URL Rewrite rule injects the
-        // authenticated Windows user as a trusted header on every proxied
-        // request. We only honor it from a loopback connection so external
-        // forgery isn't possible (assuming Node is firewalled to localhost).
-        const proxyUserRaw = req.headers['x-auth-user'];
-        if (TRUST_PROXY_HEADER && proxyUserRaw && isLoopback(req)) {
-            const username = stripDomain(proxyUserRaw);
-            if (username) {
-                try {
-                    const r = await resolveAndStampUser(req, username);
-                    if (!r.ok) return res.status(r.status).json({ error: r.error });
-                    logger.info(`[SSO] [PROXY-HEADER] ${username} for ${req.method} ${req.originalUrl}`);
-                    return next();
-                } catch (adErr) {
-                    logger.error(`[SSO] AD lookup failed for "${username}": ${adErr.message}`);
-                    return res.status(500).json({ error: 'Authentication Verification Failed' });
-                }
-            }
-        }
-
-        // ─── 2. Try the sidecar HMAC token. The token can arrive on three
-        //        channels in priority order:
+        // ─── 1. Sidecar HMAC token (preferred — has full profile data) ─
+        // The token can arrive on three channels in priority order:
         //   (a) x-sidecar-token request header   — used by AJAX (window.iflFetch)
-        //   (b) x-sidecar-token form body field  — used by HTML form POSTs that
-        //                                          can't add custom headers
-        //   (c) sidecarToken query string        — last-resort for GETs that
-        //                                          can't run JS (rare)
+        //   (b) x-sidecar-token form body field  — HTML form POSTs that can't
+        //                                          add custom headers
+        //   (c) sidecarToken query string        — last-resort for GETs
         const rawSidecarToken = (
             req.headers['x-sidecar-token']
             || (req.body && req.body['x-sidecar-token'])
             || (req.query && req.query.sidecarToken)
             || ''
         ).toString().trim();
-        if (!rawSidecarToken) {
-            // ─── OPTIONAL mode: fall back to mock user ──────────────────
-            if (SSO_MODE === 'OPTIONAL') {
-                req.user = buildMockUser();
-                logger.info(`[SSO] [OPTIONAL] No sidecar/proxy header; using mock ${req.user.username}`);
-                return next();
-            }
-            // Diagnostic — log what we DID receive so we can tell whether
-            // the IIS X-Auth-User injection is reaching Node (and from where).
-            const seenIp = (req.socket && req.socket.remoteAddress) || 'unknown';
-            const seenAuthUser = req.headers['x-auth-user'] || '<missing>';
-            logger.warn(
-                `[SSO] 401 on ${req.method} ${req.originalUrl} | ` +
-                `from=${seenIp} loopback=${isLoopback(req)} ` +
-                `trustProxyHeader=${TRUST_PROXY_HEADER} ` +
-                `x-auth-user="${seenAuthUser}" ` +
-                `x-sidecar-token=<missing>`
-            );
-            return res.status(401).json({ error: 'Unauthorized: SSO required. Please open this page from the IFL portal.' });
-        }
 
-        let authenticatedUser = null;
-        try {
-            const token = JSON.parse(rawSidecarToken);
+        if (rawSidecarToken) {
+            let token;
+            try { token = JSON.parse(rawSidecarToken); }
+            catch (e) {
+                logger.warn(`[SSO] Malformed sidecar token: ${e.message}`);
+                return res.status(401).json({ error: 'Unauthorized: Invalid Token Format' });
+            }
             const now = Math.floor(Date.now() / 1000);
             if (Math.abs(now - token.timestamp) > 300) {
                 logger.warn(`[SSO] Expired token for ${token.username}`);
                 return res.status(401).json({ error: 'Unauthorized: Token Expired' });
             }
-            if (verifySignature(token.username, token.timestamp, token.signature)) {
-                authenticatedUser = token.username;
-            } else {
+            if (!verifyTokenSignature(token)) {
                 logger.warn(`[SSO] Invalid signature for ${token.username}`);
                 return res.status(401).json({ error: 'Unauthorized: Invalid Token' });
             }
-        } catch (e) {
-            logger.warn(`[SSO] Malformed sidecar token: ${e.message}`);
-            return res.status(401).json({ error: 'Unauthorized: Invalid Token Format' });
+            req.user = userFromToken(token);
+            logger.info(`[SSO] [SIDECAR] ${req.user.username} (${req.user.email || 'no-email'}) for ${req.method} ${req.originalUrl}`);
+            return next();
         }
 
-        try {
-            const username = stripDomain(authenticatedUser);
-            const r = await resolveAndStampUser(req, username);
-            if (!r.ok) return res.status(r.status).json({ error: r.error });
-            logger.info(`[SSO] [SIDECAR] ${username} for ${req.method} ${req.originalUrl}`);
-            return next();
-        } catch (adErr) {
-            logger.error(`[SSO] AD lookup failed: ${adErr.message}`);
-            return res.status(500).json({ error: 'Authentication Verification Failed' });
+        // ─── 2. IIS proxy header (browser-navigation fallback) ─────────
+        // Only username is available on this path; email/displayName get
+        // hydrated client-side via /api/auth/me + the sidecar token.
+        const proxyUserRaw = req.headers['x-auth-user'];
+        if (TRUST_PROXY_HEADER && proxyUserRaw && isLoopback(req)) {
+            req.user = userFromProxyHeader(proxyUserRaw);
+            if (req.user.username) {
+                logger.info(`[SSO] [PROXY-HEADER] ${req.user.username} for ${req.method} ${req.originalUrl}`);
+                return next();
+            }
         }
+
+        // ─── 3. OPTIONAL mode falls back to mock identity ──────────────
+        if (SSO_MODE === 'OPTIONAL') {
+            req.user = buildMockUser();
+            logger.info(`[SSO] [OPTIONAL] No sidecar/proxy header; using mock ${req.user.username}`);
+            return next();
+        }
+
+        // ─── No identity at all → 401 with diagnostic log ──────────────
+        const seenIp = (req.socket && req.socket.remoteAddress) || 'unknown';
+        const seenAuthUser = req.headers['x-auth-user'] || '<missing>';
+        logger.warn(
+            `[SSO] 401 on ${req.method} ${req.originalUrl} | ` +
+            `from=${seenIp} loopback=${isLoopback(req)} ` +
+            `trustProxyHeader=${TRUST_PROXY_HEADER} ` +
+            `x-auth-user="${seenAuthUser}" ` +
+            `x-sidecar-token=<missing>`
+        );
+        return res.status(401).json({ error: 'Unauthorized: SSO required. Please open this page from the IFL portal.' });
 
     } catch (err) {
         logger.error(`[SSO] Middleware error: ${err.message}`);
