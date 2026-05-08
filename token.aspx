@@ -66,7 +66,7 @@
             timestamp   = timestamp,
             signature   = signature
         };
-        new JavaScriptSerializer().Serialize(result, Response.Output);
+        Response.Write(new JavaScriptSerializer().Serialize(result));
     }
 
     // Escape LDAP filter special characters per RFC 4515.
