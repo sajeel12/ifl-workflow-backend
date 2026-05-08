@@ -1,50 +1,56 @@
 <%@ Page Language="C#" %>
     <%@ Import Namespace="System.Security.Cryptography" %>
         <%@ Import Namespace="System.Web.Script.Serialization" %>
-            <script runat="server">
+            <%@ Import Namespace="System.DirectoryServices.AccountManagement" %>
+                <script runat="server">
     protected void Page_Load(object sender, EventArgs e)
-                {
-        // CONFIGURATION: Keep this secure and same as Node.js .env
-        // In production, move this to Web.config <appSettings>
-        string secretKey = System.Configuration.ConfigurationManager.AppSettings["SsoSharedSecret"];
+                    {
+        string secretKey = "IFL_WORKFLOW_SECRET_KEY_2025";
+                        Response.ContentType = "application/json";
 
-                    Response.ContentType = "application/json";
+        string username = User.Identity.Name;        // e.g. "IFL\sajeel.dilshad"
+                        if (string.IsNullOrEmpty(username)) {
+                            Response.StatusCode = 401;
+                            Response.Write("{\"error\":\"Not Authenticated\"}");
+                            return;
+                        }
 
-        // Get the current windows user
-        string username = User.Identity.Name;
-                    // string username = "IFL\\DevDefault"; // Uncomment for local testing without IIS Auth
-
-                    if (string.IsNullOrEmpty(username)) {
-                        Response.StatusCode = 401;
-                        Response.Write("{\"error\": \"Not Authenticated\"}");
-                        return;
+        // ── NEW: pull profile fields from AD via the App Pool identity ──
+        string email = "", displayName = "", manager = "";
+                        try {
+            string sam = username.Contains("\\") ? username.Split('\\')[1] : username;
+                            using(var ctx = new PrincipalContext(ContextType.Domain)) {
+                                var u = UserPrincipal.FindByIdentity(ctx, sam);
+                            if (u != null) {
+                                email = u.EmailAddress ?? "";
+                                displayName = u.DisplayName ?? "";
+                                // optional: manager DN if you need it
+                            }
+                        }
+        } catch (Exception ex) {
+                        // swallow — return what we have. Node will fall back to username if email is empty.
                     }
 
-        // Create Payload
         long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        // Create Signature (HMACSHA256)
-        // Format: username|timestamp
-        string dataToSign = username + "|" + timestamp;
+        // Sign over username + timestamp + email + displayName so they can't be tampered with
+        string dataToSign = username + "|" + timestamp + "|" + email + "|" + displayName;
         string signature = ComputeHmacSha256(dataToSign, secretKey);
 
-                    // Return JSON
                     var result = new {
-                        username = username,
-                        timestamp = timestamp,
-                        signature = signature
+                        username    = username,
+                        email       = email,
+                        displayName = displayName,
+                        timestamp   = timestamp,
+                        signature   = signature
                     };
-        
-        JavaScriptSerializer js = new JavaScriptSerializer();
-                    Response.Write(js.Serialize(result));
-                }
-
-    private string ComputeHmacSha256(string data, string key)
-                {
-                    using(var hmac = new HMACSHA256(System.Text.Encoding.UTF8.GetBytes(key)))
-                        {
-                            byte[] hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(data));
-                    return BitConverter.ToString(hash).Replace("-", "").ToLower();
-                }
+                    new JavaScriptSerializer().Serialize(result, Response.Output);
     }
-            </script>
+
+    private string ComputeHmacSha256(string data, string key) {
+                        using(var hmac = new HMACSHA256(System.Text.Encoding.UTF8.GetBytes(key))) {
+                            byte[] hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(data));
+                        return BitConverter.ToString(hash).Replace("-", "").ToLower();
+                    }
+    }
+                </script>
