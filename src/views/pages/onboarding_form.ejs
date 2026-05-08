@@ -498,6 +498,26 @@
                 const emailEl = document.querySelector('input[name="requesterEmail"]');
                 if (nameEl  && !nameEl.value)  nameEl.value  = u.displayName || u.username || '';
                 if (emailEl && !emailEl.value) emailEl.value = u.email || '';
+
+                /* ─── Forwarded-email soft check (UX) ─────────────────────
+                     If the server told us an expected approver email for this
+                     stage and the SSO user differs, show a full-page warning
+                     immediately — without waiting for the user to attempt a
+                     submit. Hard enforcement still runs server-side at POST. */
+                const expected = <%- JSON.stringify(typeof expectedAssigneeEmail !== 'undefined' && expectedAssigneeEmail ? expectedAssigneeEmail : null) %>;
+                const actual = (u.email || '').toLowerCase().trim();
+                if (expected && actual && expected.toLowerCase().trim() !== actual) {
+                    document.body.innerHTML = `
+                      <div style="max-width:560px;margin:80px auto;padding:32px;background:#fff;border:1px solid #fee2e2;border-radius:12px;text-align:center;font-family:'Segoe UI',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.08);">
+                        <div style="width:64px;height:64px;border-radius:50%;background:#fee2e2;color:#b91c1c;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 16px;">⛔</div>
+                        <h2 style="color:#b91c1c;margin:0 0 12px;">This page is authorized only for the intended recipient</h2>
+                        <p style="color:#475569;line-height:1.55;margin:0 0 14px;">
+                          This action link was sent to <strong>${expected}</strong>.<br>
+                          You are signed in as <strong>${u.email || u.username}</strong>, so you cannot act on this request.
+                        </p>
+                        <p style="color:#64748b;font-size:.9rem;">If you need to handle it on someone's behalf, please contact your administrator.</p>
+                      </div>`;
+                }
             } catch (_) { /* badge will surface SSO failure separately */ }
         });
 

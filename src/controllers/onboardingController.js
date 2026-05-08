@@ -124,6 +124,58 @@ const handleSubmission = async (req, res, token) => {
 
             const { role, request } = context;
 
+            // ─── Forwarded-email validation (HARD enforcement at POST) ────
+            // The token is valid, but make absolutely sure the SSO user
+            // submitting this action is the intended approver. This catches
+            // any forwarded-email scenario regardless of how the GET reached
+            // them. The same email that was used to send the action link
+            // (request.currentStageAssigneeEmail) must match req.user.email.
+            const expectedEmail = (request.currentStageAssigneeEmail || '').toLowerCase().trim();
+            const actualEmail   = (req.user && (req.user.email || '')).toLowerCase().trim();
+            if (expectedEmail) {
+                if (!actualEmail) {
+                    // No SSO context — refuse outright. Token-only access is
+                    // not enough to act on a request.
+                    try {
+                        await TimelineEvent.create({
+                            requestId: request.id,
+                            action: 'Unauthorized Submit',
+                            actorRole: 'System',
+                            details: `Submission attempt without SSO context. Expected ${request.currentStageAssigneeEmail}.`,
+                            timestamp: new Date()
+                        });
+                    } catch (_) {}
+                    return res.status(401).render('pages/message', {
+                        title: 'SSO required',
+                        heading: 'SSO sign-in required',
+                        titleClass: 'error',
+                        icon: '⛔',
+                        iconClass: 'error-icon',
+                        message: `This action can only be submitted by ${request.currentStageAssigneeEmail}. Please open the action link from the IFL portal so we can verify your identity.`
+                    });
+                }
+                if (actualEmail !== expectedEmail) {
+                    // Identity mismatch — log and reject.
+                    try {
+                        await TimelineEvent.create({
+                            requestId: request.id,
+                            action: 'Unauthorized Submit',
+                            actorRole: 'System',
+                            details: `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
+                            timestamp: new Date()
+                        });
+                    } catch (_) {}
+                    return res.status(403).render('pages/message', {
+                        title: 'Not authorized',
+                        heading: 'This action is authorized only for the intended recipient',
+                        titleClass: 'error',
+                        icon: '⛔',
+                        iconClass: 'error-icon',
+                        message: `This action link was sent to ${request.currentStageAssigneeEmail}. You are signed in as ${req.user.email}, so you cannot submit this request. If you need to handle it on someone's behalf, please contact your administrator.`
+                    });
+                }
+            }
+
             if (role === 'IT') {
                 // Step 2: IT Ops records the configuration.
                 await onboardingService.updateITDetails(token, data);
@@ -284,34 +336,42 @@ const renderForm = async (req, res, token) => {
         request = context.request;
         role = context.role;
 
-        // ─── Forwarded-email validation ─────────────────────────────────
-        // The link is valid (correct token), but make sure the SSO user
-        // clicking it is actually the intended recipient. If the email was
-        // forwarded to a colleague, their identity won't match the email
-        // stored on the request, so we block them with a clear message.
-        const expected = (request.currentStageAssigneeEmail || '').toLowerCase().trim();
-        const actual   = (req.user && (req.user.email || '')).toLowerCase().trim();
-        if (expected && actual && expected !== actual) {
-            // Audit the unauthorized click attempt for admins to review
-            try {
-                await TimelineEvent.create({
-                    requestId: request.id,
-                    action: 'Unauthorized Click',
-                    actorRole: 'System',
-                    details: `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
-                    timestamp: new Date()
+        // ─── Forwarded-email validation (SOFT, server-rendered hint) ──
+        // The form-link route is intentionally NOT SSO-protected at GET, so
+        // email-link clicks from any browser context render the form. If
+        // req.user IS already populated (e.g. browser had Intranet zone trust
+        // and IIS injected X-Auth-User), we do an early server-side reject
+        // here so a forwarded recipient never sees the form's data. If
+        // req.user is missing, the form's own JS does the same check
+        // client-side via /api/auth/me as soon as it runs.
+        //
+        // The HARD enforcement happens at POST time: handleSubmission
+        // refuses any submit whose req.user.email doesn't match the stored
+        // currentStageAssigneeEmail.
+        if (req.user && req.user.email && request.currentStageAssigneeEmail) {
+            const expected = request.currentStageAssigneeEmail.toLowerCase().trim();
+            const actual   = req.user.email.toLowerCase().trim();
+            if (expected !== actual) {
+                try {
+                    await TimelineEvent.create({
+                        requestId: request.id,
+                        action: 'Unauthorized Click',
+                        actorRole: 'System',
+                        details: `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
+                        timestamp: new Date()
+                    });
+                } catch (e) {
+                    logger.warn('[Onboarding] Could not record unauthorized-click audit event: ' + e.message);
+                }
+                return res.status(403).render('pages/message', {
+                    title: 'Not authorized',
+                    heading: 'This page is authorized only for the intended recipient',
+                    titleClass: 'error',
+                    icon: '⛔',
+                    iconClass: 'error-icon',
+                    message: `This action link was sent to ${request.currentStageAssigneeEmail}. You are signed in as ${req.user.email}, so you cannot act on this request. If you need to handle it on someone's behalf, please contact your administrator.`
                 });
-            } catch (e) {
-                logger.warn('[Onboarding] Could not record unauthorized-click audit event: ' + e.message);
             }
-            return res.status(403).render('pages/message', {
-                title: 'Not authorized',
-                heading: 'This page is authorized only for the intended recipient',
-                titleClass: 'error',
-                icon: '⛔',
-                iconClass: 'error-icon',
-                message: `This action link was sent to ${request.currentStageAssigneeEmail}. You are signed in as ${req.user.email}, so you cannot act on this request. If you need to handle it on someone's behalf, please contact your administrator.`
-            });
         }
 
         // Load timeline events for this request to expose history within the form page
@@ -508,7 +568,12 @@ const renderForm = async (req, res, token) => {
         fileSharePaths,
         sharepointPaths,
         timeline,
-        currentUser
+        currentUser,
+        // Expected SSO email for this stage — JS does a client-side mismatch
+        // check on load so a forwarded recipient sees the rejection screen
+        // even before they try to submit. Hard server-side enforcement still
+        // runs at POST time.
+        expectedAssigneeEmail: request.currentStageAssigneeEmail || null
     });
 };
 

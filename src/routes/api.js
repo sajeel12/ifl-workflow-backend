@@ -31,12 +31,19 @@ router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
 // token as a hidden field which ssoMiddleware reads (in addition to the header).
 router.get('/onboarding/initiate', onboardingController.handleRequest);
 router.post('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
-// GET /handle is gated by SSO so we can compare the logged-in user with the
-// intended approver email stored on the request (forwarded-email validation).
-// POST stays open — submissions still authenticate via the sidecar token in
-// the form body, the same way /initiate POST does.
-router.get('/onboarding/handle', ssoMiddleware, onboardingController.handleRequest);
-router.post('/onboarding/handle', onboardingController.handleRequest);
+// GET /handle stays open at Node so email-link clicks don't get blocked when
+// the browser hasn't yet established an SSO context (Outlook → fresh browser
+// session, etc.). The form renders with the action token; the form's JS
+// hydrates the user's identity via /token.aspx + /api/auth/me, and runs a
+// soft mismatch check client-side.
+//
+// POST /handle is the strict gate: ssoMiddleware extracts the sidecar token
+// from the form body (which the submit-handler attached), populates req.user,
+// and the controller compares req.user.email against the request's stored
+// currentStageAssigneeEmail before any action is processed. A forwarded
+// recipient can never submit, even if they reach the form.
+router.get('/onboarding/handle', onboardingController.handleRequest);
+router.post('/onboarding/handle', ssoMiddleware, onboardingController.handleRequest);
 
 // Proof upload is performed by the DCI Implementer; the form attaches the
 // sidecar token in the multipart body the same way the HR form does.
