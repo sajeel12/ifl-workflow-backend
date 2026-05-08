@@ -16,6 +16,14 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         type: DataTypes.STRING,
         allowNull: true
     },
+    // Email address the current action link was sent to. Used to validate
+    // that the SSO-logged-in user clicking the link is the intended approver
+    // (forwarded-email protection). Updated every time currentStageToken
+    // rotates. Null on closed/rejected stages.
+    currentStageAssigneeEmail: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
 
     // Section 1: Requestor Information (HR)
     requesterName: { type: DataTypes.STRING }, // Auto-filled from logged-in initiator

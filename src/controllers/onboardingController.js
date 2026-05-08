@@ -283,6 +283,37 @@ const renderForm = async (req, res, token) => {
         if (!context) return renderError(res, 'Invalid or Expired Token');
         request = context.request;
         role = context.role;
+
+        // ─── Forwarded-email validation ─────────────────────────────────
+        // The link is valid (correct token), but make sure the SSO user
+        // clicking it is actually the intended recipient. If the email was
+        // forwarded to a colleague, their identity won't match the email
+        // stored on the request, so we block them with a clear message.
+        const expected = (request.currentStageAssigneeEmail || '').toLowerCase().trim();
+        const actual   = (req.user && (req.user.email || '')).toLowerCase().trim();
+        if (expected && actual && expected !== actual) {
+            // Audit the unauthorized click attempt for admins to review
+            try {
+                await TimelineEvent.create({
+                    requestId: request.id,
+                    action: 'Unauthorized Click',
+                    actorRole: 'System',
+                    details: `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
+                    timestamp: new Date()
+                });
+            } catch (e) {
+                logger.warn('[Onboarding] Could not record unauthorized-click audit event: ' + e.message);
+            }
+            return res.status(403).render('pages/message', {
+                title: 'Not authorized',
+                heading: 'This page is authorized only for the intended recipient',
+                titleClass: 'error',
+                icon: '⛔',
+                iconClass: 'error-icon',
+                message: `This action link was sent to ${request.currentStageAssigneeEmail}. You are signed in as ${req.user.email}, so you cannot act on this request. If you need to handle it on someone's behalf, please contact your administrator.`
+            });
+        }
+
         // Load timeline events for this request to expose history within the form page
         try {
             timeline = await TimelineEvent.findAll({

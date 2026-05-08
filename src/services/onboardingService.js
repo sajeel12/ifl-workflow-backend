@@ -46,7 +46,13 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
         if (!request || request.status !== 'PendingDCIManager') throw new Error('Invalid Token');
 
         if (action === 'Reject') {
-            await request.update({ status: 'Rejected', approvalStatus: 'Rejected', dciRemarks: remarks, currentStageToken: null });
+            await request.update({
+                status: 'Rejected',
+                approvalStatus: 'Rejected',
+                dciRemarks: remarks,
+                currentStageToken: null,
+                currentStageAssigneeEmail: null
+            });
             await logTimelineEvent(request.id, 'DCI Manager Rejected', 'DCIManager', remarks);
             return request;
         }
@@ -54,13 +60,14 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
         // NEW: DCI Manager can request changes — sends back to DCI Team
         if (action === 'RequestChanges') {
             const newToken = crypto.randomBytes(20).toString('hex');
+            const dciEmail = await RecipientService.get('DCI_TEAM', { location: request.location });
             await request.update({
                 status: 'PendingDCI',
                 dciChangeRequestRemarks: remarks,
-                currentStageToken: newToken
+                currentStageToken: newToken,
+                currentStageAssigneeEmail: dciEmail || null
             });
             await logTimelineEvent(request.id, 'DCI Manager Requested Changes', 'DCIManager', remarks);
-            const dciEmail = await RecipientService.get('DCI_TEAM', { location: request.location });
             await sendStageEmail(dciEmail, request, newToken, 'DCI_CHANGES_REQUESTED');
             return request;
         }
@@ -69,28 +76,30 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
 
         if (needsEmailApproval) {
             const newToken = crypto.randomBytes(20).toString('hex');
+            const itHodEmail = await RecipientService.get('IT_HOD', { location: request.location });
             await request.update({
                 status: 'PendingITHOD',
                 dciRemarks: remarks,
                 currentStageToken: newToken,
+                currentStageAssigneeEmail: itHodEmail || null,
                 dciManagerDecidedAt: new Date()
             });
             await logTimelineEvent(request.id, 'DCI Manager Approved (High Risk)', 'DCIManager', remarks);
-            const itHodEmail = await RecipientService.get('IT_HOD', { location: request.location });
             await sendStageEmail(itHodEmail, request, newToken, 'IT_HOD_APPROVAL');
         } else {
             // Move to Implementation Phase
             const newToken = crypto.randomBytes(20).toString('hex');
+            const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER', { location: request.location });
             await request.update({
                 status: 'PendingDCIImplementation',
                 approvalStatus: 'Approved',
                 dciRemarks: remarks,
                 currentStageToken: newToken,
+                currentStageAssigneeEmail: implementerEmail || null,
                 dciManagerDecidedAt: new Date()
             });
             await logTimelineEvent(request.id, 'DCI Manager Approved', 'DCIManager', remarks);
             await generateAndStorePDF(request); // PDF serves as Work Order
-            const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER', { location: request.location });
             await sendStageEmail(implementerEmail, request, newToken, 'DCI_IMPLEMENTATION');
         }
         return request;
@@ -112,6 +121,7 @@ export const handleITHODApproval = async (token, action, remarks = null) => {
                 approvalStatus: 'Rejected',
                 itHodRemarks: remarks,
                 currentStageToken: null,
+                currentStageAssigneeEmail: null,
                 itHodDecidedAt: new Date()
             });
             await logTimelineEvent(request.id, 'IT HOD Rejected', 'ITHOD', remarks);
@@ -120,16 +130,17 @@ export const handleITHODApproval = async (token, action, remarks = null) => {
 
         // Approve -> Move to Implementation
         const newToken = crypto.randomBytes(20).toString('hex');
+        const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER', { location: request.location });
         await request.update({
             status: 'PendingDCIImplementation',
             approvalStatus: 'Approved',
             itHodRemarks: remarks,
             currentStageToken: newToken,
+            currentStageAssigneeEmail: implementerEmail || null,
             itHodDecidedAt: new Date()
         });
         await logTimelineEvent(request.id, 'IT HOD Approved', 'ITHOD', remarks);
         await generateAndStorePDF(request);
-        const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER', { location: request.location });
         await sendStageEmail(implementerEmail, request, newToken, 'DCI_IMPLEMENTATION');
 
         return request;
@@ -146,18 +157,19 @@ export const handleDCIImplementation = async (token, filePaths, implementerName)
         if (!request || request.status !== 'PendingDCIImplementation') throw new Error('Invalid Token');
 
         const newToken = crypto.randomBytes(20).toString('hex');
+        // Per client requirement: the IT Ops user who handled Step 2 is also
+        // responsible for Step 12 (post-desk-setup verification), so routing
+        // for OPS verification uses IT_OPS — not a separate OPS_TEAM group.
+        const opsEmail = await RecipientService.get('IT_OPS', { location: request.location });
         await request.update({
             status: 'PendingOPSAction',
             dciImplementer: implementerName,
             dciProofAttachments: filePaths, // Array of strings
             dciImplementedAt: new Date(),
-            currentStageToken: newToken
+            currentStageToken: newToken,
+            currentStageAssigneeEmail: opsEmail || null
         });
         await logTimelineEvent(request.id, 'DCI Implementation Completed', 'DCIImplementer', `Implemented by ${implementerName}`);
-        // Per client requirement: the IT Ops user who handled Step 2 is also
-        // responsible for Step 12 (post-desk-setup verification), so routing
-        // for OPS verification uses IT_OPS — not a separate OPS_TEAM group.
-        const opsEmail = await RecipientService.get('IT_OPS', { location: request.location });
         await sendStageEmail(opsEmail, request, newToken, 'OPS_ACTION');
         return request;
     } catch (err) {
@@ -177,7 +189,8 @@ export const handleOPSAction = async (token, checklistData, opsName) => {
             opsCompletedBy: opsName,
             opsChecklist: checklistData,
             opsCompletedAt: new Date(),
-            currentStageToken: null // Flow Ends
+            currentStageToken: null, // Flow Ends
+            currentStageAssigneeEmail: null
         });
         await logTimelineEvent(request.id, 'OPS Checklist Completed', 'OPS', JSON.stringify(checklistData));
         logger.info(`[Onboarding] Request ${request.id} COMPLETED.`);
@@ -273,6 +286,8 @@ export const createRequest = async (data) => {
             : 'Initial submission';
         await logTimelineEvent(request.id, 'Request Initiated', 'HR', initiatorLabel);
         const itEmail = await RecipientService.get('IT_OPS', { location: request.location });
+        // Persist the intended recipient so we can validate clicks later.
+        await request.update({ currentStageAssigneeEmail: itEmail || null });
         await sendStageEmail(itEmail, request, token, 'IT_OPS');
         return request;
     } catch (err) {
@@ -288,15 +303,15 @@ export const updateITDetails = async (token, data) => {
         if (!request || request.status !== 'PendingIT') throw new Error('Invalid Token or Stage');
 
         const newToken = crypto.randomBytes(20).toString('hex');
+        const hodEmail = await RecipientService.get('HOD', { employeeId: request.employeeId, location: request.location });
         await request.update({
             ...data,
             status: 'PendingHOD',
             currentStageToken: newToken,
+            currentStageAssigneeEmail: hodEmail || null,
             itSubmittedAt: new Date()
         });
         await logTimelineEvent(request.id, 'IT Services Configured', 'IT', JSON.stringify(data));
-        // In real app, look up HOD email based on employeeId/Dep
-        const hodEmail = await RecipientService.get('HOD', { employeeId: request.employeeId, location: request.location });
         await sendStageEmail(hodEmail, request, newToken, 'HOD_REVIEW');
         return request;
     } catch (err) {
@@ -313,20 +328,27 @@ export const handleHODApproval = async (token, action, remarks) => {
         if (!request || request.status !== 'PendingHOD') throw new Error('Invalid Token');
 
         if (action === 'Reject') {
-            await request.update({ status: 'Rejected', approvalStatus: 'Rejected', hodRemarks: remarks, currentStageToken: null });
+            await request.update({
+                status: 'Rejected',
+                approvalStatus: 'Rejected',
+                hodRemarks: remarks,
+                currentStageToken: null,
+                currentStageAssigneeEmail: null
+            });
             await logTimelineEvent(request.id, 'HOD Rejected', 'HOD', remarks);
             return request;
         }
 
         const newToken = crypto.randomBytes(20).toString('hex');
+        const dciEmail = await RecipientService.get('DCI_TEAM', { location: request.location });
         await request.update({
             status: 'PendingDCI',
             hodRemarks: remarks,
             currentStageToken: newToken,
+            currentStageAssigneeEmail: dciEmail || null,
             hodApprovedAt: new Date()
         });
         await logTimelineEvent(request.id, 'HOD Approved', 'HOD', remarks);
-        const dciEmail = await RecipientService.get('DCI_TEAM', { location: request.location });
         await sendStageEmail(dciEmail, request, newToken, 'DCI_INPUT');
         return request;
     } catch (err) {
@@ -342,14 +364,15 @@ export const updateDCIDetails = async (token, data) => {
         if (!request || request.status !== 'PendingDCI') throw new Error('Invalid Token');
 
         const newToken = crypto.randomBytes(20).toString('hex');
+        const dciManagerEmail = await RecipientService.get('DCI_MANAGER', { location: request.location });
         await request.update({
             ...data,
             status: 'PendingDCIManager',
             currentStageToken: newToken,
+            currentStageAssigneeEmail: dciManagerEmail || null,
             dciSubmittedAt: new Date()
         });
         await logTimelineEvent(request.id, 'DCI Configuration Submitted', 'DCI', JSON.stringify(data));
-        const dciManagerEmail = await RecipientService.get('DCI_MANAGER', { location: request.location });
         await sendStageEmail(dciManagerEmail, request, newToken, 'DCI_MANAGER_APPROVAL');
         return request;
     } catch (err) {

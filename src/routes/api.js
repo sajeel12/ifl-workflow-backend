@@ -31,7 +31,11 @@ router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
 // token as a hidden field which ssoMiddleware reads (in addition to the header).
 router.get('/onboarding/initiate', onboardingController.handleRequest);
 router.post('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
-router.get('/onboarding/handle', onboardingController.handleRequest);
+// GET /handle is gated by SSO so we can compare the logged-in user with the
+// intended approver email stored on the request (forwarded-email validation).
+// POST stays open — submissions still authenticate via the sidecar token in
+// the form body, the same way /initiate POST does.
+router.get('/onboarding/handle', ssoMiddleware, onboardingController.handleRequest);
 router.post('/onboarding/handle', onboardingController.handleRequest);
 
 // Proof upload is performed by the DCI Implementer; the form attaches the
