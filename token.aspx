@@ -1,7 +1,9 @@
 <%@ Page Language="C#" %>
-    <%@ Import Namespace="System.Security.Cryptography" %>
-        <%@ Import Namespace="System.Web.Script.Serialization" %>
-            <%@ Import Namespace="System.DirectoryServices.AccountManagement" %>
+<%@ Assembly Name="System.DirectoryServices, Version=4.0.0.0, Culture=neutral, PublicKeyToken=B03F5F7F11D50A3A" %>
+<%@ Assembly Name="System.DirectoryServices.AccountManagement, Version=4.0.0.0, Culture=neutral, PublicKeyToken=B03F5F7F11D50A3A" %>
+<%@ Import Namespace="System.Security.Cryptography" %>
+<%@ Import Namespace="System.Web.Script.Serialization" %>
+<%@ Import Namespace="System.DirectoryServices.AccountManagement" %>
                 <script runat="server">
     protected void Page_Load(object sender, EventArgs e)
                     {
