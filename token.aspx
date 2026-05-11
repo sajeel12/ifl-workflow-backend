@@ -53,7 +53,7 @@
         // Sign over username + timestamp + email + displayName so they can't
         // be tampered with in transit.
         string dataToSign = username + "|" + timestamp + "|" + email + "|" + displayName;
-        string signature = ComputeHmacSha256(dataToSign, SECRET_KEY);
+        string signature = ComputeHmacSha256(dataToSign, secretKey);
 
                         var result = new
                             {
