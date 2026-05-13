@@ -55,6 +55,10 @@ router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
 // History / status view for an existing onboarding request
 router.get('/onboarding/history/:id', onboardingController.renderHistory);
 
+// JSON details for a single request — used by the role-portal sidebar's
+// history-row detail popup. SSO-gated.
+router.get('/onboarding/:id/details', ssoMiddleware, onboardingController.getRequestDetails);
+
 // Role-scoped queue: pending actions or full history for a given role (JSON)
 // Requires SSO so a malicious caller can't enumerate every role's queue.
 router.get('/onboarding/queue', ssoMiddleware, onboardingController.getRoleQueue);

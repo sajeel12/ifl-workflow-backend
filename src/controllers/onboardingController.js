@@ -772,6 +772,74 @@ export const getRoleQueue = async (req, res) => {
 };
 
 /**
+ * GET /api/onboarding/:id/details
+ * Returns a JSON snapshot of one request (summary + friendly timeline).
+ * Powers the role-portal sidebar's "history row click" detail popup.
+ * SSO-gated so only authenticated workflow users can introspect requests.
+ */
+export const getRequestDetails = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'Invalid id' });
+
+        const request = await OnboardingRequest.findByPk(id, {
+            attributes: [
+                'id', 'employeeId', 'fullName', 'department', 'subDepartment',
+                'designation', 'location', 'requesterName', 'requesterEmail',
+                'status', 'approvalStatus',
+                'hrSubmittedAt', 'itSubmittedAt', 'hodApprovedAt',
+                'dciSubmittedAt', 'dciManagerDecidedAt', 'itHodDecidedAt',
+                'dciImplementedAt', 'opsCompletedAt', 'createdAt', 'updatedAt'
+            ]
+        });
+        if (!request) return res.status(404).json({ success: false, error: 'Request not found' });
+
+        const events = await TimelineEvent.findAll({
+            where: { requestId: id },
+            order: [['timestamp', 'ASC']],
+            attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
+        });
+
+        const timeline = events.map(e => {
+            const ev = e.toJSON();
+            return {
+                eventId:   ev.eventId,
+                action:    ev.action,
+                actorRole: ev.actorRole,
+                summary:   narrate(ev),
+                timestamp: ev.timestamp
+            };
+        });
+
+        const r = request.toJSON();
+        return res.json({
+            success: true,
+            request: {
+                id:             r.id,
+                employeeId:     r.employeeId,
+                fullName:       r.fullName,
+                department:     r.department,
+                subDepartment:  r.subDepartment,
+                designation:    r.designation,
+                location:       r.location,
+                requesterName:  r.requesterName,
+                requesterEmail: r.requesterEmail,
+                statusRaw:      r.status,
+                statusLabel:    statusLabelFor(r.status),
+                statusOwner:    statusOwnerFor(r.status),
+                approvalStatus: r.approvalStatus,
+                createdAt:      r.createdAt,
+                updatedAt:      r.updatedAt
+            },
+            timeline
+        });
+    } catch (err) {
+        logger.error(`[Onboarding] getRequestDetails error: ${err.message}`);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+/**
  * JSON lookup — does an active onboarding request exist for this employeeId?
  * Used by the HR form's "Get Employee Data" flow to redirect to history.
  */
