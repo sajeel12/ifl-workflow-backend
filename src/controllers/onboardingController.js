@@ -7,6 +7,7 @@ import { Op } from 'sequelize';
 import { humanizeDetails, humanizeDetailsHTML, humanizeAction, narrate } from '../utils/historyFormatter.js';
 import { labelFor as statusLabelFor, ownerFor as statusOwnerFor, colorFor as statusColorFor } from '../utils/workflowLabels.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
+import { emailsMatch } from '../utils/emailMatch.js';
 
 // Map workflow status -> the role currently responsible for it
 const STATUS_TO_ROLE = {
@@ -130,8 +131,11 @@ const handleSubmission = async (req, res, token) => {
             // any forwarded-email scenario regardless of how the GET reached
             // them. The same email that was used to send the action link
             // (request.currentStageAssigneeEmail) must match req.user.email.
-            const expectedEmail = (request.currentStageAssigneeEmail || '').toLowerCase().trim();
-            const actualEmail   = (req.user && (req.user.email || '')).toLowerCase().trim();
+            // Compare LOCAL-PART only (text before "@") — same person can be
+            // ali.khan@ifl.net in HRMS and ali.khan@igc.com.pk in AD; the
+            // domain varies but the local-part is consistent.
+            const expectedEmail = request.currentStageAssigneeEmail || '';
+            const actualEmail   = (req.user && req.user.email) || '';
             if (expectedEmail) {
                 if (!actualEmail) {
                     // No SSO context — refuse outright. Token-only access is
@@ -154,7 +158,7 @@ const handleSubmission = async (req, res, token) => {
                         message: `This action can only be submitted by ${request.currentStageAssigneeEmail}. Please open the action link from the IFL portal so we can verify your identity.`
                     });
                 }
-                if (actualEmail !== expectedEmail) {
+                if (!emailsMatch(actualEmail, expectedEmail)) {
                     // Identity mismatch — log and reject.
                     try {
                         await TimelineEvent.create({
@@ -349,9 +353,8 @@ const renderForm = async (req, res, token) => {
         // refuses any submit whose req.user.email doesn't match the stored
         // currentStageAssigneeEmail.
         if (req.user && req.user.email && request.currentStageAssigneeEmail) {
-            const expected = request.currentStageAssigneeEmail.toLowerCase().trim();
-            const actual   = req.user.email.toLowerCase().trim();
-            if (expected !== actual) {
+            // Local-part only — see emailMatch.js for the rationale.
+            if (!emailsMatch(req.user.email, request.currentStageAssigneeEmail)) {
                 try {
                     await TimelineEvent.create({
                         requestId: request.id,

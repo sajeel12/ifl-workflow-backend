@@ -891,6 +891,21 @@
             const expected = <%- JSON.stringify(typeof expectedAssigneeEmail !== 'undefined' && expectedAssigneeEmail ? expectedAssigneeEmail : null) %>;
             const overlay  = document.getElementById('iflVerifyOverlay');
 
+            // Local-part comparison: same person can be ali.khan@ifl.net in
+            // HRMS and ali.khan@igc.com.pk in AD — domain varies, local-part
+            // stays consistent. Mirror of src/utils/emailMatch.js.
+            const emailLocalPart = (e) => {
+                if (!e || typeof e !== 'string') return '';
+                const at = e.indexOf('@');
+                if (at <= 0) return '';
+                return e.slice(0, at).toLowerCase().trim();
+            };
+            const emailsMatch = (a, b) => {
+                const la = emailLocalPart(a);
+                const lb = emailLocalPart(b);
+                return !!la && la === lb;
+            };
+
             // Helper: dismiss the verification cloak (only present when expected != null)
             const liftCloak = () => {
                 document.body.classList.remove('ifl-is-verifying');
@@ -945,7 +960,7 @@
                     showRejection(expected, 'an unverified user');
                     return;
                 }
-                if (u.email.toLowerCase().trim() !== expected.toLowerCase().trim()) {
+                if (!emailsMatch(u.email, expected)) {
                     showRejection(expected, u.email || u.username);
                     return;
                 }
