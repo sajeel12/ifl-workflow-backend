@@ -22,6 +22,34 @@ const DEFAULT_APPROVER_CONFIGS = [
 const PORT = process.env.PORT || 3000;
 
 
+/**
+ * Idempotent ADD COLUMN helper. Checks the actual DB schema and only adds
+ * the column if it's missing. Works on SQLite and SQL Server (the two
+ * dialects this project supports). Safe to call on every startup.
+ */
+async function ensureColumn(sequelize, isSqlite, tableName, columnName, sqlType) {
+    try {
+        let exists = false;
+        if (isSqlite) {
+            const [rows] = await sequelize.query(`PRAGMA table_info("${tableName}")`);
+            exists = Array.isArray(rows) && rows.some(r => r.name === columnName);
+        } else {
+            const [rows] = await sequelize.query(
+                `SELECT 1 AS ok FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_NAME = '${tableName}' AND COLUMN_NAME = '${columnName}'`
+            );
+            exists = Array.isArray(rows) && rows.length > 0;
+        }
+        if (!exists) {
+            const ddlType = sqlType === 'STRING' ? (isSqlite ? 'TEXT' : 'NVARCHAR(255)') : sqlType;
+            await sequelize.query(`ALTER TABLE "${tableName}" ADD ${isSqlite ? '' : 'COLUMN '}${columnName} ${ddlType} NULL`);
+            logger.info(`[Schema] Added missing column ${tableName}.${columnName} (${ddlType}).`);
+        }
+    } catch (err) {
+        logger.warn(`[Schema] ensureColumn(${tableName}.${columnName}) failed: ${err.message}`);
+    }
+}
+
 async function dropAllForeignKeys() {
     try {
         const query = `
@@ -70,6 +98,14 @@ async function startServer() {
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
             logger.info(`Database synced in ${duration}s (sync results).`);
         }
+
+        // ── Idempotent micro-migrations ──────────────────────────────────
+        // Add columns we introduced after the initial schema, only if they
+        // don't already exist. Safer than DB_SYNC_ALTER (which can rebuild
+        // entire tables and lose data) and runs every startup so production
+        // never has to remember a one-off migration step.
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
+        // Add future columns here as the model evolves.
 
         // Seed default approver configs if table is empty
         const count = await WorkflowApproverConfig.count();

@@ -573,8 +573,35 @@ const renderForm = async (req, res, token) => {
         // check on load so a forwarded recipient sees the rejection screen
         // even before they try to submit. Hard server-side enforcement still
         // runs at POST time.
-        expectedAssigneeEmail: request.currentStageAssigneeEmail || null
+        expectedAssigneeEmail: request.currentStageAssigneeEmail || null,
+        // Role-portal sidebar context — when token-bearing pages render in
+        // portal mode (everyone except HR / read-only), the sidebar fetches
+        // this role's pending tasks + history.
+        roleKey:   FORM_ROLE_TO_QUEUE_KEY[role] || null,
+        roleLabel: FORM_ROLE_TO_LABEL[role]     || role
     });
+};
+
+// Workflow form role → queue role-key + display label used by the portal sidebar.
+const FORM_ROLE_TO_QUEUE_KEY = {
+    HR:              null,           // HR initiates only; no portal sidebar
+    IT:              'IT_OPS',
+    HOD:             'HOD',
+    DCI:             'DCI_TEAM',
+    DCIManager:      'DCI_MANAGER',
+    ITHOD:           'IT_HOD',
+    DCIImplementer:  'DCI_IMPLEMENTER',
+    OPS:             'IT_OPS',       // OPS verification is IT_OPS per client policy
+    ReadOnly:        null
+};
+const FORM_ROLE_TO_LABEL = {
+    IT:              'IT Operations',
+    HOD:             'Head of Department',
+    DCI:             'DCI Team',
+    DCIManager:      'DCI Manager',
+    ITHOD:           'IT HOD',
+    DCIImplementer:  'DCI Implementer',
+    OPS:             'IT Operations'
 };
 
 // Map a role key to the request statuses it owns/can act on
