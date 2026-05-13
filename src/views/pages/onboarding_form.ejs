@@ -1299,92 +1299,99 @@
             }
 
             // ─── Detail popup controller ───────────────────────────────
-            // Fetches one request + its timeline and paints a rich modal.
-            // Wired to history-row clicks. Cached so reopens are instant.
-            const detailCache = {};
-            const detailBackdrop = document.getElementById('iflDetailBackdrop');
-            const detailName     = document.getElementById('iflDetailName');
-            const detailSub      = document.getElementById('iflDetailSub');
-            const detailBody     = document.getElementById('iflDetailBody');
-
-            function fmtAbs(ts) {
-                if (!ts) return '—';
-                const d = new Date(ts);
-                if (isNaN(d.getTime())) return '—';
-                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                    + ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-            }
-
-            function pillClassForStatus(rawStatus) {
-                if (!rawStatus) return 'is-pending';
-                if (/reject/i.test(rawStatus)) return 'is-rejected';
-                if (rawStatus === 'Completed') return 'is-done';
-                return 'is-pending';
-            }
-
-            function dotClassForAction(action) {
-                const a = (action || '').toLowerCase();
-                if (a.includes('reject')) return 'is-rejected';
-                if (a.includes('approve') || a.includes('completed')) return 'is-done';
-                return '';
-            }
-
-            function renderDetail(payload) {
-                if (!payload || !payload.success) {
-                    detailBody.innerHTML = '<div class="ifl-detail-state" style="color:#dc2626;">Could not load details.</div>';
+            // Defensive: every step is wrapped so a missing element or
+            // typo can't break the rest of the sidebar/portal setup.
+            (function setupDetailPopup() {
+                const detailBackdrop = document.getElementById('iflDetailBackdrop');
+                const detailName     = document.getElementById('iflDetailName');
+                const detailSub      = document.getElementById('iflDetailSub');
+                const detailBody     = document.getElementById('iflDetailBody');
+                if (!detailBackdrop || !detailName || !detailSub || !detailBody) {
+                    console.warn('[Portal detail] modal elements missing; popup disabled.');
+                    window.iflPortalDetail = { open() {}, close() {} };
                     return;
                 }
-                const r = payload.request || {};
-                const tl = payload.timeline || [];
+                const detailCache = {};
 
-                detailName.textContent = (r.fullName && r.fullName.trim()) ? r.fullName : ('Request #' + r.id);
-                detailSub.textContent  = '#' + r.id
-                    + (r.designation ? ' · ' + r.designation : '')
-                    + (r.department  ? ' · ' + r.department  : '');
+                function fmtAbs(ts) {
+                    if (!ts) return '—';
+                    const d = new Date(ts);
+                    if (isNaN(d.getTime())) return '—';
+                    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                        + ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                }
+                function pillClassForStatus(s) {
+                    if (!s) return 'is-pending';
+                    if (/reject/i.test(s)) return 'is-rejected';
+                    if (s === 'Completed') return 'is-done';
+                    return 'is-pending';
+                }
+                function dotClassForAction(a) {
+                    a = (a || '').toLowerCase();
+                    if (a.indexOf('reject') >= 0) return 'is-rejected';
+                    if (a.indexOf('approve') >= 0 || a.indexOf('completed') >= 0) return 'is-done';
+                    return '';
+                }
 
-                const pillCls = pillClassForStatus(r.statusRaw);
+                function renderDetail(payload) {
+                    if (!payload || !payload.success) {
+                        detailBody.innerHTML = '<div class="ifl-detail-state" style="color:#dc2626;">Could not load details.</div>';
+                        return;
+                    }
+                    const r = payload.request || {};
+                    const tl = payload.timeline || [];
 
-                const grid = []
-                    .concat(r.employeeId    ? [{ label: 'Employee ID',   value: r.employeeId }] : [])
-                    .concat(r.location      ? [{ label: 'Location',      value: r.location }] : [])
-                    .concat(r.subDepartment ? [{ label: 'Sub-department', value: r.subDepartment }] : [])
-                    .concat([{ label: 'Status', value: '<span class="ifl-detail-pill ' + pillCls + '">' + escapeHTML(r.statusLabel || r.statusRaw || '—') + '</span>' }])
-                    .concat(r.statusOwner && r.statusOwner !== '—' ? [{ label: 'Currently With', value: r.statusOwner }] : [])
-                    .concat(r.requesterName ? [{ label: 'Initiated By', value: r.requesterName + (r.requesterEmail ? ' (' + r.requesterEmail + ')' : '') }] : [])
-                    .concat([{ label: 'Created',  value: fmtAbs(r.createdAt) }])
-                    .concat([{ label: 'Updated',  value: fmtAbs(r.updatedAt) }]);
+                    detailName.textContent = (r.fullName && r.fullName.trim()) ? r.fullName : ('Request #' + r.id);
+                    detailSub.textContent  = '#' + r.id
+                        + (r.designation ? ' · ' + r.designation : '')
+                        + (r.department  ? ' · ' + r.department  : '');
 
-                const summaryHtml = ''
-                    + '<div class="ifl-detail-section">'
-                    +   '<h4>Summary</h4>'
-                    +   '<div class="ifl-detail-grid">'
-                    +     grid.map(g => '<div><div class="idg-label">' + escapeHTML(g.label) + '</div><div class="idg-value">' + g.value + '</div></div>').join('')
-                    +   '</div>'
-                    + '</div>';
+                    const pillCls = pillClassForStatus(r.statusRaw);
 
-                const timelineHtml = !tl.length
-                    ? ''
-                    : '<div class="ifl-detail-section">'
-                    +   '<h4>Workflow Activity</h4>'
-                    +   '<ul class="ifl-detail-timeline">'
-                    +     tl.map(ev => ''
-                    +       + '<li>'
-                    +       +   '<span class="idt-dot ' + dotClassForAction(ev.action) + '">●</span>'
-                    +       +   '<div class="idt-action">'
-                    +       +     '<span class="idt-role">' + escapeHTML(ev.actorRole || '—') + '</span>'
-                    +       +     escapeHTML(ev.summary || ev.action || '')
-                    +       +   '</div>'
-                    +       +   '<div class="idt-meta">' + escapeHTML(fmtAbs(ev.timestamp)) + '</div>'
-                    +       + '</li>'
-                    +     ).join('')
-                    +   '</ul>'
-                    + '</div>';
+                    const grid = [];
+                    if (r.employeeId)    grid.push({ label: 'Employee ID',     value: escapeHTML(r.employeeId) });
+                    if (r.location)      grid.push({ label: 'Location',        value: escapeHTML(r.location) });
+                    if (r.subDepartment) grid.push({ label: 'Sub-department',  value: escapeHTML(r.subDepartment) });
+                    grid.push({ label: 'Status', value: '<span class="ifl-detail-pill ' + pillCls + '">' + escapeHTML(r.statusLabel || r.statusRaw || '—') + '</span>' });
+                    if (r.statusOwner && r.statusOwner !== '—') grid.push({ label: 'Currently With', value: escapeHTML(r.statusOwner) });
+                    if (r.requesterName) grid.push({ label: 'Initiated By', value: escapeHTML(r.requesterName + (r.requesterEmail ? ' (' + r.requesterEmail + ')' : '')) });
+                    grid.push({ label: 'Created', value: escapeHTML(fmtAbs(r.createdAt)) });
+                    grid.push({ label: 'Updated', value: escapeHTML(fmtAbs(r.updatedAt)) });
 
-                detailBody.innerHTML = summaryHtml + timelineHtml;
-            }
+                    const summaryHtml =
+                        '<div class="ifl-detail-section">' +
+                            '<h4>Summary</h4>' +
+                            '<div class="ifl-detail-grid">' +
+                                grid.map(g =>
+                                    '<div>' +
+                                        '<div class="idg-label">' + escapeHTML(g.label) + '</div>' +
+                                        '<div class="idg-value">' + g.value + '</div>' +
+                                    '</div>'
+                                ).join('') +
+                            '</div>' +
+                        '</div>';
 
-            window.iflPortalDetail = {
-                async open(requestId) {
+                    const timelineHtml = !tl.length ? '' :
+                        '<div class="ifl-detail-section">' +
+                            '<h4>Workflow Activity</h4>' +
+                            '<ul class="ifl-detail-timeline">' +
+                                tl.map(ev =>
+                                    '<li>' +
+                                        '<span class="idt-dot ' + dotClassForAction(ev.action) + '">●</span>' +
+                                        '<div class="idt-action">' +
+                                            '<span class="idt-role">' + escapeHTML(ev.actorRole || '—') + '</span>' +
+                                            escapeHTML(ev.summary || ev.action || '') +
+                                        '</div>' +
+                                        '<div class="idt-meta">' + escapeHTML(fmtAbs(ev.timestamp)) + '</div>' +
+                                    '</li>'
+                                ).join('') +
+                            '</ul>' +
+                        '</div>';
+
+                    detailBody.innerHTML = summaryHtml + timelineHtml;
+                }
+
+                async function open(requestId) {
                     if (!requestId) return;
                     detailBackdrop.setAttribute('aria-hidden', 'false');
                     detailBackdrop.classList.add('is-open');
@@ -1406,22 +1413,20 @@
                         console.warn('[Portal detail]', err && err.message);
                         detailBody.innerHTML = '<div class="ifl-detail-state" style="color:#dc2626;">Could not load details.<br><span style="font-size:.78rem;">' + escapeHTML(err && err.message || '') + '</span></div>';
                     }
-                },
-                close() {
+                }
+                function close() {
                     detailBackdrop.classList.remove('is-open');
                     detailBackdrop.setAttribute('aria-hidden', 'true');
                 }
-            };
+                window.iflPortalDetail = { open, close };
 
-            // Close on backdrop click + Escape key
-            detailBackdrop.addEventListener('mousedown', (e) => {
-                if (e.target === detailBackdrop) iflPortalDetail.close();
-            });
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && detailBackdrop.classList.contains('is-open')) {
-                    iflPortalDetail.close();
-                }
-            });
+                detailBackdrop.addEventListener('mousedown', (e) => {
+                    if (e.target === detailBackdrop) close();
+                });
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && detailBackdrop.classList.contains('is-open')) close();
+                });
+            })();
 
             window.iflPortal = {
                 switchTab(tab) {
@@ -1435,17 +1440,21 @@
                 }
             };
 
-            // Wait until the verification cloak (if any) has lifted before
-            // we start filling the sidebar.
+            // Wait briefly for the verification cloak to lift, then start
+            // loading regardless. The cloak hides the sidebar visually, so
+            // we can safely populate it in the background. A hard timeout
+            // ensures the sidebar isn't held hostage by a slow SSO call.
+            let _waited = 0;
             const startWhenReady = () => {
-                if (document.body.classList.contains('ifl-is-verifying')) {
+                const cloaked = document.body.classList.contains('ifl-is-verifying');
+                if (cloaked && _waited < 6000) {
+                    _waited += 200;
                     setTimeout(startWhenReady, 200);
                     return;
                 }
-                loadTab('pending');
-                // Eager-load history in the background so the tab switch is
-                // instant. With the renderIfActive gate above, this no longer
-                // overwrites the pending DOM.
+                if (cloaked) console.warn('[Portal] cloak still up after 6s — loading sidebar anyway');
+                loadTab('pending').catch(e => console.warn('[Portal] pending load failed:', e));
+                // Eager-load history in the background.
                 setTimeout(() => loadTab('history').catch(() => {}), 1200);
             };
             if (document.readyState === 'loading') {
