@@ -47,7 +47,12 @@ router.post('/onboarding/handle', ssoMiddleware, onboardingController.handleRequ
 
 // Proof upload is performed by the DCI Implementer; the form attaches the
 // sidecar token in the multipart body the same way the HR form does.
-router.post('/onboarding/upload-proof', ssoMiddleware, upload.array('dciProof', 5), onboardingController.handleProofUpload);
+// IMPORTANT: multer (`upload.array`) MUST run before ssoMiddleware so the
+// multipart body is parsed and `req.body['x-sidecar-token']` is visible.
+// If ssoMiddleware runs first, req.body is empty for multipart requests and
+// the sidecar token (which the form submits as a hidden field) can't be read,
+// causing a 401 → IIS Windows-auth login-prompt loop.
+router.post('/onboarding/upload-proof', upload.array('dciProof', 5), ssoMiddleware, onboardingController.handleProofUpload);
 
 // Lookup active onboarding request by employeeId (used by HR form JS)
 router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
