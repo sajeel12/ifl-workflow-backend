@@ -1077,13 +1077,27 @@
                 listEl.innerHTML = html;
             }
 
-            async function loadTab(tab) {
-                if (cache[tab]) {
+            // Fetch a tab's data and (optionally) render it.
+            //
+            // CRITICAL: `renderRows` is only invoked when the *currently
+            // active* tab matches the one we just fetched. The background
+            // history prefetch must NOT clobber the rendered pending list.
+            async function loadTab(tab, opts) {
+                opts = opts || {};
+                const renderIfActive = () => {
+                    if (currentTab !== tab) return;
                     renderRows(cache[tab]);
+                };
+
+                if (cache[tab]) {
                     counts[tab].textContent = cache[tab].length || '';
+                    renderIfActive();
                     return;
                 }
-                renderState('<div class="pls-spin"></div><div>Loading…</div>');
+
+                if (currentTab === tab) {
+                    renderState('<div class="pls-spin"></div><div>Loading…</div>');
+                }
                 try {
                     const fetcher = (typeof window.iflFetch === 'function') ? window.iflFetch : (u, o) => fetch(u, o);
                     const r = await fetcher('/api/onboarding/queue?role=' + encodeURIComponent(ROLE_KEY) + '&type=' + tab);
@@ -1092,10 +1106,21 @@
                     if (!j.success) throw new Error(j.error || 'failed');
                     cache[tab] = j.data || [];
                     counts[tab].textContent = cache[tab].length || '';
-                    renderRows(cache[tab]);
+
+                    // Debug: print each row's destination URL so we can verify
+                    // the queue endpoint hands back distinct tokens per row.
+                    try {
+                        console.groupCollapsed('[Portal] ' + tab + ' tab — ' + cache[tab].length + ' rows');
+                        cache[tab].forEach(it => console.log('#' + it.requestId, '→', it.url));
+                        console.groupEnd();
+                    } catch (_) {}
+
+                    renderIfActive();
                 } catch (err) {
                     console.warn('[Portal]', err && err.message);
-                    renderState('<div style="color:#dc2626;">Could not load tasks.<br><span style="font-size:.78rem;">' + escapeHTML(err && err.message || '') + '</span></div>');
+                    if (currentTab === tab) {
+                        renderState('<div style="color:#dc2626;">Could not load tasks.<br><span style="font-size:.78rem;">' + escapeHTML(err && err.message || '') + '</span></div>');
+                    }
                 }
             }
 
@@ -1104,7 +1129,10 @@
                     if (tab === currentTab) return;
                     currentTab = tab;
                     tabBtns.forEach(b => b.classList.toggle('is-active', b.dataset.tab === tab));
-                    loadTab(tab);
+                    // If we already have data, render immediately; otherwise
+                    // loadTab() will fetch + render.
+                    if (cache[tab]) renderRows(cache[tab]);
+                    else loadTab(tab);
                 }
             };
 
@@ -1116,7 +1144,9 @@
                     return;
                 }
                 loadTab('pending');
-                // Eager-load history in the background so tab switch is instant.
+                // Eager-load history in the background so the tab switch is
+                // instant. With the renderIfActive gate above, this no longer
+                // overwrites the pending DOM.
                 setTimeout(() => loadTab('history').catch(() => {}), 1200);
             };
             if (document.readyState === 'loading') {
