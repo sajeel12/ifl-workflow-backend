@@ -726,41 +726,147 @@ export const renderRoleQueue = async (req, res) => {
     }
 };
 
+// queue role-key → list of TimelineEvent.actorRole values this role has produced.
+// Used by the History tab so each row reflects what THIS role did to a request,
+// not the request's overall status.
+const QUEUE_ROLE_TO_ACTOR_ROLES = {
+    IT_OPS:          ['IT', 'OPS'],         // Step 2 (configure) + Step 12 (verify)
+    HOD:             ['HOD'],
+    DCI_TEAM:        ['DCI'],
+    DCI_MANAGER:     ['DCIManager'],
+    IT_HOD:          ['ITHOD'],
+    DCI_IMPLEMENTER: ['DCIImplementer']
+};
+
+// Friendly verb for each action — what gets shown as the row's primary text
+// in the history sidebar ("Approved", "Configured Services", …).
+const ACTION_VERB = {
+    'Request Initiated':                  'Submitted Request',
+    'IT Services Configured':             'Configured Services',
+    'HOD Approved':                       'Approved',
+    'HOD Rejected':                       'Rejected',
+    'DCI Configuration Submitted':        'Submitted Identity Config',
+    'DCI Manager Approved':               'Approved',
+    'DCI Manager Approved (High Risk)':   'Approved (Email Routed)',
+    'DCI Manager Rejected':               'Rejected',
+    'DCI Manager Requested Changes':      'Requested Changes',
+    'IT HOD Approved':                    'Approved',
+    'IT HOD Rejected':                    'Rejected',
+    'DCI Implementation Completed':       'Provisioned Account',
+    'OPS Checklist Completed':            'Verified Setup',
+    'Email Regenerated':                  'Resent Email',
+    'Work Order PDF Emailed':             'PDF Generated'
+};
+
+function actionTone(action) {
+    if (!action) return 'info';
+    if (/reject/i.test(action))                      return 'danger';
+    if (/approve|completed|verified|submitted/i.test(action)) return 'success';
+    if (/requested changes/i.test(action))           return 'warning';
+    return 'info';
+}
+
 /**
  * GET /api/onboarding/queue?role=DCI_IMPLEMENTER&type=pending|history
- * Returns the list of requests visible to a given role.
- * Each row includes id, employee, status, currentRecipient.
+ *
+ * Two modes:
+ *   pending → rows are OnboardingRequests currently waiting on this role
+ *   history → rows are TimelineEvents this role has already produced
+ *             (i.e., "what I did to this request"), most-recent first
  */
 export const getRoleQueue = async (req, res) => {
     try {
         const role = String(req.query.role || '').toUpperCase();
         const type = String(req.query.type || 'pending').toLowerCase();
-        const map = type === 'history' ? ROLE_TO_HISTORY_STATUS : ROLE_TO_PENDING_STATUS;
 
-        if (!map[role]) {
-            return res.status(400).json({ success: false, error: `Unknown role "${role}". Valid: ${Object.keys(map).join(', ')}` });
+        if (type === 'history') {
+            const actorRoles = QUEUE_ROLE_TO_ACTOR_ROLES[role];
+            if (!actorRoles) {
+                return res.status(400).json({ success: false, error: `Unknown role "${role}". Valid: ${Object.keys(QUEUE_ROLE_TO_ACTOR_ROLES).join(', ')}` });
+            }
+
+            const events = await TimelineEvent.findAll({
+                where: { actorRole: { [Op.in]: actorRoles } },
+                order: [['timestamp', 'DESC']],
+                attributes: ['eventId', 'requestId', 'action', 'actorRole', 'details', 'timestamp']
+            });
+
+            const requestIds = Array.from(new Set(events.map(e => e.requestId)));
+            const requests = requestIds.length
+                ? await OnboardingRequest.findAll({
+                    where: { id: { [Op.in]: requestIds } },
+                    attributes: ['id', 'employeeId', 'fullName', 'department', 'subDepartment',
+                                 'designation', 'requesterName', 'requesterEmail', 'status']
+                })
+                : [];
+            const reqMap = new Map(requests.map(r => [r.id, r.toJSON()]));
+
+            const data = events.map(e => {
+                const ev = e.toJSON();
+                const req = reqMap.get(ev.requestId) || {};
+                return {
+                    rowId:           'evt-' + ev.eventId,
+                    isEvent:         true,
+                    eventId:         ev.eventId,
+                    requestId:       ev.requestId,
+                    actorRole:       ev.actorRole,
+                    action:          ev.action,
+                    actionLabel:     ACTION_VERB[ev.action] || ev.action,
+                    actionTone:      actionTone(ev.action),
+                    actionDetailHTML: humanizeDetailsHTML(ev.details),
+                    actionDetailText: humanizeDetails(ev.details),
+                    timestamp:       ev.timestamp,
+                    // Employee summary — surface enough so the row stands alone
+                    fullName:        req.fullName     || '',
+                    employeeId:      req.employeeId   || '',
+                    department:      req.department   || '',
+                    subDepartment:   req.subDepartment || '',
+                    designation:     req.designation  || '',
+                    initiatorName:   req.requesterName  || '',
+                    initiatorEmail:  req.requesterEmail || '',
+                    requestStatus:   req.status || ''
+                };
+            });
+
+            return res.json({ success: true, role, type, count: data.length, data });
+        }
+
+        // ─── pending mode (unchanged shape, flattened for the portal sidebar) ───
+        const pendingStatuses = ROLE_TO_PENDING_STATUS[role];
+        if (!pendingStatuses) {
+            return res.status(400).json({ success: false, error: `Unknown role "${role}". Valid: ${Object.keys(ROLE_TO_PENDING_STATUS).join(', ')}` });
         }
 
         const rows = await OnboardingRequest.findAll({
-            where: { status: { [Op.in]: map[role] } },
+            where: { status: { [Op.in]: pendingStatuses } },
             order: [['updatedAt', 'DESC']],
             attributes: ['id', 'employeeId', 'fullName', 'department', 'subDepartment', 'designation',
-                         'requesterName', 'requesterEmail', 'status', 'createdAt', 'updatedAt']
+                         'requesterName', 'requesterEmail', 'status', 'createdAt', 'updatedAt', 'currentStageToken']
         });
 
-        // Uniform shape so all role UIs look the same
         const data = rows.map(r => {
             const j = r.toJSON();
             const stage = STATUS_TO_ROLE[j.status];
+            const actionable = pendingStatuses.includes(j.status);
+            const url = actionable && j.currentStageToken
+                ? `/api/onboarding/handle?token=${j.currentStageToken}`
+                : `/api/onboarding/history/${j.id}`;
             return {
-                requestId: j.id,
-                employee: { id: j.employeeId, name: j.fullName, designation: j.designation,
-                            department: j.department, subDepartment: j.subDepartment },
-                initiator: { name: j.requesterName, email: j.requesterEmail },
-                currentStage: j.status,
-                currentRole: stage ? stage.label : j.status,
-                lastUpdated: j.updatedAt,
-                actionable: ROLE_TO_PENDING_STATUS[role]?.includes(j.status) || false
+                rowId:           'req-' + j.id,
+                isEvent:         false,
+                requestId:       j.id,
+                fullName:        j.fullName     || '',
+                employeeId:      j.employeeId   || '',
+                department:      j.department   || '',
+                subDepartment:   j.subDepartment || '',
+                designation:     j.designation  || '',
+                initiatorName:   j.requesterName  || '',
+                initiatorEmail:  j.requesterEmail || '',
+                currentStage:    statusLabelFor(j.status),
+                currentRoleOwner: stage ? stage.label : j.status,
+                lastUpdated:     j.updatedAt,
+                actionable,
+                url
             };
         });
 
