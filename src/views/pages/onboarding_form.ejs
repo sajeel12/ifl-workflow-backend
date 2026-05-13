@@ -84,21 +84,22 @@
     <% const showPortal = !!(token && roleKey); %>
     <% if (showPortal) { %>
     <style>
+        /* Sidebar sticks to the left edge of the viewport.
+           Main area takes the rest and keeps the form's original centered
+           layout (the existing .app-container max-width is preserved). */
         .portal-shell {
             display: flex;
-            max-width: 1480px;
-            margin: 0 auto;
             min-height: calc(100vh - 90px);
             background: #f8fafc;
         }
         .portal-sidebar {
-            width: 320px; flex-shrink: 0;
+            width: 280px; flex-shrink: 0;
             background: #ffffff;
             border-right: 1px solid #e2e8f0;
             box-shadow: 1px 0 0 rgba(15,23,42,0.02);
             display: flex; flex-direction: column;
             position: sticky; top: 0; align-self: flex-start;
-            max-height: 100vh; overflow: hidden;
+            height: calc(100vh - 90px); overflow: hidden;
         }
         .portal-side-head {
             padding: 22px 22px 14px;
@@ -219,9 +220,9 @@
             flex: 1; min-width: 0;
             padding: 0;
         }
-        /* The existing .app-container styles assume it's the only child of
-           body — when nested in the portal main it needs to fill the space. */
-        .portal-main > .app-container { max-width: none; margin: 0; padding: 24px 32px; }
+        /* Inside the portal, the existing .app-container keeps its own
+           max-width and auto-centers within the main area — so the form
+           looks the same width as before, just shifted right of the sidebar. */
 
         @media (max-width: 1000px) {
             .portal-shell { flex-direction: column; }
@@ -1036,25 +1037,41 @@
                 const html = items.map(it => {
                     const isCurrent = it.requestId === CURRENT_REQ_ID;
                     const isPending = currentTab === 'pending';
+                    const hasName   = it.fullName && it.fullName.trim() && it.fullName !== '—';
+                    const nameText  = hasName ? it.fullName : ('Request #' + it.requestId);
+
+                    // Meta line: only show parts we actually have. If we
+                    // already used "Request #N" as the name, skip the #N
+                    // here to avoid duplication.
+                    const metaBits = [];
+                    if (hasName) metaBits.push('<strong>#' + escapeHTML(it.requestId) + '</strong>');
+                    if (it.department && it.department.trim() && it.department !== '—') metaBits.push(escapeHTML(it.department));
+                    if (it.designation && it.designation.trim()) metaBits.push(escapeHTML(it.designation));
+                    const metaHtml = metaBits.length
+                        ? '<div class="pr-meta">' + metaBits.join(' · ') + '</div>'
+                        : '';
+
                     const badgeHtml = isPending
                         ? (isCurrent
-                            ? ''
+                            ? '<span class="pr-badge is-now">Viewing</span>'
                             : '<span class="pr-badge is-now">Action</span>')
-                        : '<span class="pr-badge is-done">' + escapeHTML(it.currentStage || '') + '</span>';
+                        : '<span class="pr-badge is-done">' + escapeHTML(it.currentStage || 'Past') + '</span>';
+
+                    // Disable the link for the currently-viewed row so clicks
+                    // don't trigger a full reload of the same page.
+                    const href = isCurrent ? '#' : escapeHTML(it.url);
+                    const clickGuard = isCurrent ? 'onclick="event.preventDefault();return false;"' : '';
+
                     return ''
-                        + '<a class="portal-row ' + (isCurrent ? 'is-current' : '') + '" href="' + escapeHTML(it.url) + '">'
+                        + '<a class="portal-row ' + (isCurrent ? 'is-current' : '') + '" href="' + href + '" ' + clickGuard + ' title="' + escapeHTML(it.url) + '">'
                         +   '<div class="pr-top">'
                         +     '<div class="pr-name">'
                         +       (isCurrent ? '<span class="pr-current-dot"></span>' : '')
-                        +       escapeHTML(it.fullName || ('#' + it.requestId))
+                        +       escapeHTML(nameText)
                         +     '</div>'
                         +     badgeHtml
                         +   '</div>'
-                        +   '<div class="pr-meta">'
-                        +     '<strong>#' + escapeHTML(it.requestId) + '</strong> · '
-                        +     escapeHTML(it.department || '—')
-                        +     (it.designation ? ' · ' + escapeHTML(it.designation) : '')
-                        +   '</div>'
+                        +   metaHtml
                         + '</a>';
                 }).join('');
                 listEl.innerHTML = html;
