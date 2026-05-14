@@ -1,0 +1,311 @@
+<%
+    // Drives the portal sidebar: fetches /api/onboarding/queue, renders rows,
+    // and wires up the history detail-modal. Include this AFTER the sidebar
+    // markup (i.e. after partials/portal_shell.ejs) and AFTER the page body.
+    //
+    // Required locals:
+    //   showPortal : boolean — when false, this partial renders nothing
+    //   roleKey    : string  — e.g. 'HOD' (sent to /api/onboarding/queue?role=)
+    //
+    // Optional locals:
+    //   portalCurrentRequestId : number|null — when set, that pending row is
+    //                                          rendered as "Viewing" and isn't
+    //                                          a navigable link. Used by the
+    //                                          form page; the message page
+    //                                          leaves it null.
+%>
+<% if (locals.showPortal) { %>
+<script>
+    /* ─── Portal sidebar — fetches role-scoped queue and renders rows ─── */
+    (function () {
+        const ROLE_KEY      = <%- JSON.stringify(locals.roleKey) %>;
+        const CURRENT_REQ_ID = <%- JSON.stringify(locals.portalCurrentRequestId || null) %>;
+        const listEl  = document.getElementById('portalList');
+        const tabBtns = document.querySelectorAll('.portal-tab');
+        const counts  = { pending: document.getElementById('ps-count-pending'),
+                          history: document.getElementById('ps-count-history') };
+        const cache   = { pending: null, history: null };
+        let currentTab = 'pending';
+
+        function escapeHTML(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+                ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function renderState(html) { listEl.innerHTML = '<div class="portal-list-state">' + html + '</div>'; }
+
+        function renderEmpty(tab) {
+            const msg = tab === 'pending'
+                ? 'You have no pending tasks right now.'
+                : 'No past activity for this role yet.';
+            renderState('<div style="font-size:1.4rem;opacity:.4;margin-bottom:6px;">📭</div><div>' + msg + '</div>');
+        }
+
+        // Compact relative-then-absolute date.
+        // < 24h → "3h ago" · < 7d → "2d ago" · else → "5 May, 14:30"
+        function formatRelDate(ts) {
+            if (!ts) return '';
+            const d = new Date(ts);
+            if (isNaN(d.getTime())) return '';
+            const diff = Date.now() - d.getTime();
+            const min = Math.floor(diff / 60000);
+            if (min < 1)   return 'just now';
+            if (min < 60)  return min + 'm ago';
+            const hr = Math.floor(min / 60);
+            if (hr < 24)   return hr + 'h ago';
+            const day = Math.floor(hr / 24);
+            if (day < 7)   return day + 'd ago';
+            return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                + ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // History row data is cached so the modal can render instantly
+        // without re-fetching when the user clicks.
+        const historyRowMap = {};
+
+        function renderRows(items) {
+            if (!items.length) { renderEmpty(currentTab); return; }
+            const isHistory = currentTab === 'history';
+
+            const html = items.map(it => {
+                if (isHistory && it.isEvent) {
+                    historyRowMap[it.eventId] = it;
+                    return renderHistoryRow(it);
+                }
+                return renderPendingRow(it);
+            }).join('');
+            listEl.innerHTML = html;
+        }
+
+        function renderPendingRow(it) {
+            const isCurrent = CURRENT_REQ_ID !== null && it.requestId === CURRENT_REQ_ID;
+            const hasName   = it.fullName && it.fullName.trim();
+            const nameText  = hasName ? it.fullName : ('Request #' + it.requestId);
+
+            const metaBits = [];
+            if (hasName) metaBits.push('<strong>#' + escapeHTML(it.requestId) + '</strong>');
+            if (it.department && it.department.trim())  metaBits.push(escapeHTML(it.department));
+            if (it.designation && it.designation.trim()) metaBits.push(escapeHTML(it.designation));
+            const metaHtml = metaBits.length ? '<div class="pr-meta">' + metaBits.join(' · ') + '</div>' : '';
+
+            const timeStr  = formatRelDate(it.lastUpdated);
+            const timeHtml = timeStr ? '<div class="pr-time">' + escapeHTML(timeStr) + '</div>' : '';
+
+            const badge = isCurrent
+                ? '<span class="pr-badge is-now">Viewing</span>'
+                : '<span class="pr-badge is-now">Action</span>';
+
+            const href = isCurrent ? '#' : escapeHTML(it.url || '#');
+            const clickAttr = isCurrent ? 'onclick="event.preventDefault();return false;"' : '';
+
+            return '<a class="portal-row ' + (isCurrent ? 'is-current' : '') + '" href="' + href + '" ' + clickAttr + ' title="' + escapeHTML(it.url || '') + '">'
+                +   '<div class="pr-top">'
+                +     '<div class="pr-name">'
+                +       (isCurrent ? '<span class="pr-current-dot"></span>' : '')
+                +       escapeHTML(nameText)
+                +     '</div>'
+                +     badge
+                +   '</div>'
+                +   metaHtml
+                +   timeHtml
+                + '</a>';
+        }
+
+        function renderHistoryRow(it) {
+            const tone     = it.actionTone || 'info';
+            const verb     = it.actionLabel || it.action || 'Action';
+            const empName  = it.fullName && it.fullName.trim()
+                ? it.fullName + (it.requestId ? ' · #' + it.requestId : '')
+                : 'Request #' + it.requestId;
+
+            const metaBits = [];
+            if (it.department && it.department.trim())  metaBits.push(escapeHTML(it.department));
+            if (it.designation && it.designation.trim()) metaBits.push(escapeHTML(it.designation));
+            const metaHtml = metaBits.length ? '<div class="pr-meta">' + metaBits.join(' · ') + '</div>' : '';
+
+            const timeStr  = formatRelDate(it.timestamp);
+            const timeHtml = timeStr ? '<div class="pr-time">' + escapeHTML(timeStr) + '</div>' : '';
+
+            return '<a class="portal-row" href="#" onclick="event.preventDefault();iflPortalDetail.open(' + Number(it.eventId) + ');">'
+                +   '<div class="pr-top">'
+                +     '<div class="pr-name">' + escapeHTML(verb) + '</div>'
+                +     '<span class="pr-badge tone-' + tone + '">' + escapeHTML(verb.split(' ')[0]) + '</span>'
+                +   '</div>'
+                +   '<div class="pr-sub-name">' + escapeHTML(empName) + '</div>'
+                +   metaHtml
+                +   timeHtml
+                + '</a>';
+        }
+
+        // Fetch a tab's data and (optionally) render it.
+        // renderRows is only invoked when the *currently active* tab matches
+        // the one we just fetched. The background history prefetch must not
+        // clobber the rendered pending list.
+        async function loadTab(tab, opts) {
+            opts = opts || {};
+            const renderIfActive = () => {
+                if (currentTab !== tab) return;
+                renderRows(cache[tab]);
+            };
+
+            if (cache[tab]) {
+                counts[tab].textContent = cache[tab].length || '';
+                renderIfActive();
+                return;
+            }
+
+            if (currentTab === tab) {
+                renderState('<div class="pls-spin"></div><div>Loading…</div>');
+            }
+            try {
+                const fetcher = (typeof window.iflFetch === 'function') ? window.iflFetch : (u, o) => fetch(u, o);
+                const r = await fetcher('/api/onboarding/queue?role=' + encodeURIComponent(ROLE_KEY) + '&type=' + tab);
+                if (!r.ok) throw new Error('queue ' + r.status);
+                const j = await r.json();
+                if (!j.success) throw new Error(j.error || 'failed');
+                cache[tab] = j.data || [];
+                counts[tab].textContent = cache[tab].length || '';
+                renderIfActive();
+            } catch (err) {
+                console.warn('[Portal]', err && err.message);
+                if (currentTab === tab) {
+                    renderState('<div style="color:#dc2626;">Could not load tasks.<br><span style="font-size:.78rem;">' + escapeHTML(err && err.message || '') + '</span></div>');
+                }
+            }
+        }
+
+        // ─── Detail popup controller ───────────────────────────────
+        (function setupDetailPopup() {
+            const detailBackdrop = document.getElementById('iflDetailBackdrop');
+            const detailName     = document.getElementById('iflDetailName');
+            const detailSub      = document.getElementById('iflDetailSub');
+            const detailBody     = document.getElementById('iflDetailBody');
+            if (!detailBackdrop || !detailName || !detailSub || !detailBody) {
+                console.warn('[Portal detail] modal elements missing; popup disabled.');
+                window.iflPortalDetail = { open() {}, close() {} };
+                return;
+            }
+
+            function fmtAbs(ts) {
+                if (!ts) return '—';
+                const d = new Date(ts);
+                if (isNaN(d.getTime())) return '—';
+                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    + ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            function openEventDetail(eventId) {
+                const ev = historyRowMap[eventId];
+                if (!ev) {
+                    detailName.textContent = 'Not found';
+                    detailSub.textContent  = '';
+                    detailBody.innerHTML   = '<div class="ifl-detail-state" style="color:#dc2626;">Event data missing.</div>';
+                    return;
+                }
+
+                detailBackdrop.setAttribute('aria-hidden', 'false');
+                detailBackdrop.classList.add('is-open');
+
+                detailName.textContent = ev.actionLabel || ev.action || 'Action';
+                detailSub.textContent  = (ev.fullName ? ev.fullName + ' · ' : '')
+                    + '#' + ev.requestId
+                    + (ev.department ? ' · ' + ev.department : '');
+
+                const tone = ev.actionTone || 'info';
+                const yourActionHtml =
+                    '<div class="ifl-detail-section">' +
+                        '<h4>Your Action</h4>' +
+                        '<div class="ifl-detail-grid">' +
+                            '<div><div class="idg-label">Action</div><div class="idg-value">' +
+                                '<span class="ifl-detail-pill ' + (tone === 'danger' ? 'is-rejected' : tone === 'success' ? 'is-done' : 'is-pending') + '">' +
+                                    escapeHTML(ev.actionLabel || ev.action || '') +
+                                '</span>' +
+                            '</div></div>' +
+                            '<div><div class="idg-label">When</div><div class="idg-value">' + escapeHTML(fmtAbs(ev.timestamp)) + '</div></div>' +
+                        '</div>' +
+                    '</div>';
+
+                const detailHtml = ev.actionDetailHTML
+                    ? '<div class="ifl-detail-section">' +
+                          '<h4>What You Recorded</h4>' +
+                          '<div class="ifl-detail-action-body">' + ev.actionDetailHTML + '</div>' +
+                      '</div>'
+                    : '';
+
+                const empBits = [];
+                if (ev.employeeId)    empBits.push({ label: 'Employee ID',   value: escapeHTML(ev.employeeId) });
+                if (ev.fullName)      empBits.push({ label: 'Name',          value: escapeHTML(ev.fullName) });
+                if (ev.designation)   empBits.push({ label: 'Designation',   value: escapeHTML(ev.designation) });
+                if (ev.department)    empBits.push({ label: 'Department',    value: escapeHTML(ev.department) });
+                if (ev.subDepartment) empBits.push({ label: 'Sub-Dept',      value: escapeHTML(ev.subDepartment) });
+                if (ev.initiatorName) empBits.push({ label: 'Initiated By',  value: escapeHTML(ev.initiatorName) });
+
+                const employeeHtml = empBits.length
+                    ? '<div class="ifl-detail-section">' +
+                          '<h4>Employee</h4>' +
+                          '<div class="ifl-detail-grid">' +
+                              empBits.map(g =>
+                                  '<div>' +
+                                      '<div class="idg-label">' + escapeHTML(g.label) + '</div>' +
+                                      '<div class="idg-value">' + g.value + '</div>' +
+                                  '</div>'
+                              ).join('') +
+                          '</div>' +
+                      '</div>'
+                    : '';
+
+                detailBody.innerHTML = yourActionHtml + detailHtml + employeeHtml;
+            }
+
+            async function open(eventId) {
+                if (eventId == null) return;
+                openEventDetail(Number(eventId));
+            }
+            function close() {
+                detailBackdrop.classList.remove('is-open');
+                detailBackdrop.setAttribute('aria-hidden', 'true');
+            }
+            window.iflPortalDetail = { open, close };
+
+            detailBackdrop.addEventListener('mousedown', (e) => {
+                if (e.target === detailBackdrop) close();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && detailBackdrop.classList.contains('is-open')) close();
+            });
+        })();
+
+        window.iflPortal = {
+            switchTab(tab) {
+                if (tab === currentTab) return;
+                currentTab = tab;
+                tabBtns.forEach(b => b.classList.toggle('is-active', b.dataset.tab === tab));
+                if (cache[tab]) renderRows(cache[tab]);
+                else loadTab(tab);
+            }
+        };
+
+        // Wait briefly for the verification cloak to lift, then start
+        // loading regardless. The cloak (when present) hides the sidebar
+        // visually; we can safely populate it in the background. A hard
+        // timeout ensures the sidebar isn't held hostage by a slow SSO call.
+        let _waited = 0;
+        const startWhenReady = () => {
+            const cloaked = document.body.classList.contains('ifl-is-verifying');
+            if (cloaked && _waited < 6000) {
+                _waited += 200;
+                setTimeout(startWhenReady, 200);
+                return;
+            }
+            if (cloaked) console.warn('[Portal] cloak still up after 6s — loading sidebar anyway');
+            loadTab('pending').catch(e => console.warn('[Portal] pending load failed:', e));
+            setTimeout(() => loadTab('history').catch(() => {}), 1200);
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startWhenReady);
+        } else {
+            startWhenReady();
+        }
+    })();
+</script>
+<% } %>

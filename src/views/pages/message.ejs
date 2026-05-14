@@ -10,6 +10,11 @@
     </div>
 </header>
 
+<%# Message page is reused for post-submit success + error screens. When the
+    controller passes showPortal/roleKey/roleLabel, the include below renders
+    the role-portal sidebar; otherwise the partial renders nothing. %>
+<%- include('../partials/portal_shell') %>
+
 <style>
     /* Resulting-status panel — shows what the request just transitioned to
        and who currently owns it. Mirrors the client's nomenclature table. */
@@ -86,4 +91,7 @@
         <%- metaHtml %>
     <% } %>
 </div>
+
+<%- include('../partials/portal_close') %>
+<%- include('../partials/portal_scripts') %>
 <%- include('../partials/footer') %>

@@ -187,7 +187,7 @@ const handleSubmission = async (req, res, token) => {
                     res,
                     'Record Submitted',
                     'Required Services configured and recorded. The request has been forwarded to HOD for review.',
-                    { status: 'PendingHOD', requestId: request.id }
+                    { status: 'PendingHOD', requestId: request.id, actorRole: 'IT' }
                 );
             }
             else if (role === 'HOD') {
@@ -199,14 +199,14 @@ const handleSubmission = async (req, res, token) => {
                         res,
                         'Request Rejected',
                         'Request rejected by HOD. The process has been stopped and notified to the relevant team.',
-                        { status: 'Rejected', requestId: request.id }
+                        { status: 'Rejected', requestId: request.id, actorRole: 'HOD' }
                     );
                 }
                 return renderSuccess(
                     res,
                     'Request Approved',
                     'Approved by HOD. The request has been forwarded to the DCI Team for Window login and access setup.',
-                    { status: 'PendingDCI', requestId: request.id }
+                    { status: 'PendingDCI', requestId: request.id, actorRole: 'HOD' }
                 );
             }
             else if (role === 'DCI') {
@@ -216,7 +216,7 @@ const handleSubmission = async (req, res, token) => {
                     res,
                     'Record Submitted',
                     'Windows login and required access details have been recorded. The request has been forwarded to the DCI Manager for final approval.',
-                    { status: 'PendingDCIManager', requestId: request.id }
+                    { status: 'PendingDCIManager', requestId: request.id, actorRole: 'DCI' }
                 );
             }
             else if (role === 'DCIManager') {
@@ -228,7 +228,7 @@ const handleSubmission = async (req, res, token) => {
                         res,
                         'Request Rejected',
                         'Request rejected by DCI Manager. The workflow has been stopped and notified to the DCI team.',
-                        { status: 'Rejected', requestId: request.id }
+                        { status: 'Rejected', requestId: request.id, actorRole: 'DCIManager' }
                     );
                 }
                 if (action === 'RequestChanges') {
@@ -236,7 +236,7 @@ const handleSubmission = async (req, res, token) => {
                         res,
                         'Changes Requested',
                         'Change request sent back to the DCI Team with your remarks.',
-                        { status: 'PendingDCI', requestId: request.id }
+                        { status: 'PendingDCI', requestId: request.id, actorRole: 'DCIManager' }
                     );
                 }
                 // Approve — branches based on whether email approval is needed.
@@ -245,14 +245,14 @@ const handleSubmission = async (req, res, token) => {
                         res,
                         'Approve Request (Email Yes)',
                         'Approved by DCI Manager. The request has been forwarded to IT HOD for email service authorization.',
-                        { status: 'PendingITHOD', requestId: request.id }
+                        { status: 'PendingITHOD', requestId: request.id, actorRole: 'DCIManager' }
                     );
                 }
                 return renderSuccess(
                     res,
                     'Approved (No Email)',
                     'Approved by DCI Manager. PDF summary has been generated for record and notification sent for implementation.',
-                    { status: 'PendingDCIImplementation', requestId: request.id }
+                    { status: 'PendingDCIImplementation', requestId: request.id, actorRole: 'DCIManager' }
                 );
             }
             else if (role === 'ITHOD') {
@@ -264,14 +264,14 @@ const handleSubmission = async (req, res, token) => {
                         res,
                         'Request Rejected',
                         'Request rejected by IT HOD. The workflow has been stopped and notified to the relevant team.',
-                        { status: 'Rejected', requestId: request.id }
+                        { status: 'Rejected', requestId: request.id, actorRole: 'ITHOD' }
                     );
                 }
                 return renderSuccess(
                     res,
                     'Request Approved',
                     'Approved by IT HOD. The request is finalized — PDF summary has been generated for record and notification sent for implementation.',
-                    { status: 'PendingDCIImplementation', requestId: request.id }
+                    { status: 'PendingDCIImplementation', requestId: request.id, actorRole: 'ITHOD' }
                 );
             }
             else if (role === 'OPS') {
@@ -288,7 +288,7 @@ const handleSubmission = async (req, res, token) => {
                     res,
                     'Mark as Verified',
                     'Verification completed successfully. The onboarding process has been completed.',
-                    { status: 'Completed', requestId: request.id }
+                    { status: 'Completed', requestId: request.id, actorRole: 'OPS' }
                 );
             }
             else {
@@ -322,7 +322,7 @@ export const handleProofUpload = async (req, res) => {
             res,
             'Implementation Proof Uploaded',
             'Implementation proof uploaded successfully. The request has been forwarded to the Operations team for the workstation and profile setup and final verification.',
-            { status: 'PendingOPSAction', requestId: updated && updated.id }
+            { status: 'PendingOPSAction', requestId: updated && updated.id, actorRole: 'DCIImplementer' }
         );
     } catch (err) {
         return renderError(res, err.message);
@@ -589,7 +589,12 @@ const renderForm = async (req, res, token) => {
         // portal mode (everyone except HR / read-only), the sidebar fetches
         // this role's pending tasks + history.
         roleKey:   FORM_ROLE_TO_QUEUE_KEY[role] || null,
-        roleLabel: FORM_ROLE_TO_LABEL[role]     || role
+        roleLabel: FORM_ROLE_TO_LABEL[role]     || role,
+        // Resolved here (rather than in the .ejs) so partials/portal_shell.ejs
+        // and partials/portal_scripts.ejs can read it directly as a top-level
+        // local — EJS does not propagate <% const %> into included templates.
+        showPortal: !!(token && FORM_ROLE_TO_QUEUE_KEY[role]),
+        portalCurrentRequestId: (request && request.id) || null
     });
 };
 
@@ -1035,6 +1040,27 @@ export const renderHistory = async (req, res) => {
  *                                   (e.g. 'PendingHOD'). The view shows the friendly label.
  * @param {number|string} [next.requestId] - Request reference number to display
  */
+// Maps a form role (e.g. 'HOD', 'DCIImplementer') to the sidebar's queue
+// roleKey + display label. Used to surface the role-portal sidebar on the
+// post-submission message page so the user can immediately see their other
+// pending tasks / history without going back to email.
+const FORM_ROLE_TO_PORTAL = {
+    HR:             null,                 // HR isn't part of the role queue
+    IT:             { key: 'IT_OPS',          label: 'IT Operations' },
+    HOD:            { key: 'HOD',             label: 'Head of Department' },
+    DCI:            { key: 'DCI_TEAM',        label: 'DCI Team' },
+    DCIManager:     { key: 'DCI_MANAGER',     label: 'DCI Manager' },
+    ITHOD:          { key: 'IT_HOD',          label: 'IT HOD' },
+    DCIImplementer: { key: 'DCI_IMPLEMENTER', label: 'DCI Implementer' },
+    OPS:            { key: 'IT_OPS',          label: 'IT Operations' }
+};
+
+function portalLocalsForRole(role) {
+    const cfg = role && FORM_ROLE_TO_PORTAL[role];
+    if (!cfg) return {};
+    return { showPortal: true, roleKey: cfg.key, roleLabel: cfg.label };
+}
+
 const renderSuccess = (res, title, message, next = {}) => {
     const view = {
         title: 'Success',
@@ -1042,7 +1068,8 @@ const renderSuccess = (res, title, message, next = {}) => {
         titleClass: 'success',
         icon: '✅',
         iconClass: 'success-icon',
-        message: message
+        message: message,
+        ...portalLocalsForRole(next.actorRole)
     };
     if (next.status) {
         view.nextStatus      = statusLabelFor(next.status);
@@ -1053,13 +1080,14 @@ const renderSuccess = (res, title, message, next = {}) => {
     return res.render('pages/message', view);
 };
 
-const renderError = (res, message) => {
+const renderError = (res, message, opts = {}) => {
     return res.render('pages/message', {
         title: 'Error',
         heading: 'Error',
         titleClass: 'error',
         icon: '❌',
         iconClass: 'error-icon',
-        message: message
+        message: message,
+        ...portalLocalsForRole(opts.actorRole)
     });
 };

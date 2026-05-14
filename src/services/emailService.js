@@ -486,7 +486,7 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
             break;
         case 'DCI_MANAGER_APPROVAL':
             subject = `Onboarding ${reqNo} — Manager Review`;
-            body = buildBullets('Approve, reject, or request changes.', 'Standard → Implementation. Email-risk → IT HOD.');
+            body = buildBullets('Approve, reject, or request changes.');
             break;
         case 'IT_HOD_APPROVAL':
             subject = `Onboarding ${reqNo} — IT HOD Sign-off`;
