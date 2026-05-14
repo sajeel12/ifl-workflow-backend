@@ -46,46 +46,40 @@ body {
 /* Header */
 .app-header {
     background: #0078D4;
-    /* Official Blue */
-    padding: 24px 32px;
-    /* Increased vertical padding */
+    padding: 10px 32px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
     display: flex;
     align-items: center;
     justify-content: space-between;
     color: white;
-    /* position: sticky; */
-    /* Removed sticky to allow margin above it gracefully */
-    /* top: 0; */
     z-index: 1000;
 }
 
 .brand-section {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
 }
 
 .logo {
-    height: 48px;
+    height: 32px;
     width: auto;
     border-radius: 4px;
 }
 
-/* Removed background and padding */
-
-/* Added background to logo for contrast */
 .app-title h1 {
     margin: 0;
-    font-size: 1.25rem;
+    font-size: 1rem;
     font-weight: 700;
     color: white;
+    line-height: 1.2;
 }
 
 .app-title p {
     margin: 0;
-    font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.2;
 }
 
 .status-badge {
