@@ -503,6 +503,7 @@ const renderForm = async (req, res, token) => {
 
     // OPS Checklist Generation
     let opsChecklistHTML = '';
+    const opsVerifierName = (req.user && (req.user.displayName || req.user.username)) || '';
     if (role === 'OPS') {
         const items = [];
         if (request.intranetAccess) items.push('Configure Intranet Access');
@@ -521,7 +522,14 @@ const renderForm = async (req, res, token) => {
                     <span class="section-tag">Required</span>
                 </div>
                 <div class="grid-2">
-                    <div class="form-group"><label>Verifier Name</label><input type="text" name="opsName" required></div>
+                    <div class="form-group">
+                        <label>Verifier Name
+                            <span style="color:#64748b; font-weight:400; font-size:0.8rem;">(auto-filled from Windows login)</span>
+                        </label>
+                        <input type="text" name="opsName" data-ifl-sso-name="1"
+                               value="${opsVerifierName}" disabled
+                               style="background:#f1f5f9; color:#0f172a;">
+                    </div>
                 </div>
                 <div class="checkbox-card-group" style="grid-template-columns: 1fr;">
                     ${items.map(item => `

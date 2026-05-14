@@ -684,15 +684,6 @@
                                         </div>
                                     <% } %>
 
-                                    <!-- IT HOD Remarks section (visible to IT HOD and afterwards as read-only) -->
-                                    <% if (role==='ITHOD' || request.itHodRemarks) { %>
-                                        <div class="section-title"><span>IT HOD Remarks</span></div>
-                                        <div class="form-group full-width">
-                                            <textarea name="itHodRemarks" rows="3" placeholder="Enter IT HOD remarks / notes..."
-                                                <%= role === 'ITHOD' ? '' : 'disabled' %>><%= val('itHodRemarks') %></textarea>
-                                        </div>
-                                    <% } %>
-
                                         <% if (!['HR', 'IT' , 'HOD' ].includes(role) || request.ntUserName) { %>
                                             <!-- Section 3: DCI Configuration -->
                                             <div class="dci-box">
@@ -758,6 +749,17 @@
                                             </div>
                                             <% } %>
 
+                                                <!-- IT HOD Remarks — placed after the DCI Manager / DCI Configuration
+                                                     section so the approval chain reads top-to-bottom:
+                                                     HOD → DCI Manager → IT HOD. -->
+                                                <% if (role==='ITHOD' || request.itHodRemarks) { %>
+                                                    <div class="section-title"><span>IT HOD Remarks</span></div>
+                                                    <div class="form-group full-width">
+                                                        <textarea name="itHodRemarks" rows="3" placeholder="Enter IT HOD remarks / notes..."
+                                                            <%= role === 'ITHOD' ? '' : 'disabled' %>><%= val('itHodRemarks') %></textarea>
+                                                    </div>
+                                                <% } %>
+
                                                 <!-- OPS Checklist Dynamic -->
                                                 <%- typeof opsChecklistHTML !=='undefined' ? opsChecklistHTML : '' %>
 
@@ -769,12 +771,14 @@
                                                             <div class="form-group">
                                                                 <label>Implementer Name
                                                                     <span style="color:#64748b; font-weight:400; font-size:0.8rem;">
-                                                                        (auto-filled from Windows login<%= currentUser ? '' : ' — SSO not detected, please enter manually' %>)
+                                                                        (auto-filled from Windows login)
                                                                     </span>
                                                                 </label>
                                                                 <input type="text" name="implementerName"
+                                                                    data-ifl-sso-name="1"
                                                                     value="<%= (currentUser && (currentUser.displayName || currentUser.username)) || '' %>"
-                                                                    <%= currentUser ? 'readonly style="background:#f1f5f9;"' : 'required' %>>
+                                                                    disabled
+                                                                    style="background:#f1f5f9; color:#0f172a;">
                                                             </div>
                                                             <div class="form-group"
                                                                 style="padding: 20px; border: 2px dashed #cbd5e1; text-align: center; border-radius: 8px;">
@@ -931,6 +935,19 @@
                   </div>`;
             };
 
+            // Hydrate any input marked data-ifl-sso-name="1" (DCI Implementer's
+            // "Implementer Name", OPS Verifier's "Verifier Name", etc.) with
+            // the SSO display name. These inputs are rendered `disabled`, so
+            // they're informational only — the server uses req.user to record
+            // the actor identity, never the form value.
+            const fillSsoNameFields = (u) => {
+                const v = (u && (u.displayName || u.username)) || '';
+                if (!v) return;
+                document.querySelectorAll('input[data-ifl-sso-name="1"]').forEach(el => {
+                    if (!el.value) el.value = v;
+                });
+            };
+
             // No expected email → not an SSO-gated stage (e.g. HR initiate). Lift any cloak and exit.
             if (!expected) {
                 liftCloak();
@@ -943,6 +960,7 @@
                             const emailEl = document.querySelector('input[name="requesterEmail"]');
                             if (nameEl  && !nameEl.value)  nameEl.value  = u.displayName || u.username || '';
                             if (emailEl && !emailEl.value) emailEl.value = u.email || '';
+                            fillSsoNameFields(u);
                         }
                     }
                 } catch (_) {}
@@ -969,6 +987,7 @@
                 const emailEl = document.querySelector('input[name="requesterEmail"]');
                 if (nameEl  && !nameEl.value)  nameEl.value  = u.displayName || u.username || '';
                 if (emailEl && !emailEl.value) emailEl.value = u.email || '';
+                fillSsoNameFields(u);
                 liftCloak();
             } catch (e) {
                 // SSO call failed for some reason (token.aspx unreachable, network, etc.)

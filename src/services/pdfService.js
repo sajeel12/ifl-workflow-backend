@@ -78,12 +78,20 @@ export const generateOnboardingPDF = async (request, outputPath) => {
             fieldBox(x + labelW, y, fieldW, h, value);
         };
 
-        // Checkbox: small square, optional tick inside, label to the right
+        // Checkbox: small square with an optional vector-drawn tick.
+        // We draw the tick with lineTo() instead of using a Unicode "✓"
+        // character — PDFKit's default Helvetica is WinAnsi-encoded and can't
+        // render U+2713, which previously rendered as a substitute glyph.
         const checkbox = (label, x, y, checked) => {
             doc.lineWidth(0.5).rect(x, y + 1, 9, 9).stroke();
             if (checked) {
-                doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
-                text('✓', x + 1.5, y + 1.5);
+                doc.save();
+                doc.lineWidth(1.2).strokeColor('#000');
+                doc.moveTo(x + 1.8, y + 5.5)
+                   .lineTo(x + 4,   y + 8)
+                   .lineTo(x + 7.8, y + 2.8)
+                   .stroke();
+                doc.restore();
             }
             doc.font('Helvetica').fontSize(9);
             text(label, x + 14, y + 3);
@@ -302,8 +310,9 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         const gpl = request.groupPolicyLevel || '';
         const isHighly  = gpl === 'Highly Managed';
         const isLightly = gpl === 'Lightly Managed' || gpl === 'IT User';
-        const highlyVal  = isHighly  ? (request.ntUserName || '✓') : '';
-        const lightlyVal = isLightly ? `${request.ntUserName || '✓'}${gpl === 'IT User' ? '  (IT User)' : ''}` : '';
+        // Use "X" instead of Unicode "✓" — WinAnsi-safe (see checkbox helper).
+        const highlyVal  = isHighly  ? (request.ntUserName || 'X') : '';
+        const lightlyVal = isLightly ? `${request.ntUserName || 'X'}${gpl === 'IT User' ? '  (IT User)' : ''}` : '';
         labeledField('HighlyManagedUsers', colLeftX, sy, 110, colWidth - 115, 16, highlyVal);
         labeledField('LightlyManagUser',   colRightX, sy, 95, colWidth - 100, 16, lightlyVal);
 
