@@ -11,13 +11,13 @@ import WorkflowApproverLocationOverride from './src/models/WorkflowApproverLocat
 import SystemConfig from './src/models/SystemConfig.js';
 
 const DEFAULT_APPROVER_CONFIGS = [
-    { roleKey: 'HR_INITIATOR', label: 'HR Initiator', description: 'Authorized HR users who can initiate onboarding requests. Configured per location group.', workflowStage: 'Step 1 – Initiate Request', approverEmail: '', approverName: 'HR' },
-    { roleKey: 'IT_OPS', label: 'IT Operations Team', description: 'Handles IT configuration in Step 2', workflowStage: 'Step 2 – IT Configuration', approverEmail: process.env.EMAIL_IT_OPS || '', approverName: 'IT Operations' },
-    { roleKey: 'DCI_TEAM', label: 'DCI Team', description: 'DCI configuration and setup in Step 4', workflowStage: 'Step 4 – DCI Configuration', approverEmail: process.env.EMAIL_DCI_TEAM || '', approverName: 'DCI Team' },
-    { roleKey: 'OPS_TEAM', label: 'OPS Support Team', description: 'Final OPS verification in Step 7', workflowStage: 'Step 7 – OPS Verification', approverEmail: process.env.EMAIL_OPS_TEAM || '', approverName: 'OPS Team' },
-    { roleKey: 'DCI_MANAGER', label: 'DCI Manager', description: 'DCI Manager decision in Step 5', workflowStage: 'Step 5 – DCI Manager Decision', approverEmail: process.env.EMAIL_DCI_MANAGER || '', approverName: 'DCI Manager' },
-    { roleKey: 'IT_HOD', label: 'IT Head of Department', description: 'IT HOD review in Step 5b (email required)', workflowStage: 'Step 5b – IT HOD Review', approverEmail: process.env.EMAIL_IT_HOD || '', approverName: 'IT HOD' },
-    { roleKey: 'DCI_IMPLEMENTER', label: 'DCI Implementer', description: 'Implements DCI changes in Step 6', workflowStage: 'Step 6 – DCI Implementation', approverEmail: process.env.EMAIL_DCI_IMPLEMENTER || '', approverName: 'DCI Implementer' },
+    { roleKey: 'HR_INITIATOR', label: 'HR Initiator', description: 'Authorized HR users who can initiate onboarding requests. Configured per location group.', workflowStage: 'Step 1 – Initiate Request', approverEmail: null, approverName: 'HR' },
+    { roleKey: 'IT_OPS', label: 'IT Operations Team', description: 'Handles IT configuration in Step 2', workflowStage: 'Step 2 – IT Configuration', approverEmail: process.env.EMAIL_IT_OPS || null, approverName: 'IT Operations' },
+    { roleKey: 'DCI_TEAM', label: 'DCI Team', description: 'DCI configuration and setup in Step 4', workflowStage: 'Step 4 – DCI Configuration', approverEmail: process.env.EMAIL_DCI_TEAM || null, approverName: 'DCI Team' },
+    { roleKey: 'OPS_TEAM', label: 'OPS Support Team', description: 'Final OPS verification in Step 7', workflowStage: 'Step 7 – OPS Verification', approverEmail: process.env.EMAIL_OPS_TEAM || null, approverName: 'OPS Team' },
+    { roleKey: 'DCI_MANAGER', label: 'DCI Manager', description: 'DCI Manager decision in Step 5', workflowStage: 'Step 5 – DCI Manager Decision', approverEmail: process.env.EMAIL_DCI_MANAGER || null, approverName: 'DCI Manager' },
+    { roleKey: 'IT_HOD', label: 'IT Head of Department', description: 'IT HOD review in Step 5b (email required)', workflowStage: 'Step 5b – IT HOD Review', approverEmail: process.env.EMAIL_IT_HOD || null, approverName: 'IT HOD' },
+    { roleKey: 'DCI_IMPLEMENTER', label: 'DCI Implementer', description: 'Implements DCI changes in Step 6', workflowStage: 'Step 6 – DCI Implementation', approverEmail: process.env.EMAIL_DCI_IMPLEMENTER || null, approverName: 'DCI Implementer' },
 ];
 
 const PORT = process.env.PORT || 3000;
