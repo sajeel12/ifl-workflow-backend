@@ -12,10 +12,9 @@
     <div>
       <strong>Fallback:</strong> Primary first; after 2 days, Secondary takes over.
       <strong>Cross-backup:</strong> DCI Manager ↔ IT HOD cover each other.
-      <strong>Per-location:</strong> only the <em>IT Operations</em> role supports location-based overrides
-      (the IT Ops user who configures services in Step 2 also handles the OPS verification in Step 12).
-      All other roles (DCI Team, DCI Manager, IT HOD, DCI Implementer) are configured globally and apply
-      to every location.
+      <strong>Per-location:</strong> <em>HR Initiator</em> and <em>IT Operations</em> are configured per location group (LHR, HO/ISB/MUL/…, TP3/TP4/PG, PP, TP1/TP2).
+      Only HR users on the list for a group may initiate a request; the request then routes to IT Ops in the same group.
+      All other roles (DCI Team, DCI Manager, IT HOD, DCI Implementer) are configured globally.
     </div>
   </div>
 
@@ -55,14 +54,47 @@
       font-size: .78rem; font-weight: 600;
     }
     .a-clear-override-btn:hover { background: var(--a-red-bg); }
+
+    /* Merged HR + IT Ops card layout — two columns on desktop, stacked on
+       smaller screens. The card takes the full grid row so each column has
+       room for its own search/email/name fields. */
+    .a-approver-card.is-merged { grid-column: 1 / -1; }
+    .a-merged-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .a-merged-col {
+      padding: 14px 16px;
+      background: var(--a-surface-2);
+      border: 1px solid var(--a-border);
+      border-radius: var(--a-radius-sm);
+    }
+    .a-merged-col__head {
+      font-size: .82rem; font-weight: 700; color: var(--a-text);
+      margin-bottom: 4px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .a-merged-col__stage {
+      font-size: .68rem; font-weight: 600; color: var(--a-text-muted);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    @media (max-width: 880px) {
+      .a-merged-grid { grid-template-columns: 1fr; }
+    }
   </style>
 
   <!-- Approver cards — one per role, server-rendered with the GLOBAL config.
        The IT Operations card has an extra in-card location dropdown that
        client-side switches between Default + per-location overrides. -->
   <div class="a-approver-grid" id="approverGrid">
-    <% approvers.forEach(function(ap) { %>
-    <div class="a-approver-card" data-id="<%= ap.id %>" data-rolekey="<%= ap.roleKey %>">
+    <% approvers.forEach(function(ap) {
+         // HR_INITIATOR is rendered inside the IT_OPS merged card; skip its standalone card.
+         if (ap.roleKey === 'HR_INITIATOR') return;
+         const isMerged = (ap.roleKey === 'IT_OPS');
+         const hr = isMerged ? approvers.find(a => a.roleKey === 'HR_INITIATOR') : null;
+    %>
+    <div class="a-approver-card <%= isMerged ? 'is-merged' : '' %>" data-id="<%= ap.id %>" data-rolekey="<%= ap.roleKey %>" <% if (isMerged && hr) { %>data-hr-id="<%= hr.id %>"<% } %>>
 
       <!-- Card header -->
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
@@ -94,16 +126,97 @@
       %>
       <% if (ap.roleKey === 'IT_OPS' && typeof locations !== 'undefined' && locations.length) { %>
         <div class="itops-loc-row" data-itops-card-id="<%= ap.id %>">
-          <span class="itops-loc-row__label">Configure for</span>
+          <span class="itops-loc-row__label">Configure for location group</span>
           <select id="itops-loc-<%= ap.id %>" class="itops-loc-select"
                   onchange="onItOpsLocationChange(<%= ap.id %>)">
             <option value="">★ Default (All Locations)</option>
             <% locations.forEach(function(loc) { %>
-              <option value="<%= loc %>"><%= loc %></option>
+              <option value="<%= loc %>"><%= (typeof locationLabels !== 'undefined' && locationLabels[loc]) ? locationLabels[loc] : loc %></option>
             <% }); %>
           </select>
           <span id="itops-scope-<%= ap.id %>" class="itops-scope-badge is-default">Default</span>
         </div>
+      <% } %>
+
+      <% if (isMerged && hr) { %>
+        <div class="a-merged-grid">
+          <!-- ═══ HR INITIATOR COLUMN ═══════════════════════════════════ -->
+          <div class="a-merged-col" data-hr-col data-hr-id="<%= hr.id %>">
+            <div class="a-merged-col__head">
+              <span>HR Initiator</span>
+              <span class="a-merged-col__stage">Step 1 – Initiate</span>
+            </div>
+            <p style="font-size:.78rem;color:var(--a-text-muted);margin:0 0 12px;line-height:1.45;">
+              Only listed HR users can submit requests for this group. Local-part of the SSO email must match.
+            </p>
+
+            <!-- HR PRIMARY -->
+            <div class="approver-section" style="margin-bottom:12px;">
+              <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="font-weight:700;font-size:.74rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Primary HR</span>
+              </div>
+              <div class="a-field" style="margin-bottom:6px;">
+                <input type="text" id="psearch-hr-<%= ap.id %>" class="a-input"
+                       placeholder="🔍 Search employee directory…"
+                       autocomplete="off"
+                       oninput="onApproverSearch('hr-' + <%= ap.id %>, 'primary', this.value)"
+                       onkeydown="onApproverKey(event)">
+              </div>
+              <div class="a-field-row">
+                <div class="a-field" style="margin:0;">
+                  <label class="a-label">Primary Email</label>
+                  <input type="email" id="email-hr-<%= ap.id %>" class="a-input"
+                         value="<%= hr.approverEmail || '' %>" placeholder="hr.primary@company.com">
+                </div>
+                <div class="a-field" style="margin:0;">
+                  <label class="a-label">Primary Name</label>
+                  <input type="text" id="name-hr-<%= ap.id %>" class="a-input"
+                         value="<%= hr.approverName || '' %>" placeholder="HR person name">
+                </div>
+              </div>
+            </div>
+
+            <!-- HR SECONDARY -->
+            <div class="approver-section" style="padding-top:10px;border-top:1px dashed var(--a-border);">
+              <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="font-weight:700;font-size:.74rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Secondary HR</span>
+              </div>
+              <div class="a-field" style="margin-bottom:6px;">
+                <input type="text" id="ssearch-hr-<%= ap.id %>" class="a-input"
+                       placeholder="🔍 Search employee directory…"
+                       autocomplete="off"
+                       oninput="onApproverSearch('hr-' + <%= ap.id %>, 'secondary', this.value)"
+                       onkeydown="onApproverKey(event)">
+              </div>
+              <div class="a-field-row">
+                <div class="a-field" style="margin:0;">
+                  <label class="a-label">Secondary Email</label>
+                  <input type="email" id="semail-hr-<%= ap.id %>" class="a-input"
+                         value="<%= hr.secondaryEmail || '' %>" placeholder="hr.secondary@company.com">
+                </div>
+                <div class="a-field" style="margin:0;">
+                  <label class="a-label">Secondary Name</label>
+                  <input type="text" id="sname-hr-<%= ap.id %>" class="a-input"
+                         value="<%= hr.secondaryName || '' %>" placeholder="HR backup name">
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;">
+              <button class="btn btn-primary" style="padding:7px 18px;font-size:.85rem;" onclick="saveHR(<%= ap.id %>, <%= hr.id %>)">Save HR</button>
+              <span class="a-save-status" id="st-hr-<%= ap.id %>"></span>
+            </div>
+          </div>
+
+          <!-- ═══ IT OPERATIONS COLUMN ═══════════════════════════════════ -->
+          <div class="a-merged-col">
+            <div class="a-merged-col__head">
+              <span>IT Operations</span>
+              <span class="a-merged-col__stage">Step 2 – Configure</span>
+            </div>
+            <p style="font-size:.78rem;color:var(--a-text-muted);margin:0 0 12px;line-height:1.45;">
+              The IT Ops user who configures services for this group. Also handles Step 12 verification.
+            </p>
       <% } %>
 
       <!-- ── PRIMARY ── -->
@@ -190,9 +303,14 @@
 
       <!-- Footer -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--a-border);">
-        <button class="btn btn-primary" style="padding:8px 22px;" onclick="save(<%= ap.id %>)">Save</button>
+        <button class="btn btn-primary" style="padding:8px 22px;" onclick="save(<%= ap.id %>)"><%= isMerged ? 'Save IT Ops' : 'Save' %></button>
         <span class="a-save-status" id="st-<%= ap.id %>"></span>
       </div>
+
+      <% if (isMerged && hr) { %>
+        </div><%# /.a-merged-col (IT Operations) %>
+        </div><%# /.a-merged-grid %>
+      <% } %>
 
     </div>
     <% }); %>
@@ -419,6 +537,75 @@ async function save(id) {
   return saveGlobal(id);
 }
 
+// Save HR Initiator from the merged IT_OPS card.
+// `itopsCardId` is the IT_OPS WorkflowApproverConfig.id (used to find the
+// card + read the shared location dropdown). `hrConfigId` is the HR_INITIATOR
+// global config row id, used for the default ("All Locations") save path.
+async function saveHR(itopsCardId, hrConfigId) {
+  const email          = document.getElementById('email-hr-'  + itopsCardId).value.trim();
+  const name           = document.getElementById('name-hr-'   + itopsCardId).value.trim();
+  const secondaryEmail = document.getElementById('semail-hr-' + itopsCardId).value.trim();
+  const secondaryName  = document.getElementById('sname-hr-'  + itopsCardId).value.trim();
+  const stKey = 'hr-' + itopsCardId;
+  const btn = document.querySelector(`.a-approver-card[data-id="${itopsCardId}"] [onclick*="saveHR("]`);
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (email && !emailRe.test(email)) { setStatus(stKey, 'err', 'Invalid primary email'); return; }
+  if (secondaryEmail && !emailRe.test(secondaryEmail)) { setStatus(stKey, 'err', 'Invalid secondary email'); return; }
+
+  // Location scope is shared with the IT_OPS half of the merged card.
+  const location = itOpsScope[itopsCardId] || '';
+
+  if (btn) btn.disabled = true;
+  setStatus(stKey, 'ing', 'Saving…');
+
+  try {
+    let res;
+    if (location) {
+      // Per-group override
+      res = await fetch('/admin/workflow-approvers/by-location', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roleKey: 'HR_INITIATOR',
+          location,
+          approverEmail:  email,
+          approverName:   name,
+          secondaryEmail: secondaryEmail,
+          secondaryName:  secondaryName,
+          isActive: true
+        })
+      });
+    } else {
+      // Global default for HR
+      res = await fetch('/admin/workflow-approvers/' + hrConfigId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approverEmail:  email || null,
+          approverName:   name || null,
+          secondaryEmail: secondaryEmail || null,
+          secondaryName:  secondaryName || null,
+          isActive: true
+        })
+      });
+    }
+    const data = await res.json();
+    if (data.success) {
+      setStatus(stKey, 'ok', 'Saved ✓');
+      showToast('ok', data.message || 'HR list updated');
+    } else {
+      setStatus(stKey, 'err', data.error || 'Failed');
+      showToast('err', data.error || 'Save failed');
+    }
+  } catch {
+    setStatus(stKey, 'err', 'Network error');
+    showToast('err', 'Network error. Please retry.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function saveGlobal(id) {
   const email          = document.getElementById('email-'  + id).value.trim();
   const name           = document.getElementById('name-'   + id).value.trim();
@@ -561,7 +748,14 @@ async function onItOpsLocationChange(id) {
       approverName:   document.getElementById('name-'   + id).value,
       secondaryEmail: document.getElementById('semail-' + id).value,
       secondaryName:  document.getElementById('sname-'  + id).value,
-      isActive:       document.getElementById('active-' + id).checked
+      isActive:       document.getElementById('active-' + id).checked,
+      // Mirror the HR column too — it shares the same location selector.
+      hr: {
+        approverEmail:  document.getElementById('email-hr-'  + id).value,
+        approverName:   document.getElementById('name-hr-'   + id).value,
+        secondaryEmail: document.getElementById('semail-hr-' + id).value,
+        secondaryName:  document.getElementById('sname-hr-'  + id).value
+      }
     };
   }
 
@@ -570,9 +764,19 @@ async function onItOpsLocationChange(id) {
   if (!location) {
     // Default — restore the global snapshot, no fetch needed.
     applyItOpsCardData(id, itOpsGlobalSnapshot[id], { isOverride: false, isDefault: true });
+    if (itOpsGlobalSnapshot[id].hr) applyHRCardData(id, itOpsGlobalSnapshot[id].hr);
     return;
   }
   await loadItOpsForLocation(id, location);
+}
+
+// Mirror of applyItOpsCardData but for the HR column of the merged card.
+function applyHRCardData(id, ap) {
+  if (!ap) return;
+  document.getElementById('email-hr-'  + id).value = ap.approverEmail  || '';
+  document.getElementById('name-hr-'   + id).value = ap.approverName   || '';
+  document.getElementById('semail-hr-' + id).value = ap.secondaryEmail || '';
+  document.getElementById('sname-hr-'  + id).value = ap.secondaryName  || '';
 }
 
 async function loadItOpsForLocation(id, location) {
@@ -590,6 +794,11 @@ async function loadItOpsForLocation(id, location) {
       return;
     }
     applyItOpsCardData(id, itOps, { isOverride: !!itOps.isOverride, isDefault: false });
+    // HR uses the same location selector — populate the HR column from the
+    // same response. When no HR override exists for this group, the API
+    // still returns the global HR ghost row (isOverride=false).
+    const hr = j.data.find(x => x.roleKey === 'HR_INITIATOR');
+    if (hr) applyHRCardData(id, hr);
     setStatus(id, '', '');
   } catch (e) {
     console.error(e);

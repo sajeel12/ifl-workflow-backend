@@ -180,8 +180,27 @@
                                     value="<%= val('designation') %>" <%=hrDisabled %>></div>
                         </div>
                         <div class="grid-2">
-                            <div class="form-group"><label>Location</label><input type="text" name="location"
-                                    value="<%= val('location') %>" <%=hrDisabled %>></div>
+                            <div class="form-group">
+                                <label>Location Group
+                                    <span style="color:#64748b; font-weight:400; font-size:0.8rem;">
+                                        (derived from your HR assignment)
+                                    </span>
+                                </label>
+                                <%
+                                    // For HR initiate: location is server-derived from the HR's
+                                    // configured group at submit time, so we render it readonly with
+                                    // a friendly label here. For all later stages the request already
+                                    // carries `request.location` (a group key) — display its label.
+                                    let locDisplay = val('location') || '';
+                                    try {
+                                        const _locModule = locDisplay && typeof locationGroupLabels !== 'undefined'
+                                            ? locationGroupLabels[locDisplay] : null;
+                                        if (_locModule) locDisplay = _locModule;
+                                    } catch(_) {}
+                                %>
+                                <input type="text" name="location" value="<%= locDisplay %>"
+                                       readonly style="background:#f1f5f9;">
+                            </div>
                         </div>
                         <div class="grid-3">
                             <div class="form-group"><label>HOD Name</label><input type="text" name="hod"

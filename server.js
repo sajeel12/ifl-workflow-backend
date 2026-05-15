@@ -11,6 +11,7 @@ import WorkflowApproverLocationOverride from './src/models/WorkflowApproverLocat
 import SystemConfig from './src/models/SystemConfig.js';
 
 const DEFAULT_APPROVER_CONFIGS = [
+    { roleKey: 'HR_INITIATOR', label: 'HR Initiator', description: 'Authorized HR users who can initiate onboarding requests. Configured per location group.', workflowStage: 'Step 1 – Initiate Request', approverEmail: '', approverName: 'HR' },
     { roleKey: 'IT_OPS', label: 'IT Operations Team', description: 'Handles IT configuration in Step 2', workflowStage: 'Step 2 – IT Configuration', approverEmail: process.env.EMAIL_IT_OPS || '', approverName: 'IT Operations' },
     { roleKey: 'DCI_TEAM', label: 'DCI Team', description: 'DCI configuration and setup in Step 4', workflowStage: 'Step 4 – DCI Configuration', approverEmail: process.env.EMAIL_DCI_TEAM || '', approverName: 'DCI Team' },
     { roleKey: 'OPS_TEAM', label: 'OPS Support Team', description: 'Final OPS verification in Step 7', workflowStage: 'Step 7 – OPS Verification', approverEmail: process.env.EMAIL_OPS_TEAM || '', approverName: 'OPS Team' },
@@ -107,11 +108,16 @@ async function startServer() {
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
         // Add future columns here as the model evolves.
 
-        // Seed default approver configs if table is empty
-        const count = await WorkflowApproverConfig.count();
-        if (count === 0) {
-            await WorkflowApproverConfig.bulkCreate(DEFAULT_APPROVER_CONFIGS);
-            logger.info('Seeded default WorkflowApproverConfig rows.');
+        // Idempotent seed: ensure every default role exists. Use findOrCreate
+        // (not bulkCreate-only-when-empty) so that roles added in later
+        // releases (e.g. HR_INITIATOR) auto-appear on existing databases
+        // without needing a manual migration.
+        for (const cfg of DEFAULT_APPROVER_CONFIGS) {
+            const [, created] = await WorkflowApproverConfig.findOrCreate({
+                where: { roleKey: cfg.roleKey },
+                defaults: cfg
+            });
+            if (created) logger.info(`[Schema] Seeded WorkflowApproverConfig row for ${cfg.roleKey}.`);
         }
 
         // Seed default system configs if table is empty.

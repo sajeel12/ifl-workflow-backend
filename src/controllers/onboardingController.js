@@ -7,7 +7,39 @@ import { Op } from 'sequelize';
 import { humanizeDetails, humanizeDetailsHTML, humanizeAction, narrate } from '../utils/historyFormatter.js';
 import { labelFor as statusLabelFor, ownerFor as statusOwnerFor, colorFor as statusColorFor } from '../utils/workflowLabels.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
+import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import { emailsMatch } from '../utils/emailMatch.js';
+import { LOCATION_GROUPS, groupByKey, groupLabel } from '../utils/locationGroups.js';
+
+// Built once at module-load so each form render doesn't rebuild it.
+const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key, g.label]));
+
+// Find the HR_INITIATOR location-group that this SSO email belongs to.
+// Checks every active per-group override row first (those are admin-assigned
+// HR users), then the global fallback. Returns the matching group key or
+// null if the email isn't on any HR list. Local-part comparison only — same
+// person can appear with ifl.net or igc.com.pk domains in AD vs HRMS.
+async function resolveHRGroupForEmail(email) {
+    if (!email) return null;
+    const overrides = await WorkflowApproverLocationOverride.findAll({
+        where: { roleKey: 'HR_INITIATOR', isActive: true }
+    });
+    for (const o of overrides) {
+        if (emailsMatch(email, o.approverEmail) || emailsMatch(email, o.secondaryEmail)) {
+            return o.location;
+        }
+    }
+    // Global fallback — HR row in WorkflowApproverConfig (no group). If the
+    // initiator matches the global HR, we allow the submission but can't
+    // route to a specific location group. Caller decides what to do.
+    const globalCfg = await WorkflowApproverConfig.findOne({
+        where: { roleKey: 'HR_INITIATOR', isActive: true }
+    });
+    if (globalCfg && (emailsMatch(email, globalCfg.approverEmail) || emailsMatch(email, globalCfg.secondaryEmail))) {
+        return '__GLOBAL__';
+    }
+    return null;
+}
 
 // Map workflow status -> the role currently responsible for it
 const STATUS_TO_ROLE = {
@@ -87,6 +119,34 @@ const handleSubmission = async (req, res, token) => {
                     titleClass: 'error',
                     message: 'This request must be initiated from the IFL portal so we can identify the requester. Please open this page from the portal and try again.'
                 });
+            }
+
+            // ─── HR gating ─────────────────────────────────────────────────
+            // Only admin-configured HR users may initiate a request. The
+            // initiator's SSO email is matched (local-part) against the
+            // HR_INITIATOR rows in WorkflowApproverLocationOverride (per group)
+            // and WorkflowApproverConfig (global). The matching group becomes
+            // the request's location, so IT Ops routing in Step 2 lands in
+            // the same group.
+            const hrGroupKey = await resolveHRGroupForEmail(req.user.email);
+            if (!hrGroupKey) {
+                return res.status(403).render('pages/message', {
+                    title: 'Not authorized',
+                    heading: 'Only authorized HR users can initiate a request',
+                    titleClass: 'error',
+                    icon: '⛔',
+                    iconClass: 'error-icon',
+                    message: `You are signed in as ${req.user.email}, but you are not on the HR Initiator list. Please contact the workflow administrator to be added.`
+                });
+            }
+            if (hrGroupKey !== '__GLOBAL__') {
+                // Group-scoped HR — overwrite any client-supplied location
+                // with the canonical group key so IT Ops routing matches.
+                const grp = groupByKey(hrGroupKey);
+                if (grp) {
+                    data.location = hrGroupKey;
+                    data._locationLabel = groupLabel(hrGroupKey); // for logging only
+                }
             }
 
             // Guard: block duplicate active request for same employee.
@@ -578,6 +638,9 @@ const renderForm = async (req, res, token) => {
         printerLocations,
         fileSharePaths,
         sharepointPaths,
+        // Group-key → label map so the form can show "LHR" / "HO / ISB / …"
+        // instead of the raw group key stored in request.location.
+        locationGroupLabels: LOCATION_GROUP_LABELS,
         timeline,
         currentUser,
         // Expected SSO email for this stage — JS does a client-side mismatch

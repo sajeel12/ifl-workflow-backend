@@ -8,6 +8,7 @@ import TimelineEvent from '../models/TimelineEvent.js';
 import oracleSyncService from '../services/oracleSyncService.js';
 import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
+import { LOCATION_GROUPS } from '../utils/locationGroups.js';
 import cronService from '../services/cronService.js';
 import * as emailService from '../services/emailService.js';
 import RecipientService from '../services/recipientService.js';
@@ -28,7 +29,7 @@ const STATUS_TO_RESEND = {
 // Per client policy, only the IT Operations role is split by location.
 // All other roles use the global default everywhere. The admin UI hides
 // non-location-aware roles from the per-location editor.
-const LOCATION_AWARE_ROLES = new Set(['IT_OPS']);
+const LOCATION_AWARE_ROLES = new Set(['IT_OPS', 'HR_INITIATOR']);
 
 // State to remember current config (would usually be in DB)
 let currentCronConfig = {
@@ -368,23 +369,18 @@ class AdminController {
      */
     async renderWorkflowApproversPanel(req, res) {
         try {
-            const [approvers, locationRows] = await Promise.all([
-                WorkflowApproverConfig.findAll({ order: [['id', 'ASC']] }),
-                Employee.findAll({
-                    attributes: ['location'],
-                    where: { location: { [Op.ne]: null } },
-                    group: ['location'],
-                    order: [['location', 'ASC']],
-                    raw: true
-                })
-            ]);
-            const locations = Array.from(new Set(
-                locationRows.map(r => (r.location || '').trim()).filter(Boolean)
-            ));
+            const approvers = await WorkflowApproverConfig.findAll({ order: [['id', 'ASC']] });
+            // Per client policy, locations are no longer derived from HRMS —
+            // they're fixed groups defined in src/utils/locationGroups.js.
+            // The page passes both the group keys (used as <option value>)
+            // and a parallel `locationLabels` map for human display.
+            const locations      = LOCATION_GROUPS.map(g => g.key);
+            const locationLabels = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key, g.label]));
             res.render('pages/admin_workflow_approvers', {
                 activeTab: 'approvers',
                 approvers,
-                locations
+                locations,
+                locationLabels
             });
         } catch (error) {
             console.error('Error loading approvers panel:', error);
@@ -412,18 +408,13 @@ class AdminController {
      */
     async getLocations(req, res) {
         try {
-            const rows = await Employee.findAll({
-                attributes: ['location'],
-                where: { location: { [Op.ne]: null } },
-                group: ['location'],
-                order: [['location', 'ASC']]
+            // Fixed location groups — see src/utils/locationGroups.js. We
+            // return both the keys (for API consumers) and the human labels.
+            return res.json({
+                success: true,
+                data:   LOCATION_GROUPS.map(g => g.key),
+                groups: LOCATION_GROUPS
             });
-            const locations = rows
-                .map(r => (r.location || '').trim())
-                .filter(Boolean);
-            // Deduplicate (some DBs may return duplicates depending on collation)
-            const unique = Array.from(new Set(locations));
-            return res.json({ success: true, data: unique });
         } catch (error) {
             console.error('Error fetching locations:', error);
             return res.status(500).json({ success: false, error: 'Failed to fetch locations' });
