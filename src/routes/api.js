@@ -23,13 +23,9 @@ router.all('/approvals/handle', approvalController.handleApprovalClick);
 
 router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
 
-// User Onboarding Routes
-// GET /initiate renders the HR form openly (same pattern as /admin/hod-panel) —
-// the page's JS resolves SSO identity client-side and pre-fills the form.
-// POST /initiate IS gated by SSO so the requester identity must be authenticated
-// at the moment of submission. The form's submit-handler attaches the sidecar
-// token as a hidden field which ssoMiddleware reads (in addition to the header).
-router.get('/onboarding/initiate', onboardingController.handleRequest);
+// GET /initiate now gated by SSO — only authenticated users can see the form.
+// POST /initiate also SSO-gated; submission validates HR authorization.
+router.get('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
 router.post('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
 // GET /handle stays open at Node so email-link clicks don't get blocked when
 // the browser hasn't yet established an SSO context (Outlook → fresh browser

@@ -455,25 +455,58 @@ const renderForm = async (req, res, token) => {
         } catch (e) {
             logger.warn('[Onboarding] Could not load timeline: ' + e.message);
         }
-    } else if (req.query.employeeId && role === 'HR') {
-        // HR is entering an employee number — if an active request already
-        // exists, refuse with a least-privilege blocked-message. HR cannot view
-        // the in-flight request's trail; that's reserved for the role currently
-        // holding the workflow.
-        const existing = await OnboardingRequest.findOne({
-            where: {
-                employeeId: req.query.employeeId,
-                status: { [Op.notIn]: ['Rejected', 'Completed'] }
-            },
-            attributes: ['id']
-        });
-        if (existing) {
-            return res.status(409).render('pages/message', {
-                title: 'Request already exists',
-                heading: 'A request is already in progress',
+    } else if (!token && role === 'HR') {
+        // ─── HR form load — gate by SSO + HR_INITIATOR config ──────────
+        // Only admin-configured HR users may even *see* the initiation form.
+        // Same resolveHRGroupForEmail logic used on POST, but applied at GET
+        // so unauthorized users never see the form.
+        if (req.user && req.user.email) {
+            const hrGroupKey = await resolveHRGroupForEmail(req.user.email);
+            if (!hrGroupKey) {
+                return res.status(403).render('pages/message', {
+                    title: 'Access Denied',
+                    heading: 'Only authorized HR users can access this form',
+                    titleClass: 'error',
+                    icon: '⛔',
+                    iconClass: 'error-icon',
+                    message: `You are signed in as ${req.user.email}, but you are not on the HR Initiator list for any location group. Please contact the workflow administrator to be added.`
+                });
+            }
+            // Pre-set the location group on the request object so the form
+            // renders with the correct readonly location label.
+            if (hrGroupKey !== '__GLOBAL__') {
+                request.location = hrGroupKey;
+            }
+        } else if (!req.user) {
+            return res.status(401).render('pages/message', {
+                title: 'Sign-in Required',
+                heading: 'Authentication Required',
                 titleClass: 'error',
-                message: `An onboarding request for employee #${req.query.employeeId} is already moving through the workflow. Please wait for it to complete before initiating a new one.`
+                message: 'You must be signed in via SSO to access the onboarding form. Please open this page from the IFL portal.'
             });
+        }
+
+        // Duplicate check for when HR navigates with ?employeeId=
+        if (req.query.employeeId) {
+            // HR is entering an employee number — if an active request already
+            // exists, refuse with a least-privilege blocked-message. HR cannot view
+            // the in-flight request's trail; that's reserved for the role currently
+            // holding the workflow.
+            const existing = await OnboardingRequest.findOne({
+                where: {
+                    employeeId: req.query.employeeId,
+                    status: { [Op.notIn]: ['Rejected', 'Completed'] }
+                },
+                attributes: ['id']
+            });
+            if (existing) {
+                return res.status(409).render('pages/message', {
+                    title: 'Request already exists',
+                    heading: 'A request is already in progress',
+                    titleClass: 'error',
+                    message: `An onboarding request for employee #${req.query.employeeId} is already moving through the workflow. Please wait for it to complete before initiating a new one.`
+                });
+            }
         }
     } else if (req.query.mock) {
         role = req.query.mock.toUpperCase(); // IT, HOD, DCI, OPS, HR
