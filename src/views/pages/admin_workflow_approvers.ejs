@@ -104,6 +104,7 @@
           <span class="a-stage"><%= ap.workflowStage %></span>
           <% } %>
         </div>
+        <% if (!isMerged) { %>
         <label class="a-toggle" title="Enable / disable this role">
           <input type="checkbox" id="active-<%= ap.id %>"
                  <%= ap.isActive ? 'checked' : '' %>
@@ -112,6 +113,7 @@
           <div class="a-pill <%= ap.isActive ? 'a-pill--on' : '' %>" id="pill-<%= ap.id %>"></div>
           <span class="a-toggle__text" id="pill-lbl-<%= ap.id %>"><%= ap.isActive ? 'Active' : 'Inactive' %></span>
         </label>
+        <% } %>
       </div>
 
       <!-- Description -->
@@ -202,14 +204,22 @@
               </div>
             </div>
 
-            <div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;">
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <button class="btn btn-primary" style="padding:7px 18px;font-size:.85rem;" onclick="saveHR(<%= ap.id %>, <%= hr.id %>)">Save HR</button>
+              <label class="a-toggle" title="Enable / disable HR for this scope">
+                <input type="checkbox" id="active-hr-<%= ap.id %>"
+                       <%= hr.isActive ? 'checked' : '' %>
+                       style="display:none"
+                       onchange="onToggle('hr-' + <%= ap.id %>)">
+                <div class="a-pill <%= hr.isActive ? 'a-pill--on' : '' %>" id="pill-hr-<%= ap.id %>"></div>
+                <span class="a-toggle__text" id="pill-lbl-hr-<%= ap.id %>"><%= hr.isActive ? 'Active' : 'Inactive' %></span>
+              </label>
               <span class="a-save-status" id="st-hr-<%= ap.id %>"></span>
             </div>
           </div>
 
           <!-- ═══ IT OPERATIONS COLUMN ═══════════════════════════════════ -->
-          <div class="a-merged-col">
+          <div class="a-merged-col" data-itops-col>
             <div class="a-merged-col__head">
               <span>IT Operations</span>
               <span class="a-merged-col__stage">Step 2 – Configure</span>
@@ -302,8 +312,18 @@
       </div>
 
       <!-- Footer -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--a-border);">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--a-border);">
         <button class="btn btn-primary" style="padding:8px 22px;" onclick="save(<%= ap.id %>)"><%= isMerged ? 'Save IT Ops' : 'Save' %></button>
+        <% if (isMerged) { %>
+        <label class="a-toggle" title="Enable / disable IT Operations for this scope">
+          <input type="checkbox" id="active-<%= ap.id %>"
+                 <%= ap.isActive ? 'checked' : '' %>
+                 style="display:none"
+                 onchange="onToggle(<%= ap.id %>)">
+          <div class="a-pill <%= ap.isActive ? 'a-pill--on' : '' %>" id="pill-<%= ap.id %>"></div>
+          <span class="a-toggle__text" id="pill-lbl-<%= ap.id %>"><%= ap.isActive ? 'Active' : 'Inactive' %></span>
+        </label>
+        <% } %>
         <span class="a-save-status" id="st-<%= ap.id %>"></span>
       </div>
 
@@ -448,18 +468,24 @@ async function _approverSuggestFetch(id, which, q) {
 
   FloatSuggest.show(inp, suggestLoading(), () => {});
   try {
-    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
+    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=20`);
     const json = await res.json();
 
-    if (!json.success || !json.data.length) {
+    // An approver with no email is useless for routing — drop those rows so
+    // the admin can't pick someone the workflow can't actually notify.
+    const results = (json.success && Array.isArray(json.data))
+      ? json.data.filter(emp => emp.email && emp.email.trim())
+      : [];
+
+    if (!results.length) {
       FloatSuggest.show(inp, suggestEmpty(q), () => {});
       return;
     }
 
-    const html = json.data.map(emp => empHTML(emp, q)).join('');
+    const html = results.slice(0, 8).map(emp => empHTML(emp, q)).join('');
 
     FloatSuggest.show(inp, html, (item, i) => {
-      const emp = json.data[i];
+      const emp = results[i];
       const emailId = (which === 'primary' ? 'email-' : 'semail-') + id;
       const nameId  = (which === 'primary' ? 'name-'  : 'sname-')  + id;
       const emailInp = document.getElementById(emailId);
@@ -548,6 +574,8 @@ async function saveHR(itopsCardId, hrConfigId) {
   const secondaryName  = document.getElementById('sname-hr-'  + itopsCardId).value.trim();
   const stKey = 'hr-' + itopsCardId;
   const btn = document.querySelector(`.a-approver-card[data-id="${itopsCardId}"] [onclick*="saveHR("]`);
+  const activeEl = document.getElementById('active-hr-' + itopsCardId);
+  const isActive = activeEl ? activeEl.checked : true;
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email && !emailRe.test(email)) { setStatus(stKey, 'err', 'Invalid primary email'); return; }
@@ -573,7 +601,7 @@ async function saveHR(itopsCardId, hrConfigId) {
           approverName:   name,
           secondaryEmail: secondaryEmail,
           secondaryName:  secondaryName,
-          isActive: true
+          isActive: isActive
         })
       });
     } else {
@@ -586,7 +614,7 @@ async function saveHR(itopsCardId, hrConfigId) {
           approverName:   name || null,
           secondaryEmail: secondaryEmail || null,
           secondaryName:  secondaryName || null,
-          isActive: true
+          isActive: isActive
         })
       });
     }
@@ -594,6 +622,8 @@ async function saveHR(itopsCardId, hrConfigId) {
     if (data.success) {
       setStatus(stKey, 'ok', 'Saved ✓');
       showToast('ok', data.message || 'HR list updated');
+      // Re-load so the HR Clear-Override button + scope badge refresh.
+      if (location) await loadItOpsForLocation(itopsCardId, location);
     } else {
       const detail = data.details ? (data.error + ' — ' + data.details) : (data.error || 'Failed');
       setStatus(stKey, 'err', data.error || 'Failed');
@@ -614,7 +644,7 @@ async function saveGlobal(id) {
   const secondaryEmail = document.getElementById('semail-' + id).value.trim();
   const secondaryName  = document.getElementById('sname-'  + id).value.trim();
   const active         = document.getElementById('active-' + id).checked;
-  const btn            = document.querySelector(`.a-approver-card[data-id="${id}"] .btn`);
+  const btn            = document.querySelector(`.a-approver-card[data-id="${id}"] [onclick^="save("]`);
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
@@ -664,7 +694,7 @@ async function saveItOpsOverride(id, location) {
   const secondaryEmail = document.getElementById('semail-' + id).value.trim();
   const secondaryName  = document.getElementById('sname-'  + id).value.trim();
   const active         = document.getElementById('active-' + id).checked;
-  const btn            = document.querySelector(`.a-approver-card[data-id="${id}"] .btn`);
+  const btn            = document.querySelector(`.a-approver-card[data-id="${id}"] [onclick^="save("]`);
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
@@ -758,7 +788,8 @@ async function onItOpsLocationChange(id) {
         approverEmail:  document.getElementById('email-hr-'  + id).value,
         approverName:   document.getElementById('name-hr-'   + id).value,
         secondaryEmail: document.getElementById('semail-hr-' + id).value,
-        secondaryName:  document.getElementById('sname-hr-'  + id).value
+        secondaryName:  document.getElementById('sname-hr-'  + id).value,
+        isActive:       document.getElementById('active-hr-' + id).checked
       }
     };
   }
@@ -768,19 +799,85 @@ async function onItOpsLocationChange(id) {
   if (!location) {
     // Default — restore the global snapshot, no fetch needed.
     applyItOpsCardData(id, itOpsGlobalSnapshot[id], { isOverride: false, isDefault: true });
-    if (itOpsGlobalSnapshot[id].hr) applyHRCardData(id, itOpsGlobalSnapshot[id].hr);
+    if (itOpsGlobalSnapshot[id].hr) applyHRCardData(id, itOpsGlobalSnapshot[id].hr, { isOverride: false, isDefault: true });
     return;
   }
   await loadItOpsForLocation(id, location);
 }
 
+// Clear an HR_INITIATOR override (revert this group to the global default).
+async function clearHROverride(id) {
+  const location = itOpsScope[id];
+  if (!location) return;
+  const ok = await IflDialog.confirm(
+    `Clear the HR Initiator override for "${location}"? Future requests from this group will use the Default HR list.`,
+    { title: 'Clear override', okText: 'Clear Override', danger: true }
+  );
+  if (!ok) return;
+  try {
+    const res = await fetch('/admin/workflow-approvers/by-location', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roleKey: 'HR_INITIATOR', location,
+        approverEmail: '', approverName: '', secondaryEmail: '', secondaryName: '',
+        isActive: true
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('ok', data.message || 'Override cleared');
+      await loadItOpsForLocation(id, location);
+    } else {
+      showToast('err', data.error || 'Failed to clear');
+    }
+  } catch {
+    showToast('err', 'Network error.');
+  }
+}
+
 // Mirror of applyItOpsCardData but for the HR column of the merged card.
-function applyHRCardData(id, ap) {
+// `opts` carries { isOverride, isDefault } so the HR column can show its own
+// Clear-Override button + save-button label, exactly like the IT Ops column.
+function applyHRCardData(id, ap, opts) {
   if (!ap) return;
+  opts = opts || {};
   document.getElementById('email-hr-'  + id).value = ap.approverEmail  || '';
   document.getElementById('name-hr-'   + id).value = ap.approverName   || '';
   document.getElementById('semail-hr-' + id).value = ap.secondaryEmail || '';
   document.getElementById('sname-hr-'  + id).value = ap.secondaryName  || '';
+
+  // HR active toggle reflects the live row's state
+  const active = document.getElementById('active-hr-' + id);
+  if (active && typeof ap.isActive === 'boolean') {
+    active.checked = ap.isActive;
+    document.getElementById('pill-hr-' + id).classList.toggle('a-pill--on', ap.isActive);
+    document.getElementById('pill-lbl-hr-' + id).textContent = ap.isActive ? 'Active' : 'Inactive';
+  }
+
+  // Save-button label + Clear-Override button, scoped to the HR column.
+  const hrCol = document.querySelector(`.a-approver-card[data-id="${id}"] [data-hr-col]`);
+  if (hrCol) {
+    const saveBtn = hrCol.querySelector('.btn.btn-primary');
+    if (saveBtn) {
+      const span = saveBtn.querySelector('.ifl-btn-original') || saveBtn;
+      span.textContent = opts.isDefault ? 'Save HR' : (opts.isOverride ? 'Update HR Override' : 'Save HR Override');
+    }
+    let clearBtn = hrCol.querySelector('.a-clear-override-btn');
+    if (!opts.isDefault && opts.isOverride) {
+      if (!clearBtn) {
+        const stEl = document.getElementById('st-hr-' + id);
+        clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'a-clear-override-btn';
+        clearBtn.textContent = 'Clear Override';
+        clearBtn.onclick = () => clearHROverride(id);
+        if (stEl && stEl.parentNode) stEl.parentNode.insertBefore(clearBtn, stEl);
+      }
+    } else if (clearBtn) {
+      clearBtn.remove();
+    }
+  }
 }
 
 async function loadItOpsForLocation(id, location) {
@@ -802,7 +899,7 @@ async function loadItOpsForLocation(id, location) {
     // same response. When no HR override exists for this group, the API
     // still returns the global HR ghost row (isOverride=false).
     const hr = j.data.find(x => x.roleKey === 'HR_INITIATOR');
-    if (hr) applyHRCardData(id, hr);
+    if (hr) applyHRCardData(id, hr, { isOverride: !!hr.isOverride, isDefault: false });
     setStatus(id, '', '');
   } catch (e) {
     console.error(e);
@@ -840,16 +937,21 @@ function applyItOpsCardData(id, ap, { isOverride, isDefault }) {
       badge.textContent = 'Inherits default';
     }
   }
-  // Save button label + Clear-Override button
+  // Save button label + Clear-Override button. In a merged card the IT Ops
+  // controls live in [data-itops-col] — scope to it so we don't grab the HR
+  // column's button. For a plain (non-merged) card, the card itself is scope.
   const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
-  if (card) {
-    const saveBtn = card.querySelector('.btn.btn-primary');
+  const scope = card ? (card.querySelector('[data-itops-col]') || card) : null;
+  if (scope) {
+    const saveBtn = scope.querySelector('.btn.btn-primary');
     if (saveBtn) {
       const span = saveBtn.querySelector('.ifl-btn-original') || saveBtn;
-      const txt = isDefault ? 'Save' : (isOverride ? 'Update Override' : 'Save Override');
+      const txt = isDefault
+        ? (card.classList.contains('is-merged') ? 'Save IT Ops' : 'Save')
+        : (isOverride ? 'Update Override' : 'Save Override');
       span.textContent = txt;
     }
-    let clearBtn = card.querySelector('.a-clear-override-btn');
+    let clearBtn = scope.querySelector('.a-clear-override-btn');
     if (!isDefault && isOverride) {
       if (!clearBtn) {
         const stEl = document.getElementById('st-' + id);
