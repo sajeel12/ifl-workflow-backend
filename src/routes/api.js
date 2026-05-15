@@ -23,9 +23,16 @@ router.all('/approvals/handle', approvalController.handleApprovalClick);
 
 router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
 
-// GET /initiate now gated by SSO — only authenticated users can see the form.
-// POST /initiate also SSO-gated; submission validates HR authorization.
-router.get('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
+// GET /initiate stays OPEN at Node — gating it with ssoMiddleware causes an
+// IIS Windows-auth login-prompt loop, because a fresh browser navigation
+// carries no sidecar token (the token is attached client-side AFTER the page
+// loads). The form renders open; its JS hydrates the SSO identity via
+// /token.aspx + /api/auth/me and pre-fills the requester.
+//
+// POST /initiate IS the hard gate: ssoMiddleware reads the sidecar token the
+// submit-handler attached, populates req.user, and the controller validates
+// HR authorization (resolveHRGroupForEmail) before creating the request.
+router.get('/onboarding/initiate', onboardingController.handleRequest);
 router.post('/onboarding/initiate', ssoMiddleware, onboardingController.handleRequest);
 // GET /handle stays open at Node so email-link clicks don't get blocked when
 // the browser hasn't yet established an SSO context (Outlook → fresh browser
