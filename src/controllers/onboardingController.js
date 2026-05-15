@@ -456,34 +456,25 @@ const renderForm = async (req, res, token) => {
             logger.warn('[Onboarding] Could not load timeline: ' + e.message);
         }
     } else if (!token && role === 'HR') {
-        // ─── HR form load — gate by SSO + HR_INITIATOR config ──────────
-        // Only admin-configured HR users may even *see* the initiation form.
-        // Same resolveHRGroupForEmail logic used on POST, but applied at GET
-        // so unauthorized users never see the form.
+        // ─── HR form load ──────────────────────────────────────────────
+        // The GET initiate page must ALWAYS render with HTTP 200. Returning
+        // 401/403 here causes an IIS Windows-auth prompt loop: IIS rewrites
+        // before it authenticates, so `req.user` is absent on a fresh
+        // navigation; a 401 makes IIS re-challenge, the retry still carries
+        // no identity, and the loop never ends.
+        //
+        // HR authorization is enforced where it actually matters — at POST
+        // time (handleSubmission → resolveHRGroupForEmail). At GET we only
+        // do a SOFT, non-blocking touch: if SSO identity happens to already
+        // be present (proxy header populated req.user) and the user is a
+        // known HR, pre-set their location group so the form renders the
+        // right readonly label. A non-HR user simply sees the form and is
+        // blocked cleanly on submit.
         if (req.user && req.user.email) {
             const hrGroupKey = await resolveHRGroupForEmail(req.user.email);
-            if (!hrGroupKey) {
-                return res.status(403).render('pages/message', {
-                    title: 'Access Denied',
-                    heading: 'Only authorized HR users can access this form',
-                    titleClass: 'error',
-                    icon: '⛔',
-                    iconClass: 'error-icon',
-                    message: `You are signed in as ${req.user.email}, but you are not on the HR Initiator list for any location group. Please contact the workflow administrator to be added.`
-                });
-            }
-            // Pre-set the location group on the request object so the form
-            // renders with the correct readonly location label.
-            if (hrGroupKey !== '__GLOBAL__') {
+            if (hrGroupKey && hrGroupKey !== '__GLOBAL__') {
                 request.location = hrGroupKey;
             }
-        } else if (!req.user) {
-            return res.status(401).render('pages/message', {
-                title: 'Sign-in Required',
-                heading: 'Authentication Required',
-                titleClass: 'error',
-                message: 'You must be signed in via SSO to access the onboarding form. Please open this page from the IFL portal.'
-            });
         }
 
         // Duplicate check for when HR navigates with ?employeeId=
