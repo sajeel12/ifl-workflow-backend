@@ -595,8 +595,10 @@ async function saveHR(itopsCardId, hrConfigId) {
       setStatus(stKey, 'ok', 'Saved ✓');
       showToast('ok', data.message || 'HR list updated');
     } else {
+      const detail = data.details ? (data.error + ' — ' + data.details) : (data.error || 'Failed');
       setStatus(stKey, 'err', data.error || 'Failed');
-      showToast('err', data.error || 'Save failed');
+      showToast('err', detail);
+      console.error('[HR save failed]', data);
     }
   } catch {
     setStatus(stKey, 'err', 'Network error');
@@ -692,8 +694,10 @@ async function saveItOpsOverride(id, location) {
       // Re-load to refresh the scope badge ("Override" instead of "Inherits default").
       await loadItOpsForLocation(id, location);
     } else {
+      const detail = data.details ? (data.error + ' — ' + data.details) : (data.error || 'Failed');
       setStatus(id, 'err', data.error || 'Failed');
-      showToast('err', data.error || 'Save failed');
+      showToast('err', detail);
+      console.error('[Override save failed]', data);
     }
   } catch {
     setStatus(id, 'err', 'Network error');

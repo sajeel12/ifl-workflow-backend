@@ -51,6 +51,55 @@ async function ensureColumn(sequelize, isSqlite, tableName, columnName, sqlType)
     }
 }
 
+/**
+ * One-time repair for the WorkflowApproverLocationOverrides table.
+ *
+ * Older model revisions defined `roleKey` as a column-level UNIQUE. The table
+ * created from that revision can only ever hold one row per role, so saving a
+ * second per-location override fails with:
+ *   SQLITE_CONSTRAINT: UNIQUE constraint failed: ...roleKey
+ *
+ * The correct constraint is the composite UNIQUE(roleKey, location). Sequelize
+ * `alter` can't reliably drop a stale constraint, so when the bad index is
+ * detected we rebuild the table from scratch — preserving any existing rows.
+ * After the first run this is a no-op (the rebuilt table has no bad index).
+ */
+async function fixOverrideTableSchema(sequelize, isSqlite) {
+    if (!isSqlite) return; // SQLite-specific repair
+    try {
+        const [indexes] = await sequelize.query(
+            "PRAGMA index_list(`WorkflowApproverLocationOverrides`)"
+        );
+        let badUnique = false;
+        for (const idx of (indexes || [])) {
+            if (!idx.unique) continue;
+            const [cols] = await sequelize.query(`PRAGMA index_info(\`${idx.name}\`)`);
+            // A UNIQUE index over roleKey ALONE is the stale one.
+            if (Array.isArray(cols) && cols.length === 1 && cols[0].name === 'roleKey') {
+                badUnique = true;
+                break;
+            }
+        }
+        if (!badUnique) return;
+
+        // Preserve existing override rows, then rebuild with the correct schema.
+        const rows = await WorkflowApproverLocationOverride.findAll({ raw: true });
+        await sequelize.query('DROP TABLE IF EXISTS `WorkflowApproverLocationOverrides`');
+        await WorkflowApproverLocationOverride.sync(); // recreate with composite UNIQUE
+        if (rows.length) {
+            await WorkflowApproverLocationOverride.bulkCreate(
+                rows.map(({ id, ...rest }) => rest)
+            );
+        }
+        logger.warn(
+            `[Schema] Rebuilt WorkflowApproverLocationOverrides — removed stale UNIQUE(roleKey), ` +
+            `preserved ${rows.length} row(s).`
+        );
+    } catch (err) {
+        logger.warn(`[Schema] fixOverrideTableSchema failed: ${err.message}`);
+    }
+}
+
 async function dropAllForeignKeys() {
     try {
         const query = `
@@ -107,6 +156,14 @@ async function startServer() {
         // never has to remember a one-off migration step.
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
         // Add future columns here as the model evolves.
+
+        // One-time schema repair for WorkflowApproverLocationOverrides.
+        // Older builds created this table with a column-level UNIQUE on
+        // roleKey alone, which allows only ONE override row per role and
+        // makes every second per-location save fail with a UNIQUE constraint
+        // error. The correct constraint is the composite (roleKey, location).
+        // If the bad index is detected we rebuild the table, preserving rows.
+        await fixOverrideTableSchema(sequelize, isSqlite);
 
         // Idempotent seed: ensure every default role exists. Use findOrCreate
         // (not bulkCreate-only-when-empty) so that roles added in later
