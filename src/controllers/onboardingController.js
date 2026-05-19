@@ -185,27 +185,24 @@ const handleSubmission = async (req, res, token) => {
 
             const { role, request } = context;
 
-            // ─── Forwarded-email validation (HARD enforcement at POST) ────
-            // The token is valid, but make absolutely sure the SSO user
-            // submitting this action is the intended approver. This catches
-            // any forwarded-email scenario regardless of how the GET reached
-            // them. The same email that was used to send the action link
-            // (request.currentStageAssigneeEmail) must match req.user.email.
+            // ─── Authorization: check the LIVE configured approver for this
+            // stage role (not just the stored currentStageAssigneeEmail).
+            // This lets admin role changes take effect immediately on
+            // in-flight requests without needing an explicit rebind action.
+            // If no approver is configured for the role, any authenticated
+            // user may proceed (avoids lock-out during initial setup).
             // Compare LOCAL-PART only (text before "@") — same person can be
-            // ali.khan@ifl.net in HRMS and ali.khan@igc.com.pk in AD; the
-            // domain varies but the local-part is consistent.
-            const expectedEmail = request.currentStageAssigneeEmail || '';
-            const actualEmail   = (req.user && req.user.email) || '';
-            if (expectedEmail) {
+            // ali.khan@ifl.net in HRMS and ali.khan@igc.com.pk in AD.
+            const actualEmail = (req.user && req.user.email) || '';
+            const stageRoleInfo = STATUS_TO_ROLE[request.status];
+            if (stageRoleInfo && stageRoleInfo.key) {
                 if (!actualEmail) {
-                    // No SSO context — refuse outright. Token-only access is
-                    // not enough to act on a request.
                     try {
                         await TimelineEvent.create({
                             requestId: request.id,
                             action: 'Unauthorized Submit',
                             actorRole: 'System',
-                            details: `Submission attempt without SSO context. Expected ${request.currentStageAssigneeEmail}.`,
+                            details: `Submission attempt without SSO context. Stage: ${request.status}, stored assignee: ${request.currentStageAssigneeEmail}.`,
                             timestamp: new Date()
                         });
                     } catch (_) {}
@@ -215,27 +212,28 @@ const handleSubmission = async (req, res, token) => {
                         titleClass: 'error',
                         icon: '⛔',
                         iconClass: 'error-icon',
-                        message: `This action can only be submitted by ${request.currentStageAssigneeEmail}. Please open the action link from the IFL portal so we can verify your identity.`
+                        message: `This action can only be submitted by the configured approver for this stage. Please open the action link from the IFL portal so we can verify your identity.`
                     });
                 }
-                if (!emailsMatch(actualEmail, expectedEmail)) {
-                    // Identity mismatch — log and reject.
+                const currentRecipient = await resolveCurrentRecipient(request.status);
+                const configuredEmail = (currentRecipient && currentRecipient.email) || '';
+                if (configuredEmail && !emailsMatch(actualEmail, configuredEmail)) {
                     try {
                         await TimelineEvent.create({
                             requestId: request.id,
                             action: 'Unauthorized Submit',
                             actorRole: 'System',
-                            details: `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
+                            details: `Configured approver: ${configuredEmail}, submitted by: ${actualEmail}`,
                             timestamp: new Date()
                         });
                     } catch (_) {}
                     return res.status(403).render('pages/message', {
                         title: 'Not authorized',
-                        heading: 'This action is authorized only for the intended recipient',
+                        heading: 'This action is authorized only for the configured approver',
                         titleClass: 'error',
                         icon: '⛔',
                         iconClass: 'error-icon',
-                        message: `This action link was sent to ${request.currentStageAssigneeEmail}. You are signed in as ${req.user.email}, so you cannot submit this request. If you need to handle it on someone's behalf, please contact your administrator.`
+                        message: `This stage is currently assigned to ${configuredEmail}. You are signed in as ${actualEmail}, so you cannot submit this request. If the approver assignment has changed, please contact your administrator.`
                     });
                 }
             }

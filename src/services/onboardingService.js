@@ -285,7 +285,10 @@ export const createRequest = async (data) => {
             ? `Initiated by ${data.requesterName}${data.requesterEmail ? ' <' + data.requesterEmail + '>' : ''}`
             : 'Initial submission';
         await logTimelineEvent(request.id, 'Request Initiated', 'HR', initiatorLabel);
-        const itEmail = await RecipientService.get('IT_OPS', { location: request.location });
+        const _resolved = await RecipientService.getWithFallback('IT_OPS', { location: request.location, requestId: request.id });
+        const itEmail = (_resolved && _resolved.email)
+            ? _resolved.email
+            : await RecipientService.get('IT_OPS', { location: request.location });
         // Persist the intended recipient so we can validate clicks later.
         await request.update({ currentStageAssigneeEmail: itEmail || null });
         await sendStageEmail(itEmail, request, token, 'IT_OPS');
