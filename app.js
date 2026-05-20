@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import apiRoutes from './src/routes/api.js';
 import adminRoutes from './src/routes/admin.js';
+import portalRoutes from './src/routes/portal.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -26,6 +27,7 @@ app.use(express.static('public'));
 
 app.use('/api', apiRoutes);
 app.use('/admin', adminRoutes);
+app.use('/portal', portalRoutes);
 
 
 app.get('/', (req, res) => {

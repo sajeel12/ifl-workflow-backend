@@ -507,3 +507,37 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
 
     return sendApprovalEmail(toEmail, subject, body, actionLink, request.requesterName || 'HR', request.requesterEmail || '');
 };
+
+export const sendPortalAccessLink = async (toEmail, roleName, portalUrl) => {
+    logger.info(`[Email] Sending portal access link to ${toEmail} for ${roleName}`);
+    const subject = `Your ${roleName} Portal Access Link`;
+    const htmlBody = `
+        <div style="font-family:Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+            <div style="background:#0078D4;padding:20px 28px;">
+                <div style="color:#fff;font-size:1.1rem;font-weight:700;">IFL Workflow</div>
+            </div>
+            <div style="padding:28px;">
+                <h2 style="font-size:1.1rem;color:#0f172a;margin:0 0 10px;">${roleName} Portal — Access Link</h2>
+                <p style="font-size:0.92rem;color:#475569;margin:0 0 22px;line-height:1.6;">
+                    Click the button below to open your portal. The link is valid for <strong>8 hours</strong>.
+                    Do not share it with others.
+                </p>
+                <a href="${portalUrl}"
+                   style="display:inline-block;padding:12px 28px;background:#0078D4;color:#fff;
+                          text-decoration:none;border-radius:7px;font-size:0.95rem;font-weight:600;">
+                    Open ${roleName} Portal &rarr;
+                </a>
+                <p style="font-size:0.78rem;color:#94a3b8;margin:22px 0 0;">
+                    If you did not request this link, ignore this email.
+                </p>
+            </div>
+        </div>`;
+
+    await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER || 'workflow@ifl.com',
+        to:   toEmail,
+        subject,
+        html: htmlBody,
+        text: `Open your ${roleName} portal: ${portalUrl}  (valid 8 hours)`
+    });
+};

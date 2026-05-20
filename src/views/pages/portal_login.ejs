@@ -1,0 +1,105 @@
+<%- include('../partials/header', { title: roleName + ' Portal — IFL' }) %>
+
+<div class="header">
+    <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+    <div class="brand">IFL Workflow</div>
+</div>
+
+<style>
+    .pl-wrap {
+        min-height: calc(100vh - 64px);
+        display: flex; align-items: center; justify-content: center;
+        background: #f1f5f9; padding: 32px 16px;
+    }
+    .pl-card {
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+        padding: 40px 36px; width: 100%; max-width: 440px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    }
+    .pl-icon {
+        width: 52px; height: 52px; background: #EFF6FF; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.5rem; margin-bottom: 20px;
+    }
+    .pl-title { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 4px; }
+    .pl-sub   { font-size: 0.88rem; color: #64748b; margin: 0 0 28px; }
+    .pl-label { font-size: 0.78rem; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.04em; display: block; margin-bottom: 6px; }
+    .pl-input {
+        width: 100%; box-sizing: border-box;
+        padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 7px;
+        font-size: 0.95rem; color: #0f172a; outline: none;
+        transition: border-color 0.15s;
+    }
+    .pl-input:focus { border-color: #0078D4; box-shadow: 0 0 0 3px rgba(0,120,212,0.12); }
+    .pl-btn {
+        width: 100%; margin-top: 20px;
+        padding: 11px 0; background: #0078D4; color: #fff;
+        border: none; border-radius: 7px; font-size: 0.95rem; font-weight: 600;
+        cursor: pointer; transition: background 0.15s;
+    }
+    .pl-btn:hover { background: #005fa3; }
+
+    .pl-error {
+        background: #FEF2F2; border: 1px solid #FECACA; border-radius: 7px;
+        padding: 12px 14px; font-size: 0.88rem; color: #B91C1C; margin-bottom: 18px;
+    }
+    .pl-success {
+        background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 7px;
+        padding: 20px 18px; text-align: center;
+    }
+    .pl-success .ps-icon { font-size: 2rem; margin-bottom: 8px; }
+    .pl-success h3 { font-size: 1rem; font-weight: 700; color: #166534; margin: 0 0 6px; }
+    .pl-success p  { font-size: 0.88rem; color: #15803d; margin: 0; }
+
+    .pl-portals { margin-top: 28px; padding-top: 20px; border-top: 1px solid #f1f5f9; }
+    .pl-portals p { font-size: 0.78rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px; }
+    .pl-portals-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pl-portals-grid a {
+        font-size: 0.8rem; padding: 5px 11px; border: 1px solid #e2e8f0;
+        border-radius: 20px; color: #475569; text-decoration: none;
+        transition: all 0.12s;
+    }
+    .pl-portals-grid a:hover { border-color: #0078D4; color: #0078D4; }
+    .pl-portals-grid a.current { border-color: #0078D4; color: #0078D4; background: #EFF6FF; font-weight: 600; }
+</style>
+
+<div class="pl-wrap">
+    <div class="pl-card">
+        <div class="pl-icon">&#128274;</div>
+        <h1 class="pl-title"><%= roleName %> Portal</h1>
+        <p class="pl-sub">Enter your work email to receive a secure access link.</p>
+
+        <% if (locals.error && error) { %>
+            <div class="pl-error"><%= error %></div>
+        <% } %>
+
+        <% if (locals.sent && sent) { %>
+            <div class="pl-success">
+                <div class="ps-icon">&#9993;</div>
+                <h3>Access link sent</h3>
+                <p>Check your inbox and click the link to open your portal.<br>The link expires in 8 hours.</p>
+            </div>
+        <% } else { %>
+            <form method="POST" action="/portal/<%= roleSlug %>">
+                <label class="pl-label" for="email">Work email</label>
+                <input id="email" name="email" type="email" class="pl-input"
+                    placeholder="your.name@ifl.com" required autocomplete="email">
+                <button type="submit" class="pl-btn">Send Access Link</button>
+            </form>
+        <% } %>
+
+        <div class="pl-portals">
+            <p>Other portals</p>
+            <div class="pl-portals-grid">
+                <a href="/portal/it-ops"          class="<%= roleSlug === 'it-ops'          ? 'current' : '' %>">IT Operations</a>
+                <a href="/portal/dci-team"        class="<%= roleSlug === 'dci-team'        ? 'current' : '' %>">DCI Team</a>
+                <a href="/portal/dci-implementer" class="<%= roleSlug === 'dci-implementer' ? 'current' : '' %>">DCI Implementer</a>
+                <a href="/portal/it-hod"          class="<%= roleSlug === 'it-hod'          ? 'current' : '' %>">IT HOD</a>
+                <a href="/portal/dci-manager"     class="<%= roleSlug === 'dci-manager'     ? 'current' : '' %>">DCI Manager</a>
+                <a href="/portal/hr-initiator"    class="<%= roleSlug === 'hr-initiator'    ? 'current' : '' %>">HR Initiator</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('../partials/footer') %>

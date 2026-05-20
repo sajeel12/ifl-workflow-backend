@@ -1,0 +1,318 @@
+<%- include('../partials/header', { title: roleName + ' Portal — IFL' }) %>
+
+<div class="header">
+    <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+    <div class="brand">IFL Workflow — <%= roleName %></div>
+</div>
+
+<style>
+    .pd-wrap { max-width: 1100px; margin: 28px auto; padding: 0 20px; }
+
+    /* ── Header bar ─────────────────────────────────────── */
+    .pd-hero {
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+        padding: 20px 24px; margin-bottom: 20px;
+        display: flex; flex-wrap: wrap; gap: 14px;
+        align-items: center; justify-content: space-between;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .pd-hero-left h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 4px; }
+    .pd-hero-left p  { font-size: 0.84rem; color: #64748b; margin: 0; }
+
+    .pd-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pd-badge {
+        font-size: 0.75rem; font-weight: 600; padding: 4px 11px;
+        border-radius: 20px; letter-spacing: 0.02em;
+    }
+    .pd-badge--primary   { background: #DBEAFE; color: #1D4ED8; }
+    .pd-badge--secondary { background: #FEF3C7; color: #B45309; }
+    .pd-badge--parallel  { background: #D1FAE5; color: #065F46; }
+    .pd-badge--location  { background: #F1F5F9; color: #334155; border: 1px solid #e2e8f0; }
+
+    /* ── Stats row ──────────────────────────────────────── */
+    .pd-stats { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+    .pd-stat {
+        flex: 1; min-width: 160px;
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+        padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .pd-stat .s-val  { font-size: 2rem; font-weight: 700; color: #0f172a; line-height: 1; }
+    .pd-stat .s-lbl  { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
+    .pd-stat.s-alert .s-val { color: #D97706; }
+
+    /* ── Tabs ───────────────────────────────────────────── */
+    .pd-tabs { display: flex; gap: 4px; margin-bottom: 0; border-bottom: 2px solid #e2e8f0; }
+    .pd-tab  {
+        padding: 9px 20px; font-size: 0.9rem; font-weight: 600;
+        color: #64748b; text-decoration: none; border-bottom: 2px solid transparent;
+        margin-bottom: -2px; border-radius: 6px 6px 0 0;
+    }
+    .pd-tab.is-active { color: #0078D4; border-bottom-color: #0078D4; background: #EFF6FF; }
+
+    /* ── Request cards (pending tab) ────────────────────── */
+    .pd-section { background: #fff; border: 1px solid #e2e8f0; border-radius: 0 10px 10px 10px; padding: 20px; }
+
+    .pd-empty {
+        padding: 60px 20px; text-align: center; color: #94a3b8;
+    }
+    .pd-empty .em { font-size: 2rem; opacity: 0.5; margin-bottom: 8px; }
+
+    .req-list { display: flex; flex-direction: column; gap: 12px; }
+    .req-card {
+        border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 18px;
+        display: flex; flex-wrap: wrap; gap: 12px;
+        align-items: flex-start; justify-content: space-between;
+        transition: box-shadow 0.12s;
+    }
+    .req-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    .req-card.can-act { border-left: 3px solid #0078D4; }
+    .req-card.read-only { opacity: 0.75; }
+
+    .req-info { flex: 1; min-width: 200px; }
+    .req-name { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+    .req-sub  { font-size: 0.82rem; color: #64748b; margin: 0 0 8px; }
+    .req-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+    .req-pill {
+        font-size: 0.75rem; padding: 3px 9px; border-radius: 12px;
+        background: #f1f5f9; color: #475569;
+    }
+    .req-pill.status-pending { background: #FEF3C7; color: #92400E; }
+    .req-pill.status-ops     { background: #EDE9FE; color: #5B21B6; }
+
+    .req-timer {
+        font-size: 0.75rem; color: #94a3b8;
+        display: flex; align-items: center; gap: 4px; margin-top: 6px;
+    }
+    .req-timer.stale { color: #DC2626; font-weight: 600; }
+
+    .req-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+    .btn-handle {
+        padding: 8px 20px; background: #0078D4; color: #fff;
+        border: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600;
+        text-decoration: none; cursor: pointer;
+        transition: background 0.12s;
+    }
+    .btn-handle:hover { background: #005fa3; }
+    .btn-view {
+        padding: 7px 16px; background: transparent; color: #64748b;
+        border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.82rem;
+        text-decoration: none;
+    }
+    .btn-view:hover { border-color: #94a3b8; color: #334155; }
+
+    .assignee-note {
+        font-size: 0.75rem; color: #94a3b8; margin-top: 4px; text-align: right;
+    }
+    .assignee-note.escalated { color: #D97706; }
+
+    /* ── History table ──────────────────────────────────── */
+    .hist-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    .hist-table th {
+        text-align: left; padding: 9px 12px; font-size: 0.75rem; font-weight: 600;
+        color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
+        border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .hist-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    .hist-table tr:last-child td { border-bottom: none; }
+    .hist-table tr:hover td { background: #f8fafc; }
+
+    .status-pill {
+        display: inline-block; font-size: 0.72rem; padding: 3px 9px;
+        border-radius: 12px; font-weight: 600;
+    }
+    .sp-completed { background: #D1FAE5; color: #065F46; }
+    .sp-rejected  { background: #FEE2E2; color: #991B1B; }
+    .sp-pending   { background: #FEF3C7; color: #92400E; }
+    .sp-other     { background: #F1F5F9; color: #475569; }
+
+    /* ── HR-specific: initiate banner ───────────────────── */
+    .hr-initiate {
+        background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px;
+        padding: 18px 22px; margin-bottom: 20px;
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .hr-initiate p { margin: 0; font-size: 0.92rem; color: #166534; }
+    .btn-initiate {
+        padding: 9px 22px; background: #16A34A; color: #fff;
+        border: none; border-radius: 7px; font-size: 0.9rem; font-weight: 600;
+        text-decoration: none; white-space: nowrap;
+    }
+    .btn-initiate:hover { background: #15803d; }
+</style>
+
+<div class="pd-wrap">
+
+    <!-- ── Hero ── -->
+    <div class="pd-hero">
+        <div class="pd-hero-left">
+            <h1><%= roleName %> Portal</h1>
+            <p><%= userEmail %></p>
+        </div>
+        <div class="pd-badges">
+            <% if (roleModel === 'parallel') { %>
+                <span class="pd-badge pd-badge--parallel">Parallel Seat</span>
+            <% } else if (isPrimary) { %>
+                <span class="pd-badge pd-badge--primary">Primary</span>
+            <% } else { %>
+                <span class="pd-badge pd-badge--secondary">Secondary</span>
+            <% } %>
+            <% locationLabels.forEach(loc => { %>
+                <span class="pd-badge pd-badge--location"><%= loc %></span>
+            <% }) %>
+        </div>
+    </div>
+
+    <!-- ── HR: initiate banner ── -->
+    <% if (roleKey === 'HR_INITIATOR') { %>
+    <div class="hr-initiate">
+        <p>Submit a new onboarding request for an incoming employee.</p>
+        <a href="<%= appUrl %>/api/onboarding/initiate" class="btn-initiate">+ New Onboarding Request</a>
+    </div>
+    <% } %>
+
+    <!-- ── Stats ── -->
+    <div class="pd-stats">
+        <div class="pd-stat">
+            <div class="s-val"><%= pendingCount %></div>
+            <div class="s-lbl">Total in queue</div>
+        </div>
+        <div class="pd-stat <%= actionCount > 0 ? 's-alert' : '' %>">
+            <div class="s-val"><%= actionCount %></div>
+            <div class="s-lbl">Awaiting your action</div>
+        </div>
+        <div class="pd-stat">
+            <div class="s-val"><%= history.length %></div>
+            <div class="s-lbl">Processed (history)</div>
+        </div>
+    </div>
+
+    <!-- ── Tabs (JS-toggled) ── -->
+    <div class="pd-tabs">
+        <a class="pd-tab is-active" id="tab-pending" href="#" onclick="switchTab('pending'); return false;">
+            Pending Queue <% if (pendingCount > 0) { %>(<%= pendingCount %>)<% } %>
+        </a>
+        <a class="pd-tab" id="tab-history" href="#" onclick="switchTab('history'); return false;">
+            History <% if (history.length > 0) { %>(<%= history.length %>)<% } %>
+        </a>
+    </div>
+
+    <!-- ── Pending tab ── -->
+    <div class="pd-section" id="pane-pending">
+        <% if (pending.length === 0) { %>
+            <div class="pd-empty">
+                <div class="em">&#10003;</div>
+                <p>No pending requests in your queue.</p>
+            </div>
+        <% } else { %>
+        <div class="req-list">
+            <% pending.forEach(r => {
+                const stageAge = r.hrSubmittedAt ? Math.round((Date.now() - new Date(r.hrSubmittedAt).getTime()) / 3600000) : null;
+                const isStale  = stageAge !== null && stageAge > 48;
+                const isEscalated = !r.canAct && (r.status === r.status); // secondary sees but can't act yet
+            %>
+            <div class="req-card <%= r.canAct ? 'can-act' : 'read-only' %>">
+                <div class="req-info">
+                    <p class="req-name">#<%= r.id %> — <%= r.fullName || '—' %></p>
+                    <p class="req-sub">
+                        <%= [r.designation, r.department].filter(Boolean).join(' · ') || '—' %>
+                        <% if (r.location) { %> &middot; <%= r.location %><% } %>
+                    </p>
+                    <div class="req-meta">
+                        <span class="req-pill <%= r.status === 'PendingOPSAction' ? 'status-ops' : 'status-pending' %>">
+                            <%= r.status %>
+                        </span>
+                        <% if (r.joiningDate) { %>
+                            <span class="req-pill">Joining: <%= new Date(r.joiningDate).toLocaleDateString('en-GB') %></span>
+                        <% } %>
+                        <% if (r.hrSubmittedAt) { %>
+                            <span class="req-pill">Submitted: <%= new Date(r.hrSubmittedAt).toLocaleDateString('en-GB') %></span>
+                        <% } %>
+                    </div>
+                    <% if (stageAge !== null) { %>
+                        <div class="req-timer <%= isStale ? 'stale' : '' %>">
+                            <%= isStale ? '&#9888; ' : '&#9679; ' %>
+                            Stage open <%= stageAge %>h<%= isStale ? ' — PAST 48h' : '' %>
+                        </div>
+                    <% } %>
+                </div>
+
+                <div class="req-actions">
+                    <% if (r.canAct && r.actionUrl) { %>
+                        <a href="<%= r.actionUrl %>" class="btn-handle">Handle &#8594;</a>
+                    <% } else { %>
+                        <a href="/api/onboarding/history/<%= r.id %>" class="btn-view">View</a>
+                    <% } %>
+
+                    <div class="assignee-note <%= r.currentStageAssigneeEmail && !r.canAct ? 'escalated' : '' %>">
+                        <% if (r.canAct) { %>
+                            Assigned to you
+                        <% } else if (r.currentStageAssigneeEmail) { %>
+                            Assigned to <%= r.currentStageAssigneeEmail.split('@')[0] %>
+                        <% } else { %>
+                            Unassigned
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+    </div>
+
+    <!-- ── History tab ── -->
+    <div class="pd-section" id="pane-history" style="display:none;">
+        <% if (history.length === 0) { %>
+            <div class="pd-empty">
+                <div class="em">&#128203;</div>
+                <p>No processed requests yet.</p>
+            </div>
+        <% } else { %>
+        <table class="hist-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <% if (locationLabels[0] === 'All Locations') { %><th>Location</th><% } %>
+                    <th>Joining Date</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <% history.forEach(r => {
+                    let spClass = 'sp-other';
+                    if (r.status === 'Completed') spClass = 'sp-completed';
+                    else if (r.status === 'Rejected') spClass = 'sp-rejected';
+                    else if (r.status && r.status.startsWith('Pending')) spClass = 'sp-pending';
+                %>
+                <tr>
+                    <td>#<%= r.id %></td>
+                    <td>
+                        <strong><%= r.fullName || '—' %></strong><br>
+                        <span style="font-size:0.78rem;color:#94a3b8;"><%= r.designation || '' %></span>
+                    </td>
+                    <td><%= r.department || '—' %></td>
+                    <% if (locationLabels[0] === 'All Locations') { %><td><%= r.location || '—' %></td><% } %>
+                    <td><%= r.joiningDate ? new Date(r.joiningDate).toLocaleDateString('en-GB') : '—' %></td>
+                    <td><span class="status-pill <%= spClass %>"><%= r.status %></span></td>
+                    <td><a href="/api/onboarding/history/<%= r.id %>" class="btn-view">View</a></td>
+                </tr>
+                <% }) %>
+            </tbody>
+        </table>
+        <% } %>
+    </div>
+
+</div>
+
+<script>
+function switchTab(name) {
+    document.querySelectorAll('.pd-tab').forEach(t => t.classList.remove('is-active'));
+    document.querySelectorAll('[id^="pane-"]').forEach(p => p.style.display = 'none');
+    document.getElementById('tab-' + name).classList.add('is-active');
+    document.getElementById('pane-' + name).style.display = '';
+}
+</script>
+
+<%- include('../partials/footer') %>
