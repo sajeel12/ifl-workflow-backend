@@ -5,6 +5,7 @@ import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocation
 import { issueToken, validateToken } from '../services/portalTokenService.js';
 import { sendPortalAccessLink } from '../services/emailService.js';
 import { emailsMatch } from '../utils/emailMatch.js';
+import { groupLabel } from '../utils/locationGroups.js';
 import logger from '../utils/logger.js';
 
 // ── Role registry ──────────────────────────────────────────────────────────────
@@ -246,9 +247,11 @@ export async function showDashboard(req, res) {
             historyUrl: `${process.env.APP_URL}/api/onboarding/history/${r.id}`,
         }));
 
+        // Convert group keys (e.g. "HO_NORTH") to display labels
+        // (e.g. "HO / ISB / MUL / P10 / SIDHUPURA / KHI") for the view.
         const locationLabels = accesses.some(a => a.location === null)
             ? ['All Locations']
-            : accesses.map(a => a.location);
+            : [...new Set(accesses.map(a => a.location))].map(k => groupLabel(k) || k);
 
         const isPrimary = accesses.some(a => a.isPrimary);
 
