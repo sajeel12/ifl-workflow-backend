@@ -1,6 +1,7 @@
 import app from './app.js';
 import sequelize from './src/config/database.js';
 import logger from './src/utils/logger.js';
+import cronService from './src/services/cronService.js';
 import Employee from './src/models/Employee.js';
 import OnboardingRequest from './src/models/OnboardingRequest.js';
 import OffboardingRequest from './src/models/OffboardingRequest.js';
@@ -313,6 +314,10 @@ async function startServer() {
             }
             logger.info(`Seeded ${samples.length} sample onboarding requests with timeline events.`);
         }
+
+        // Start the 48h escalation cron. Runs every 2 hours and automatically
+        // re-routes stalled requests to secondary when primary hasn't acted.
+        cronService.scheduleEscalationCheck();
 
         app.listen(PORT, '127.0.0.1', () => {
             logger.info(`Server running on port ${PORT}`);
