@@ -88,6 +88,23 @@ const resolveCurrentRecipient = async (status, location = null) => {
     }
 };
 
+// Given a location-aware roleKey and a signed-in user email, return the location
+// group key that user belongs to by checking both seats (approverEmail /
+// secondaryEmail) in the override table. Returns null if the user is not in any
+// override row (e.g. they are in the global config, or not configured at all).
+async function resolveUserLocationForRole(roleKey, userEmail) {
+    if (!userEmail) return null;
+    const overrides = await WorkflowApproverLocationOverride.findAll({
+        where: { roleKey, isActive: true }
+    });
+    for (const o of overrides) {
+        if (emailsMatch(userEmail, o.approverEmail) || emailsMatch(userEmail, o.secondaryEmail)) {
+            return o.location;
+        }
+    }
+    return null;
+}
+
 export const handleRequest = async (req, res) => {
     const { token } = req.query;
 
@@ -735,7 +752,12 @@ const FORM_ROLE_TO_LABEL = {
 // per client requirement — the same user who configured the services initially
 // is also responsible for verifying after desk setup. OPS_TEAM is no longer a
 // separate queue; OPS-routed designations fall back into IT_OPS.
+const ALL_INFLIGHT = ['PendingIT', 'PendingHOD', 'PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction'];
+
 const ROLE_TO_PENDING_STATUS = {
+    // HR_INITIATOR has no "waiting on them" status — pending view shows all
+    // in-flight requests from their location so they can track what they started.
+    HR_INITIATOR: ALL_INFLIGHT,
     IT_OPS: ['PendingIT', 'PendingOPSAction'],
     HOD: ['PendingHOD'],
     DCI_TEAM: ['PendingDCI'],
@@ -745,7 +767,9 @@ const ROLE_TO_PENDING_STATUS = {
 };
 
 const ROLE_TO_HISTORY_STATUS = {
-    IT_OPS: ['PendingIT', 'PendingHOD', 'PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
+    // HR_INITIATOR history = closed requests from their location.
+    HR_INITIATOR: ['Completed', 'Rejected'],
+    IT_OPS: [...ALL_INFLIGHT, 'Completed', 'Rejected'],
     HOD: ['PendingHOD', 'PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
     DCI_TEAM: ['PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
     DCI_MANAGER: ['PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
@@ -757,7 +781,9 @@ const ROLE_TO_HISTORY_STATUS = {
 // Lets users land on the queue page automatically without picking a role.
 // All OPS-flavoured designations resolve to IT_OPS (single combined queue).
 const DESIGNATION_TO_ROLE = {
-    HR: 'IT_OPS', // HR initiates, doesn't have a queue. Default landing role for them is informational.
+    'HR': 'HR_INITIATOR',
+    'HR INITIATOR': 'HR_INITIATOR',
+    'HR_INITIATOR': 'HR_INITIATOR',
     'IT OPS': 'IT_OPS',
     'IT_OPS': 'IT_OPS',
     'IT': 'IT_OPS',
@@ -798,21 +824,29 @@ export const renderRoleQueue = async (req, res) => {
         const safeRole = validRoles.includes(role) ? role : 'IT_OPS';
         const statuses = map[safeRole] || [];
 
+        // Location-aware roles (IT_OPS, HR_INITIATOR) filter to the signed-in
+        // user's location group so each person only sees their own site's work.
+        let locationFilter = {};
+        if (LOCATION_AWARE_ROLE_KEYS.has(safeRole) && req.user && req.user.email) {
+            const userLocation = await resolveUserLocationForRole(safeRole, req.user.email);
+            if (userLocation) locationFilter = { location: userLocation };
+        }
+
         const rows = statuses.length ? await OnboardingRequest.findAll({
-            where: { status: { [Op.in]: statuses } },
+            where: { status: { [Op.in]: statuses }, ...locationFilter },
             order: [['updatedAt', 'DESC']],
             attributes: [
                 'id', 'employeeId', 'fullName', 'department', 'subDepartment',
-                'designation', 'requesterName', 'requesterEmail', 'status',
+                'designation', 'requesterName', 'requesterEmail', 'status', 'location',
                 'createdAt', 'updatedAt', 'currentStageToken'
             ]
         }) : [];
 
         const items = rows.map(r => {
             const j = r.toJSON();
-            const actionable = ROLE_TO_PENDING_STATUS[safeRole]?.includes(j.status) || false;
-            // Build the action URL — actionable rows go to the form via current stage token,
-            // historical rows go to the read-only history page.
+            // HR_INITIATOR never directly acts on requests — their rows are read-only tracking.
+            const actionable = safeRole !== 'HR_INITIATOR' &&
+                (ROLE_TO_PENDING_STATUS[safeRole]?.includes(j.status) || false);
             const url = actionable && j.currentStageToken
                 ? `/api/onboarding/handle?token=${j.currentStageToken}`
                 : `/api/onboarding/history/${j.id}`;
@@ -856,6 +890,7 @@ export const renderRoleQueue = async (req, res) => {
 // Used by the History tab so each row reflects what THIS role did to a request,
 // not the request's overall status.
 const QUEUE_ROLE_TO_ACTOR_ROLES = {
+    HR_INITIATOR:    ['HR'],                // "Request Initiated" events logged by HR
     IT_OPS:          ['IT', 'OPS'],         // Step 2 (configure) + Step 12 (verify)
     HOD:             ['HOD'],
     DCI_TEAM:        ['DCI'],
@@ -905,6 +940,13 @@ export const getRoleQueue = async (req, res) => {
         const role = String(req.query.role || '').toUpperCase();
         const type = String(req.query.type || 'pending').toLowerCase();
 
+        // Resolve location filter once — applies to both history and pending modes.
+        let locationWhere = {};
+        if (LOCATION_AWARE_ROLE_KEYS.has(role) && req.user && req.user.email) {
+            const userLocation = await resolveUserLocationForRole(role, req.user.email);
+            if (userLocation) locationWhere = { location: userLocation };
+        }
+
         if (type === 'history') {
             const actorRoles = QUEUE_ROLE_TO_ACTOR_ROLES[role];
             if (!actorRoles) {
@@ -920,14 +962,15 @@ export const getRoleQueue = async (req, res) => {
             const requestIds = Array.from(new Set(events.map(e => e.requestId)));
             const requests = requestIds.length
                 ? await OnboardingRequest.findAll({
-                    where: { id: { [Op.in]: requestIds } },
+                    where: { id: { [Op.in]: requestIds }, ...locationWhere },
                     attributes: ['id', 'employeeId', 'fullName', 'department', 'subDepartment',
-                                 'designation', 'requesterName', 'requesterEmail', 'status']
+                                 'designation', 'requesterName', 'requesterEmail', 'status', 'location']
                 })
                 : [];
             const reqMap = new Map(requests.map(r => [r.id, r.toJSON()]));
 
-            const data = events.map(e => {
+            // Only include events whose request passed the location filter.
+            const data = events.filter(e => reqMap.has(e.toJSON().requestId)).map(e => {
                 const ev = e.toJSON();
                 const req = reqMap.get(ev.requestId) || {};
                 return {
@@ -957,23 +1000,24 @@ export const getRoleQueue = async (req, res) => {
             return res.json({ success: true, role, type, count: data.length, data });
         }
 
-        // ─── pending mode (unchanged shape, flattened for the portal sidebar) ───
+        // ─── pending mode ───────────────────────────────────────────────────────
         const pendingStatuses = ROLE_TO_PENDING_STATUS[role];
         if (!pendingStatuses) {
             return res.status(400).json({ success: false, error: `Unknown role "${role}". Valid: ${Object.keys(ROLE_TO_PENDING_STATUS).join(', ')}` });
         }
 
         const rows = await OnboardingRequest.findAll({
-            where: { status: { [Op.in]: pendingStatuses } },
+            where: { status: { [Op.in]: pendingStatuses }, ...locationWhere },
             order: [['updatedAt', 'DESC']],
             attributes: ['id', 'employeeId', 'fullName', 'department', 'subDepartment', 'designation',
-                         'requesterName', 'requesterEmail', 'status', 'createdAt', 'updatedAt', 'currentStageToken']
+                         'requesterName', 'requesterEmail', 'status', 'location', 'createdAt', 'updatedAt', 'currentStageToken']
         });
 
         const data = rows.map(r => {
             const j = r.toJSON();
             const stage = STATUS_TO_ROLE[j.status];
-            const actionable = pendingStatuses.includes(j.status);
+            // HR_INITIATOR rows are read-only tracking — never directly actionable.
+            const actionable = role !== 'HR_INITIATOR' && pendingStatuses.includes(j.status);
             const url = actionable && j.currentStageToken
                 ? `/api/onboarding/handle?token=${j.currentStageToken}`
                 : `/api/onboarding/history/${j.id}`;
