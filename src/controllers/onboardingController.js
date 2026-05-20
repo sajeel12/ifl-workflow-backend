@@ -55,12 +55,27 @@ const STATUS_TO_ROLE = {
     Rejected: { key: null, label: 'Closed (Rejected)' }
 };
 
-const resolveCurrentRecipient = async (status) => {
+// IT_OPS and HR_INITIATOR are split by location group; all other roles use a
+// single global config row. Mirrors the same constant in recipientService.js.
+const LOCATION_AWARE_ROLE_KEYS = new Set(['IT_OPS', 'HR_INITIATOR']);
+
+// Resolve who is currently configured for a given workflow status, optionally
+// scoped by location for location-aware roles (IT_OPS). Checks the per-location
+// override first, then falls back to the global config row.
+const resolveCurrentRecipient = async (status, location = null) => {
     const map = STATUS_TO_ROLE[status];
     if (!map) return { role: status, name: '', email: '' };
     if (!map.key) return { role: map.label, name: '', email: '' };
     try {
-        const cfg = await WorkflowApproverConfig.findOne({ where: { roleKey: map.key, isActive: true } });
+        let cfg = null;
+        if (location && LOCATION_AWARE_ROLE_KEYS.has(map.key)) {
+            cfg = await WorkflowApproverLocationOverride.findOne({
+                where: { roleKey: map.key, location, isActive: true }
+            });
+        }
+        if (!cfg) {
+            cfg = await WorkflowApproverConfig.findOne({ where: { roleKey: map.key, isActive: true } });
+        }
         if (!cfg) return { role: map.label, name: '', email: '' };
         const usingSecondary = cfg.primaryExpiredAt && cfg.secondaryEmail;
         return {
@@ -215,7 +230,7 @@ const handleSubmission = async (req, res, token) => {
                         message: `This action can only be submitted by the configured approver for this stage. Please open the action link from the IFL portal so we can verify your identity.`
                     });
                 }
-                const currentRecipient = await resolveCurrentRecipient(request.status);
+                const currentRecipient = await resolveCurrentRecipient(request.status, request.location);
                 const configuredEmail = (currentRecipient && currentRecipient.email) || '';
                 if (configuredEmail && !emailsMatch(actualEmail, configuredEmail)) {
                     try {
@@ -227,13 +242,16 @@ const handleSubmission = async (req, res, token) => {
                             timestamp: new Date()
                         });
                     } catch (_) {}
+                    const delegateName = (currentRecipient.name && currentRecipient.name.trim())
+                        ? `${currentRecipient.name} (${configuredEmail})`
+                        : configuredEmail;
                     return res.status(403).render('pages/message', {
                         title: 'Not authorized',
-                        heading: 'This action is authorized only for the configured approver',
+                        heading: 'This stage has been delegated',
                         titleClass: 'error',
                         icon: '⛔',
                         iconClass: 'error-icon',
-                        message: `This stage is currently assigned to ${configuredEmail}. You are signed in as ${actualEmail}, so you cannot submit this request. If the approver assignment has changed, please contact your administrator.`
+                        message: `This stage is currently assigned to ${delegateName}. You are signed in as ${actualEmail} and are no longer the configured approver. Please use the portal to check your own pending actions, or contact your administrator.`
                     });
                 }
             }
@@ -410,27 +428,34 @@ const renderForm = async (req, res, token) => {
         // The HARD enforcement happens at POST time: handleSubmission
         // refuses any submit whose req.user.email doesn't match the stored
         // currentStageAssigneeEmail.
-        if (req.user && req.user.email && request.currentStageAssigneeEmail) {
-            // Local-part only — see emailMatch.js for the rationale.
-            if (!emailsMatch(req.user.email, request.currentStageAssigneeEmail)) {
+        if (req.user && req.user.email) {
+            // Use the LIVE configured approver (location-aware) for the gate so
+            // that delegation changes are reflected immediately — even at the
+            // GET (form-view) stage. Fall back to stored email if no live config.
+            const liveRecipient = await resolveCurrentRecipient(request.status, request.location);
+            const gateEmail = (liveRecipient && liveRecipient.email) || request.currentStageAssigneeEmail || '';
+            if (gateEmail && !emailsMatch(req.user.email, gateEmail)) {
                 try {
                     await TimelineEvent.create({
                         requestId: request.id,
                         action: 'Unauthorized Click',
                         actorRole: 'System',
-                        details: `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
+                        details: `Configured approver: ${gateEmail}, clicked by: ${req.user.email}`,
                         timestamp: new Date()
                     });
                 } catch (e) {
                     logger.warn('[Onboarding] Could not record unauthorized-click audit event: ' + e.message);
                 }
+                const delegateName = (liveRecipient && liveRecipient.name && liveRecipient.name.trim())
+                    ? `${liveRecipient.name} (${gateEmail})`
+                    : gateEmail;
                 return res.status(403).render('pages/message', {
                     title: 'Not authorized',
-                    heading: 'This page is authorized only for the intended recipient',
+                    heading: 'This stage has been delegated',
                     titleClass: 'error',
                     icon: '⛔',
                     iconClass: 'error-icon',
-                    message: `This action link was sent to ${request.currentStageAssigneeEmail}. You are signed in as ${req.user.email}, so you cannot act on this request. If you need to handle it on someone's behalf, please contact your administrator.`
+                    message: `This stage is currently assigned to ${delegateName}. You are signed in as ${req.user.email} and are no longer the configured approver. Please use the portal to check your own pending actions.`
                 });
             }
         }
@@ -1099,7 +1124,7 @@ export const renderHistory = async (req, res) => {
             return ev;
         });
 
-        const currentRecipient = await resolveCurrentRecipient(request.status);
+        const currentRecipient = await resolveCurrentRecipient(request.status, request.location);
 
         return res.render('pages/onboarding_history', {
             title: `Onboarding History - ${request.fullName || request.employeeId}`,

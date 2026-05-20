@@ -37,7 +37,15 @@ const logTimelineEvent = async (requestId, action, actorRole, details = null) =>
     }
 };
 
-// ... (existing functions) ...
+// Resolves a recipient using 2-day primary/secondary fallback where configured,
+// falling back to plain get() when getWithFallback returns nothing (e.g. HOD-only
+// roles that don't have a secondary, or delegation-model roles like DCI_MANAGER).
+const resolveRecipient = async (roleKey, context) => {
+    const resolved = await RecipientService.getWithFallback(roleKey, context);
+    return (resolved && resolved.email)
+        ? resolved.email
+        : await RecipientService.get(roleKey, context);
+};
 
 export const handleDCIManagerApproval = async (token, action, remarks) => {
     logger.info(`[Onboarding] DCI Manager Approval`);
@@ -60,7 +68,7 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
         // NEW: DCI Manager can request changes — sends back to DCI Team
         if (action === 'RequestChanges') {
             const newToken = crypto.randomBytes(20).toString('hex');
-            const dciEmail = await RecipientService.get('DCI_TEAM', { location: request.location });
+            const dciEmail = await resolveRecipient('DCI_TEAM', { location: request.location, requestId: request.id });
             await request.update({
                 status: 'PendingDCI',
                 dciChangeRequestRemarks: remarks,
@@ -89,7 +97,7 @@ export const handleDCIManagerApproval = async (token, action, remarks) => {
         } else {
             // Move to Implementation Phase
             const newToken = crypto.randomBytes(20).toString('hex');
-            const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER', { location: request.location });
+            const implementerEmail = await resolveRecipient('DCI_IMPLEMENTER', { location: request.location, requestId: request.id });
             await request.update({
                 status: 'PendingDCIImplementation',
                 approvalStatus: 'Approved',
@@ -130,7 +138,7 @@ export const handleITHODApproval = async (token, action, remarks = null) => {
 
         // Approve -> Move to Implementation
         const newToken = crypto.randomBytes(20).toString('hex');
-        const implementerEmail = await RecipientService.get('DCI_IMPLEMENTER', { location: request.location });
+        const implementerEmail = await resolveRecipient('DCI_IMPLEMENTER', { location: request.location, requestId: request.id });
         await request.update({
             status: 'PendingDCIImplementation',
             approvalStatus: 'Approved',
@@ -160,7 +168,7 @@ export const handleDCIImplementation = async (token, filePaths, implementerName)
         // Per client requirement: the IT Ops user who handled Step 2 is also
         // responsible for Step 12 (post-desk-setup verification), so routing
         // for OPS verification uses IT_OPS — not a separate OPS_TEAM group.
-        const opsEmail = await RecipientService.get('IT_OPS', { location: request.location });
+        const opsEmail = await resolveRecipient('IT_OPS', { location: request.location, requestId: request.id });
         await request.update({
             status: 'PendingOPSAction',
             dciImplementer: implementerName,
@@ -285,10 +293,7 @@ export const createRequest = async (data) => {
             ? `Initiated by ${data.requesterName}${data.requesterEmail ? ' <' + data.requesterEmail + '>' : ''}`
             : 'Initial submission';
         await logTimelineEvent(request.id, 'Request Initiated', 'HR', initiatorLabel);
-        const _resolved = await RecipientService.getWithFallback('IT_OPS', { location: request.location, requestId: request.id });
-        const itEmail = (_resolved && _resolved.email)
-            ? _resolved.email
-            : await RecipientService.get('IT_OPS', { location: request.location });
+        const itEmail = await resolveRecipient('IT_OPS', { location: request.location, requestId: request.id });
         // Persist the intended recipient so we can validate clicks later.
         await request.update({ currentStageAssigneeEmail: itEmail || null });
         await sendStageEmail(itEmail, request, token, 'IT_OPS');
@@ -343,7 +348,7 @@ export const handleHODApproval = async (token, action, remarks) => {
         }
 
         const newToken = crypto.randomBytes(20).toString('hex');
-        const dciEmail = await RecipientService.get('DCI_TEAM', { location: request.location });
+        const dciEmail = await resolveRecipient('DCI_TEAM', { location: request.location, requestId: request.id });
         await request.update({
             status: 'PendingDCI',
             hodRemarks: remarks,
