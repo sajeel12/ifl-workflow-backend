@@ -247,7 +247,7 @@ export async function showDashboard(req, res) {
             historyUrl: `${process.env.APP_URL}/api/onboarding/history/${r.id}`,
         }));
 
-        // Convert group keys (e.g. "HO_NORTH") to display labels
+        // Convert group keys (e.g. "HO_FSD") to display labels
         // (e.g. "HO / ISB / MUL / P10 / SIDHUPURA / KHI") for the view.
         const locationLabels = accesses.some(a => a.location === null)
             ? ['All Locations']

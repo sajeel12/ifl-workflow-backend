@@ -5,7 +5,7 @@
 
 export const LOCATION_GROUPS = [
     { key: 'LHR',         label: 'LHR',                                          locations: ['LHR'] },
-    { key: 'HO_NORTH',    label: 'HO / ISB / MUL / P10 / SIDHUPURA / KHI',       locations: ['HO', 'ISB', 'MUL', 'P10', 'SIDHUPURA', 'KHI'] },
+    { key: 'HO_FSD',      label: 'HO / ISB / MUL / P10 / SIDHUPURA / KHI',       locations: ['HO', 'ISB', 'MUL', 'P10', 'SIDHUPURA', 'KHI'] },
     { key: 'TP3_TP4_PG',  label: 'TP3 / TP4 / PG',                               locations: ['TP3', 'TP4', 'PG'] },
     { key: 'PP',          label: 'PP',                                           locations: ['PP'] },
     { key: 'TP1_TP2',     label: 'TP1 / TP2',                                    locations: ['TP1', 'TP2'] }
@@ -23,7 +23,7 @@ const PHYSICAL_TO_GROUP = (() => {
 })();
 
 // Return the group key for any raw location string. Accepts either a
-// physical location ("HO", "MUL") or a group key already ("HO_NORTH").
+// physical location ("HO", "MUL") or a group key already ("HO_FSD").
 // Returns null when nothing matches.
 export function groupKeyForLocation(loc) {
     if (!loc || typeof loc !== 'string') return null;
