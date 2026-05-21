@@ -67,6 +67,19 @@
     .req-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
     .req-card.can-act { border-left: 3px solid #0078D4; }
     .req-card.read-only { opacity: 0.75; }
+    .req-card.is-expanded {
+        border: 2px solid #0078D4;
+        box-shadow: 0 0 0 4px rgba(0,120,212,0.12), 0 4px 16px rgba(0,0,0,0.08);
+        background: #f0f7ff;
+    }
+    .expanded-banner {
+        display: flex; align-items: center; gap: 8px;
+        background: #0078D4; color: #fff;
+        font-size: 0.78rem; font-weight: 600;
+        padding: 7px 14px; border-radius: 5px 5px 0 0;
+        margin: -16px -18px 14px;
+    }
+    .expanded-banner span { opacity: 0.85; }
 
     .req-info { flex: 1; min-width: 200px; }
     .req-name { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
@@ -210,8 +223,13 @@
                 const isStale  = stageAge !== null && stageAge > 48;
                 const isEscalated = !r.canAct && (r.status === r.status); // secondary sees but can't act yet
             %>
-            <div class="req-card <%= r.canAct ? 'can-act' : 'read-only' %>">
+            <div class="req-card <%= r.canAct ? 'can-act' : 'read-only' %> <%= (expandId && r.id === expandId) ? 'is-expanded' : '' %>" id="req-<%= r.id %>">
                 <div class="req-info">
+                    <% if (expandId && r.id === expandId) { %>
+                    <div class="expanded-banner">
+                        &#128279; <span>You arrived here from your email — this request is assigned to you</span>
+                    </div>
+                    <% } %>
                     <p class="req-name">#<%= r.id %> — <%= r.fullName || '—' %></p>
                     <p class="req-sub">
                         <%= [r.designation, r.department].filter(Boolean).join(' · ') || '—' %>
@@ -312,6 +330,16 @@ function switchTab(name) {
     document.querySelectorAll('[id^="pane-"]').forEach(p => p.style.display = 'none');
     document.getElementById('tab-' + name).classList.add('is-active');
     document.getElementById('pane-' + name).style.display = '';
+}
+
+// If arriving from an email link, scroll the highlighted card into view.
+const expandId = <%= expandId ? expandId : 'null' %>;
+if (expandId) {
+    const card = document.getElementById('req-' + expandId);
+    if (card) {
+        switchTab('pending'); // ensure pending tab is active
+        setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+    }
 }
 </script>
 

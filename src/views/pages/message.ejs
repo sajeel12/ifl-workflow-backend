@@ -90,6 +90,29 @@
     <% if (locals.metaHtml) { %>
         <%- metaHtml %>
     <% } %>
+
+    <% if (locals.showPortal && locals.roleKey) {
+        const slugMap = {
+            IT_OPS: 'it-ops', DCI_TEAM: 'dci-team', DCI_MANAGER: 'dci-manager',
+            IT_HOD: 'it-hod', DCI_IMPLEMENTER: 'dci-implementer'
+        };
+        const portalSlug = slugMap[locals.roleKey];
+    %>
+    <% if (portalSlug) { %>
+    <div style="margin-top:28px;text-align:center;">
+        <a href="/portal/<%= portalSlug %>"
+           style="display:inline-flex;align-items:center;gap:8px;
+                  padding:11px 24px;background:#0078D4;color:#fff;
+                  border-radius:8px;font-size:0.92rem;font-weight:600;
+                  text-decoration:none;">
+            &#8592; Return to <%= locals.roleLabel %> Portal Queue
+        </a>
+        <p style="font-size:0.78rem;color:#94a3b8;margin-top:10px;">
+            Enter your email on the next page to open your full queue.
+        </p>
+    </div>
+    <% } %>
+    <% } %>
 </div>
 
 <%- include('../partials/portal_close') %>

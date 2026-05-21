@@ -115,7 +115,65 @@ function locationWhere(accesses) {
     return { location: { [Op.in]: locs } };
 }
 
+// Status → portal slug (for auto-routing from an action token).
+// PendingHOD has no portal — HOD is an ad-hoc approver, not a configured role.
+const STATUS_TO_SLUG = {
+    PendingIT:                'it-ops',
+    PendingDCI:               'dci-team',
+    PendingDCIManager:        'dci-manager',
+    PendingITHOD:             'it-hod',
+    PendingDCIImplementation: 'dci-implementer',
+    PendingOPSAction:         'it-ops',
+};
+
 // ── Route handlers ─────────────────────────────────────────────────────────────
+
+// Auto-authenticate from an action token embedded in an email link.
+// Flow: email link → /portal/:roleSlug/enter?action=ACTION_TOKEN
+//        → validates token, issues portal session, redirects to dashboard
+//        with ?expand=REQUEST_ID so the correct card is highlighted.
+export async function enterViaActionToken(req, res) {
+    const roleSlug   = req.params.roleSlug;
+    const roleKey    = ROLE_SLUGS[roleSlug];
+    const actionToken = req.query.action;
+
+    if (!roleKey || !actionToken) return res.redirect(`/portal/${roleSlug || ''}`);
+
+    try {
+        const request = await OnboardingRequest.findOne({
+            where: { currentStageToken: actionToken }
+        });
+
+        if (!request) {
+            // Token already consumed (stage moved on) — send to login with message
+            return res.redirect(`/portal/${roleSlug}?expired=1`);
+        }
+
+        const userEmail = request.currentStageAssigneeEmail;
+        if (!userEmail) return res.redirect(`/portal/${roleSlug}?expired=1`);
+
+        // Confirm this action token is actually for this portal's role
+        const expectedSlug = STATUS_TO_SLUG[request.status];
+        if (expectedSlug && expectedSlug !== roleSlug) {
+            return res.redirect(`/portal/${expectedSlug}/enter?action=${actionToken}`);
+        }
+
+        const accesses = await resolveAccess(userEmail, roleKey);
+        // If email isn't in config yet (edge case), create a minimal context from the request
+        const effectiveAccesses = accesses.length > 0
+            ? accesses
+            : [{ location: request.location || null, isPrimary: false }];
+
+        const meta  = ROLE_META[roleKey];
+        const token = issueToken({ roleKey, email: userEmail, accesses: effectiveAccesses, roleName: meta.label });
+
+        logger.info(`[Portal] Auto-auth via action token → ${userEmail} for ${roleKey} (req #${request.id})`);
+        return res.redirect(`/portal/${roleSlug}/view?token=${token}&expand=${request.id}`);
+    } catch (err) {
+        logger.error(`[Portal] enterViaActionToken error: ${err.message}`);
+        return res.redirect(`/portal/${roleSlug}`);
+    }
+}
 
 export function showLogin(req, res) {
     const roleSlug = req.params.roleSlug;
@@ -255,6 +313,8 @@ export async function showDashboard(req, res) {
 
         const isPrimary = accesses.some(a => a.isPrimary);
 
+        const expandId = parseInt(req.query.expand, 10) || null;
+
         res.render('pages/portal_dashboard', {
             roleSlug,
             roleKey,
@@ -267,6 +327,7 @@ export async function showDashboard(req, res) {
             history,
             pendingCount: pending.length,
             actionCount:  pending.filter(r => r.canAct).length,
+            expandId,
             token: req.query.token,
             appUrl: process.env.APP_URL,
         });

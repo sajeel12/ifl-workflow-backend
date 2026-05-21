@@ -128,8 +128,12 @@ export async function runEscalationCheck() {
             // 2. Update the request's assignee so the auth gate recognises the new owner
             await request.update({ currentStageAssigneeEmail: activeCfg.secondaryEmail });
 
-            // 3. Re-send the action link to secondary — same token means same form
-            const actionLink = `${process.env.APP_URL}/api/onboarding/handle?token=${request.currentStageToken}`;
+            // 3. Re-send the action link to secondary via portal (same token = same form).
+            const ESCALATION_SLUG = { IT_OPS: 'it-ops', DCI_TEAM: 'dci-team', DCI_IMPLEMENTER: 'dci-implementer' };
+            const portalSlug = ESCALATION_SLUG[stageCfg.roleKey];
+            const actionLink = portalSlug
+                ? `${process.env.APP_URL}/portal/${portalSlug}/enter?action=${request.currentStageToken}`
+                : `${process.env.APP_URL}/api/onboarding/handle?token=${request.currentStageToken}`;
             await emailService.sendOnboardingNotification(
                 activeCfg.secondaryEmail,
                 request,

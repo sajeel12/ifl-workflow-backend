@@ -10,10 +10,25 @@ import path from 'path';
 import RecipientService from './recipientService.js';
 
 
+// Email type → portal slug. Types without a portal (HOD_REVIEW) use the
+// direct action URL so the approver isn't redirected to a non-existent portal.
+const EMAIL_TYPE_TO_PORTAL_SLUG = {
+    IT_OPS:               'it-ops',
+    DCI_INPUT:            'dci-team',
+    DCI_CHANGES_REQUESTED:'dci-team',
+    DCI_MANAGER_APPROVAL: 'dci-manager',
+    IT_HOD_APPROVAL:      'it-hod',
+    DCI_IMPLEMENTATION:   'dci-implementer',
+    OPS_ACTION:           'it-ops',
+};
+
 // Generic notification sender helper
 const sendStageEmail = async (email, request, token, type) => {
     try {
-        const actionLink = `${process.env.APP_URL}/api/onboarding/handle?token=${token}`;
+        const slug = EMAIL_TYPE_TO_PORTAL_SLUG[type];
+        const actionLink = slug
+            ? `${process.env.APP_URL}/portal/${slug}/enter?action=${token}`
+            : `${process.env.APP_URL}/api/onboarding/handle?token=${token}`;
         await emailService.sendOnboardingNotification(email, request, actionLink, type);
         logger.info(`[Onboarding] Sent ${type} email to ${email}`);
     } catch (err) {

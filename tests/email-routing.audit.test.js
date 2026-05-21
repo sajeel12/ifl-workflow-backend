@@ -85,7 +85,7 @@ describe('Email routing chain audit', () => {
         expect(sendOnboardingNotification).toHaveBeenCalledWith(
             'itops.khi@ifl.com',
             expect.anything(),
-            expect.stringContaining('/api/onboarding/handle?token='),
+            expect.stringContaining('/portal/it-ops/enter?action='),
             'IT_OPS'
         );
     });
@@ -122,7 +122,7 @@ describe('Email routing chain audit', () => {
         expect(sendOnboardingNotification).toHaveBeenCalledWith(
             'dci.team@ifl.com',
             expect.anything(),
-            expect.stringContaining('/api/onboarding/handle?token='),
+            expect.stringContaining('/portal/dci-team/enter?action='),
             'DCI_INPUT'
         );
     });
@@ -138,7 +138,7 @@ describe('Email routing chain audit', () => {
         expect(sendOnboardingNotification).toHaveBeenCalledWith(
             'itops.step12@ifl.com',
             expect.anything(),
-            expect.stringContaining('/api/onboarding/handle?token='),
+            expect.stringContaining('/portal/it-ops/enter?action='),
             'OPS_ACTION'
         );
     });
