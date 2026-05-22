@@ -68,6 +68,10 @@ router.post('/onboarding/upload-proof', upload.array('dciProof', 5), ssoMiddlewa
 // Lookup active onboarding request by employeeId (used by HR form JS)
 router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
 
+// HR location group for the signed-in user — used by the initiate form to
+// hydrate the Location Group field client-side after SSO auth completes.
+router.get('/onboarding/my-hr-location', ssoMiddleware, onboardingController.getMyHRLocation);
+
 // History / status view for an existing onboarding request
 router.get('/onboarding/history/:id', onboardingController.renderHistory);
 

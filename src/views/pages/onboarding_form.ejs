@@ -86,17 +86,15 @@
     <div class="app-container">
 
         <div class="steps-container">
-            <div class="steps">
-                <% steps.forEach((s, i)=> { %>
+            <div class="steps" style="--step-progress: <%= stepProgress %>%">
+                <% steps.forEach((s, i) => { %>
                     <div class="step-item <%= s.status %>">
                         <div class="step-circle">
-                            <%= i + 1 %>
+                            <% if (s.status === 'completed') { %>&#10003;<% } else { %><%= i + 1 %><% } %>
                         </div>
-                        <div class="step-label">
-                            <%= s.label %>
-                        </div>
+                        <div class="step-label"><%= s.label %></div>
                     </div>
-                    <% }); %>
+                <% }); %>
             </div>
         </div>
 
@@ -200,10 +198,10 @@
                                     } catch(_) {}
                                 %>
                                 <input type="text" value="<%= locDisplay %>"
-                                       readonly style="background:#f1f5f9;">
+                                       readonly style="background:#f1f5f9;" data-ifl-location="1">
                             </div>
                         </div>
-                        <div class="grid-3">
+                        <div class="grid-2">
                             <div class="form-group"><label>HOD Name</label><input type="text" name="hod"
                                     value="<%= val('hod') %>" <%=hrDisabled %>></div>
                             <div class="form-group">
@@ -212,8 +210,6 @@
                                     value="<%= (function(){ if(!val('joiningDate')) return ''; const d = new Date(val('joiningDate')); return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]; })() %>"
                                     <%=hrDisabled %>>
                             </div>
-                            <div class="form-group"><label>Office Extension</label><input type="text"
-                                    name="officeExtension" value="<%= val('officeExtension') %>" <%=hrDisabled %>></div>
                         </div>
 
                         <% if (role !=='HR' || request.id) { %>
@@ -650,6 +646,19 @@
                             if (nameEl  && !nameEl.value)  nameEl.value  = u.displayName || u.username || '';
                             if (emailEl && !emailEl.value) emailEl.value = u.email || '';
                             fillSsoNameFields(u);
+                            // Hydrate location group — the GET render can't pre-fill it
+                            // when IIS hasn't authenticated the user yet (fresh navigation).
+                            // Call the SSO-gated endpoint now that we have a sidecar token.
+                            try {
+                                const locInput = document.querySelector('input[data-ifl-location="1"]');
+                                if (locInput && !locInput.value && typeof window.iflFetch === 'function') {
+                                    const lkRes = await window.iflFetch('/api/onboarding/my-hr-location');
+                                    if (lkRes && lkRes.ok) {
+                                        const lkJson = await lkRes.json();
+                                        if (lkJson.label) locInput.value = lkJson.label;
+                                    }
+                                }
+                            } catch (_) {}
                         }
                     }
                 } catch (_) {}
@@ -728,6 +737,23 @@
 
                         const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
 
+                        // Pin the action value into a hidden mirror field immediately — before any
+                        // async operation or button disabling. Browsers serialize form data AFTER
+                        // the event handler returns, at which point disabled buttons are excluded.
+                        // The mirror field ensures the action value always reaches the server even
+                        // when the submitter button is disabled to prevent double-clicks.
+                        if (submitter && submitter.name) {
+                            let mirror = form.querySelector('input[data-ifl-action-mirror]');
+                            if (!mirror) {
+                                mirror = document.createElement('input');
+                                mirror.type = 'hidden';
+                                mirror.dataset.iflActionMirror = '1';
+                                form.appendChild(mirror);
+                            }
+                            mirror.name = submitter.name;
+                            mirror.value = submitter.value;
+                        }
+
                         // If the submitter declares a confirm prompt via data-attrs,
                         // run our custom IflDialog.confirm BEFORE doing any other work.
                         const confirmMsg = submitter && submitter.dataset.iflConfirm;
@@ -760,7 +786,8 @@
                         // Second pass — confirm passed, token attached, real submit proceeds.
                         // (`submitter` was captured at the top of this handler.)
 
-                        // Disable every submit button in the form so the user can't double-click or pick another action
+                        // Disable every submit button and strip its name so the mirror field is
+                        // the sole source of the action value — no duplicate or missing POST fields.
                         form.querySelectorAll('button[type="submit"]').forEach(btn => {
                             // Preserve the original label inside a span so we can restore it later
                             if (!btn.querySelector('.ifl-btn-original')) {
@@ -769,6 +796,8 @@
                                 while (btn.firstChild) span.appendChild(btn.firstChild);
                                 btn.appendChild(span);
                             }
+                            if (btn.name) btn.dataset.iflBtnName = btn.name; // save for restore
+                            btn.removeAttribute('name'); // mirror field carries the value; avoid duplicates
                             btn.disabled = true;
                             btn.classList.add('is-loading');
 
@@ -784,13 +813,17 @@
                         // Safety net: if the page hasn't navigated within 30s (server stall), restore the buttons
                         setTimeout(() => {
                             form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                                if (btn.dataset.iflBtnName) { btn.setAttribute('name', btn.dataset.iflBtnName); delete btn.dataset.iflBtnName; }
                                 btn.disabled = false;
                                 btn.classList.remove('is-loading');
                                 const ind = btn.querySelector('.ifl-btn-loading-text');
                                 if (ind) ind.remove();
                             });
-                            // Allow a future submission to re-fetch a fresh token
+                            // Allow a future submission to re-fetch a fresh token and a fresh action mirror
                             delete form.dataset.iflTokenAttached;
+                            delete form.dataset.iflConfirmed;
+                            const mirror = form.querySelector('input[data-ifl-action-mirror]');
+                            if (mirror) mirror.remove();
                         }, 30000);
                     });
                 });
@@ -843,6 +876,22 @@
                 empBlock.appendChild(div);
             };
 
+            // Lock the Request Mode select to a fixed value so HR can't override it.
+            // disabled selects don't submit — mirror the value via a hidden input.
+            const lockRequestMode = (value) => {
+                if (!requestModeEl) return;
+                requestModeEl.value = value;
+                requestModeEl.disabled = true;
+                let hidden = document.querySelector('input[name="requestMode"][type="hidden"]');
+                if (!hidden) {
+                    hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'requestMode';
+                    requestModeEl.parentNode.appendChild(hidden);
+                }
+                hidden.value = value;
+            };
+
             const lookupAndFill = async () => {
                 const empId = empIdInput ? empIdInput.value.trim() : '';
                 if (!empId) return;
@@ -859,18 +908,21 @@
                         const el = document.querySelector('[name="' + name + '"]');
                         if (el && val != null && val !== '') el.value = val;
                     };
-                    setVal('fullName',        data.fullName);
-                    setVal('department',      data.department);
-                    setVal('subDepartment',   data.subDepartment);
-                    setVal('designation',     data.designation);
-                    setVal('location',        data.location || data.projectUnit);
-                    setVal('hod',             data.hod);
-                    setVal('mobile',          data.mobile);
-                    setVal('officeExtension', data.officeExtension);
+                    setVal('fullName',      data.fullName);
+                    setVal('department',    data.department);
+                    setVal('subDepartment', data.subDepartment);
+                    setVal('designation',   data.designation);
+                    setVal('hod',           data.hod);
                     if (data.joiningDate) {
                         const d = new Date(data.joiningDate);
                         if (!isNaN(d.getTime())) setVal('joiningDate', d.toISOString().split('T')[0]);
                     }
+
+                    // Lock all HRMS-sourced fields — readonly so they still submit
+                    ['fullName', 'department', 'subDepartment', 'designation', 'hod', 'joiningDate'].forEach(name => {
+                        const el = document.querySelector('[name="' + name + '"]');
+                        if (el) { el.readOnly = true; el.style.background = '#f1f5f9'; el.style.cursor = 'not-allowed'; }
+                    });
 
                     // 2 — Existing request check
                     clearStateBanner();
@@ -879,22 +931,17 @@
                         const lkData = lkRes.ok ? await lkRes.json() : {};
 
                         if (lkData.state === 'active') {
-                            // Block: in-flight request — HR must not duplicate
-                            IflDialog.warning(
-                                'An onboarding request for this employee is already in progress. Please wait for it to complete before initiating a new one.',
-                                { title: 'Already in progress' }
-                            );
-                            empIdInput.value = '';
-                            clearStateBanner();
-                            empIdInput.focus();
-                            return;
-                        }
-
-                        if (lkData.state === 'completed') {
-                            // Completed — auto-switch to Change Request mode
-                            if (requestModeEl) requestModeEl.value = 'Change';
+                            // In-flight — force Change/Modification and lock the dropdown
+                            lockRequestMode('Change');
                             showStateBanner(
-                                'This employee already has a completed onboarding record. Request mode has been automatically set to "Change / Modification".',
+                                'An onboarding request for this employee is already in progress. Request mode has been locked to "Change / Modification" — this will be treated as a change request, not a new hiring.',
+                                'warning'
+                            );
+                        } else if (lkData.state === 'completed') {
+                            // Completed — lock to Change/Modification
+                            lockRequestMode('Change');
+                            showStateBanner(
+                                'This employee already has a completed onboarding record. Request mode has been locked to "Change / Modification".',
                                 'info'
                             );
                         }

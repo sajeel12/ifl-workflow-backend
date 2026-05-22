@@ -655,23 +655,29 @@ const renderForm = async (req, res, token) => {
         formEnctype = 'enctype="multipart/form-data"';
     }
 
-    // Stepper Logic
-    const getStepClass = (stepRole) => {
-        const order = ['HR', 'IT', 'HOD', 'DCI', 'DCIManager', 'ITHOD', 'Approved', 'DCIImplementer', 'OPS', 'Completed'];
-        const currentIdx = order.indexOf(role);
-        const stepIdx = order.indexOf(stepRole);
-        if (currentIdx === stepIdx) return 'active';
-        if (currentIdx > stepIdx) return 'completed';
-        return '';
-    };
-
-    // Simplified Mapping for Visual Stepper
-    const steps = [
-        { label: 'Initial Request', status: getStepClass('HR') },
-        { label: 'IT Operations', status: getStepClass('IT') },
-        { label: 'Approvals', status: (['HOD', 'DCI', 'DCIManager', 'ITHOD'].includes(role) || request.approvalStatus === 'Approved') ? 'active' : (['DCIImplementer', 'OPS', 'Completed'].includes(request.status) ? 'completed' : '') },
-        { label: 'Fulfillment', status: (['DCIImplementer', 'OPS', 'Completed'].includes(role) || request.status === 'Completed') ? 'active' : '' }
+    // Full workflow stepper — driven by request.status, not the viewer role.
+    const WORKFLOW_STAGES = [
+        { label: 'HR Initiation',  statusKey: null },
+        { label: 'IT Operations',  statusKey: 'PendingIT' },
+        { label: 'HOD Approval',   statusKey: 'PendingHOD' },
+        { label: 'DCI Input',      statusKey: 'PendingDCI' },
+        { label: 'DCI Manager',    statusKey: 'PendingDCIManager' },
+        { label: 'IT HOD',         statusKey: 'PendingITHOD' },
+        { label: 'DCI Implement',  statusKey: 'PendingDCIImplementation' },
+        { label: 'OPS Action',     statusKey: 'PendingOPSAction' },
+        { label: 'Completed',      statusKey: 'Completed' },
     ];
+    const requestStatus = request && request.status;
+    let activeStepIdx = 0;
+    if (requestStatus) {
+        const found = WORKFLOW_STAGES.findIndex(s => s.statusKey === requestStatus);
+        if (found !== -1) activeStepIdx = found;
+    }
+    const steps = WORKFLOW_STAGES.map((s, i) => ({
+        label: s.label,
+        status: i === activeStepIdx ? 'active' : (i < activeStepIdx ? 'completed' : ''),
+    }));
+    const stepProgress = Math.round((activeStepIdx / (WORKFLOW_STAGES.length - 1)) * 100);
 
     // OPS Checklist Generation
     let opsChecklistHTML = '';
@@ -746,6 +752,7 @@ const renderForm = async (req, res, token) => {
         formAction,
         formEnctype,
         steps,
+        stepProgress,
         opsChecklistHTML,
         printerLocations,
         fileSharePaths,
@@ -1297,4 +1304,25 @@ const renderError = (res, message, opts = {}) => {
         message: message,
         ...portalLocalsForRole(opts.actorRole)
     });
+};
+
+/**
+ * GET /api/onboarding/my-hr-location  (ssoMiddleware required)
+ * Returns the HR_INITIATOR location group for the signed-in user so the
+ * initiate form can hydrate the Location Group field client-side — the GET
+ * render can't pre-fill it on fresh navigation because IIS hasn't completed
+ * Windows Auth by the time the Node handler runs.
+ */
+export const getMyHRLocation = async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+    try {
+        const hrGroupKey = await resolveHRGroupForEmail(req.user.email, req.user.username);
+        if (!hrGroupKey || hrGroupKey === '__GLOBAL__') {
+            return res.json({ location: null, label: null });
+        }
+        return res.json({ location: hrGroupKey, label: groupLabel(hrGroupKey) });
+    } catch (err) {
+        logger.error(`[Onboarding] getMyHRLocation: ${err.message}`);
+        return res.status(500).json({ error: err.message });
+    }
 };
