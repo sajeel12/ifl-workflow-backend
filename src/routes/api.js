@@ -7,6 +7,7 @@ import * as workflowTestController from '../controllers/workflowTestController.j
 import { ssoMiddleware } from '../middleware/ssoMiddleware.js';
 import * as authController from '../controllers/authController.js';
 import * as offboardingController from '../controllers/offboardingController.js';
+import * as portalController from '../controllers/portalController.js';
 
 
 router.post('/test/access-request', workflowTestController.createTestAccessRequest);
@@ -22,6 +23,13 @@ router.all('/approvals/handle', approvalController.handleApprovalClick);
 
 
 router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
+
+// Portal sidecar-token authentication.
+// IIS URL Rewrite inbound rules run before Windows Auth completes, so
+// X-Auth-User / {LOGON_USER} is always empty on proxied requests.
+// Portal pages use window.iflFetch to call this endpoint with the sidecar
+// token (which does carry the Windows identity from token.aspx) instead.
+router.get('/portal-auth/:roleSlug', ssoMiddleware, portalController.apiPortalAuth);
 
 // GET /initiate stays OPEN at Node — gating it with ssoMiddleware causes an
 // IIS Windows-auth login-prompt loop, because a fresh browser navigation

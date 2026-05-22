@@ -1,0 +1,49 @@
+<%- include('../partials/header', { title: roleName + ' Portal — IFL' }) %>
+
+<div class="header">
+    <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+    <div class="brand">IFL Workflow — <%= roleName %></div>
+</div>
+
+<div class="main-container">
+    <div class="card" style="text-align:center;padding:60px 40px;">
+        <div id="pl-icon" style="font-size:48px;margin-bottom:18px;">⏳</div>
+        <h2 id="pl-heading" style="color:#0078D4;margin:0 0 10px;font-size:1.3rem;">Signing you in…</h2>
+        <p id="pl-msg" style="color:#605e5c;margin:0;">Verifying your Windows identity. This takes less than a second.</p>
+    </div>
+</div>
+
+<script>
+(async () => {
+    const h = document.getElementById('pl-heading');
+    const m = document.getElementById('pl-msg');
+    const ic = document.getElementById('pl-icon');
+
+    const authUrl = '<%- authUrl %>';
+
+    try {
+        const r = await window.iflFetch(authUrl);
+        if (r.ok) {
+            const j = await r.json();
+            if (j && j.redirect) {
+                window.location.replace(j.redirect);
+                return;
+            }
+        }
+        let errMsg = 'Your Windows account is not configured for this portal.';
+        try { const j = await r.json(); if (j && j.error) errMsg = j.error; } catch (_) {}
+        ic.textContent = '⛔';
+        h.textContent  = 'Access Denied';
+        h.style.color  = '#D13438';
+        m.textContent  = errMsg;
+    } catch (e) {
+        ic.textContent = '⚠️';
+        h.textContent  = 'Could not connect';
+        h.style.color  = '#D13438';
+        m.textContent  = 'Portal server is unreachable. Please try again or contact IT.';
+    }
+})();
+</script>
+
+</body>
+</html>

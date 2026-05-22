@@ -177,7 +177,7 @@ describe('enterViaActionToken', () => {
         expect(res.redirect).toHaveBeenCalledWith(expect.stringContaining('/portal/it-ops/view'));
     });
 
-    test('username not in config (reassigned) → 403 not-authorised', async () => {
+    test('username not in config (reassigned) → loading page for sidecar auth', async () => {
         WorkflowApproverLocationOverride.findAll.mockResolvedValue([]);
         WorkflowApproverConfig.findOne.mockResolvedValue({
             approverUsername:  'new.person',
@@ -197,9 +197,10 @@ describe('enterViaActionToken', () => {
 
         await enterViaActionToken(req, res);
 
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.render).toHaveBeenCalledWith('pages/message', expect.objectContaining({
-            heading: expect.stringMatching(/not authorised/i),
+        // Authorization now happens in apiPortalAuth (sidecar path); showLogin/enter
+        // fall through to the loading page so the client can re-authenticate.
+        expect(res.render).toHaveBeenCalledWith('pages/portal_loading', expect.objectContaining({
+            roleSlug: 'it-ops',
         }));
         expect(issueToken).not.toHaveBeenCalled();
     });
@@ -250,14 +251,17 @@ describe('enterViaActionToken', () => {
         expect(issueToken).not.toHaveBeenCalled();
     });
 
-    test('no x-auth-user header (not through IIS) → redirects to login, no crash', async () => {
+    test('no x-auth-user header (not through IIS) → loading page for sidecar auth, no crash', async () => {
         defaultMocks();
         const req = { params: { roleSlug: 'it-ops' }, query: { action: ACTION_TOKEN }, headers: {} };
         const res = makeRes();
 
         await enterViaActionToken(req, res);
 
-        expect(res.redirect).toHaveBeenCalledWith('/portal/it-ops');
+        // X-Auth-User empty → sidecar loading page rather than redirect/error.
+        expect(res.render).toHaveBeenCalledWith('pages/portal_loading', expect.objectContaining({
+            roleSlug: 'it-ops',
+        }));
         expect(issueToken).not.toHaveBeenCalled();
     });
 
@@ -307,7 +311,7 @@ describe('showLogin', () => {
         );
     });
 
-    test('unauthorised Windows user → 403 not-authorised render', async () => {
+    test('unauthorised Windows user → loading page for sidecar auth', async () => {
         WorkflowApproverLocationOverride.findAll.mockResolvedValue([]);
         WorkflowApproverConfig.findOne.mockResolvedValue({
             approverUsername: 'someone.else',
@@ -326,22 +330,23 @@ describe('showLogin', () => {
 
         await showLogin(req, res);
 
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.render).toHaveBeenCalledWith('pages/message', expect.objectContaining({
-            heading: expect.stringMatching(/not authorised/i),
+        // X-Auth-User found but not in config → sidecar loading page.
+        // The 403 is issued by apiPortalAuth when the client calls it.
+        expect(res.render).toHaveBeenCalledWith('pages/portal_loading', expect.objectContaining({
+            roleSlug: 'it-ops',
         }));
         expect(issueToken).not.toHaveBeenCalled();
     });
 
-    test('no x-auth-user header → 403 intranet-only render', async () => {
+    test('no x-auth-user header → loading page for sidecar auth', async () => {
         const req = { params: { roleSlug: 'it-ops' }, query: {}, headers: {} };
         const res = makeRes();
 
         await showLogin(req, res);
 
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.render).toHaveBeenCalledWith('pages/message', expect.objectContaining({
-            heading: expect.stringMatching(/intranet/i),
+        // X-Auth-User absent → sidecar loading page (no hard 403 at page level).
+        expect(res.render).toHaveBeenCalledWith('pages/portal_loading', expect.objectContaining({
+            roleSlug: 'it-ops',
         }));
         expect(issueToken).not.toHaveBeenCalled();
     });

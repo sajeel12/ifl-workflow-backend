@@ -153,107 +153,144 @@ function locationWhere(accesses) {
 
 // ── Route handlers ─────────────────────────────────────────────────────────────
 
+// GET /api/portal-auth/:roleSlug  (ssoMiddleware already ran — req.user is set)
+// Called client-side via window.iflFetch so the sidecar token carries the identity.
+// IIS URL Rewrite inbound rules run at BeginRequest, BEFORE Windows Authentication
+// completes, so {LOGON_USER} / X-Auth-User is always empty on proxied requests.
+// Using the sidecar token (fetched from token.aspx by client JS) is the correct
+// approach — it's the same mechanism used by every other guarded route in this app.
+export async function apiPortalAuth(req, res) {
+    const roleSlug   = req.params.roleSlug;
+    const roleKey    = ROLE_SLUGS[roleSlug];
+    const actionToken = (req.query.action || '').trim();
+
+    if (!roleKey) return res.status(404).json({ error: 'Unknown portal' });
+
+    const username = (req.user?.username || '').toLowerCase();
+    if (!username) return res.status(403).json({ error: 'No identity resolved from sidecar token' });
+
+    try {
+        let expandId   = null;
+        let targetSlug = roleSlug;
+
+        if (actionToken) {
+            const request = await OnboardingRequest.findOne({ where: { currentStageToken: actionToken } });
+            if (request) {
+                expandId = request.id;
+                const expectedSlug = STATUS_TO_SLUG[request.status];
+                if (expectedSlug && expectedSlug !== roleSlug) {
+                    // Request moved to a different stage — authenticate for the correct portal.
+                    targetSlug = expectedSlug;
+                    const correctKey = ROLE_SLUGS[targetSlug];
+                    const { accesses: a2, email: e2 } = await resolveAccess(username, correctKey);
+                    if (a2.length === 0) {
+                        return res.status(403).json({ error: `Account "${username}" is not configured for the ${ROLE_META[correctKey]?.label || correctKey} portal.` });
+                    }
+                    const m2    = ROLE_META[correctKey];
+                    const tok2  = issueToken({ roleKey: correctKey, username, email: e2, accesses: a2, roleName: m2.label });
+                    logger.info(`[Portal] Sidecar auth (auto-corrected) → ${username} for ${correctKey} req#${expandId}`);
+                    return res.json({ redirect: `/portal/${targetSlug}/view?token=${tok2}&expand=${expandId}` });
+                }
+            }
+            // actionToken not found in DB — treat as expired (let dashboard redirect handle it)
+        }
+
+        const { accesses, email } = await resolveAccess(username, roleKey);
+        if (accesses.length === 0) {
+            logger.warn(`[Portal] ${username} not configured for ${roleKey} (sidecar path)`);
+            return res.status(403).json({ error: `Account "${username}" is not configured for the ${ROLE_META[roleKey].label} portal. Contact your administrator.` });
+        }
+
+        const meta  = ROLE_META[roleKey];
+        const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
+        logger.info(`[Portal] Sidecar auth → ${username} for ${roleKey}${expandId ? ` req#${expandId}` : ''}`);
+        const redirect = `/portal/${roleSlug}/view?token=${token}${expandId ? `&expand=${expandId}` : ''}`;
+        return res.json({ redirect });
+
+    } catch (err) {
+        logger.error(`[Portal] apiPortalAuth error: ${err.message}`);
+        return res.status(500).json({ error: 'Portal authentication failed. Please try again.' });
+    }
+}
+
 // GET /portal/:roleSlug
-// IIS has already authenticated the user via Windows Auth and injected X-Auth-User.
-// We read that identity, check the approver config, and auto-redirect to the dashboard.
-// No email entry form, no email link — Windows login name IS the identity.
+// Renders a loading page that authenticates via sidecar token (client-side).
+// X-Auth-User from IIS URL Rewrite is tried first as a fast path; if it is
+// absent (always the case when URL Rewrite runs before auth completes), the
+// loading page calls /api/portal-auth/:roleSlug via window.iflFetch instead.
 export async function showLogin(req, res) {
     const roleSlug = req.params.roleSlug;
     const roleKey  = ROLE_SLUGS[roleSlug];
     if (!roleKey) return res.status(404).send('Unknown portal.');
 
-    const rawHeader = req.headers['x-auth-user'] || '';
-    const username  = stripDomain(rawHeader);
-
-    if (!username) {
-        return res.status(403).render('pages/message', {
-            title:      'Intranet Access Required',
-            heading:    'Intranet Access Required',
-            titleClass: 'error',
-            icon:       '🔒',
-            iconClass:  'error-icon',
-            message:    'This portal is only accessible from within the IFL intranet. Please open it from a domain-joined computer on the company network.',
-        });
+    // Fast path: X-Auth-User present (would require IIS to set it post-auth).
+    const username = stripDomain(req.headers['x-auth-user'] || '');
+    if (username) {
+        try {
+            const { accesses, email } = await resolveAccess(username, roleKey);
+            if (accesses.length > 0) {
+                const meta  = ROLE_META[roleKey];
+                const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
+                logger.info(`[Portal] Auto-login (X-Auth-User) → ${username} for ${roleKey}`);
+                return res.redirect(`/portal/${roleSlug}/view?token=${token}`);
+            }
+        } catch (_) { /* fall through to sidecar path */ }
     }
 
-    try {
-        const { accesses, email } = await resolveAccess(username, roleKey);
-
-        if (accesses.length === 0) {
-            logger.warn(`[Portal] ${username} not configured for ${roleKey}`);
-            return res.status(403).render('pages/message', {
-                title:      'Portal Access Denied',
-                heading:    'Not Authorised',
-                titleClass: 'error',
-                icon:       '⛔',
-                iconClass:  'error-icon',
-                message:    `Your Windows account "${username}" is not configured as an approver for the ${ROLE_META[roleKey].label} portal. Contact your administrator to be added.`,
-            });
-        }
-
-        const meta  = ROLE_META[roleKey];
-        const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
-        logger.info(`[Portal] Auto-login → ${username} for ${roleKey}`);
-        return res.redirect(`/portal/${roleSlug}/view?token=${token}`);
-    } catch (err) {
-        logger.error(`[Portal] showLogin error: ${err.message}`);
-        return res.status(500).render('pages/message', {
-            title:   'Portal Error',
-            heading: 'Something went wrong',
-            message: 'Could not load the portal. Please try again.',
-        });
-    }
+    // Sidecar path: render loading page; client JS calls /api/portal-auth/:roleSlug.
+    const meta = ROLE_META[roleKey];
+    return res.render('pages/portal_loading', {
+        roleSlug,
+        roleName: meta.label,
+        authUrl:  `/api/portal-auth/${roleSlug}`,
+    });
 }
 
 // GET /portal/:roleSlug/enter?action=TOKEN
 // Entry point from an emailed action link.
-// Action token proves the user received the email; we then verify their
-// Windows identity is still a configured approver and issue a portal session.
-// Never returns 401 — no popup loop risk.
+// Validates the action token, auto-corrects the stage slug if needed, then
+// renders the same loading page as showLogin so client JS can authenticate
+// via sidecar token. The action token is passed to /api/portal-auth so the
+// dashboard opens with the relevant request expanded.
 export async function enterViaActionToken(req, res) {
     const roleSlug    = req.params.roleSlug;
     const roleKey     = ROLE_SLUGS[roleSlug];
-    const actionToken = req.query.action;
+    const actionToken = (req.query.action || '').trim();
 
     if (!roleKey || !actionToken) return res.redirect(`/portal/${roleSlug || ''}`);
 
-    const rawHeader = req.headers['x-auth-user'] || '';
-    const username  = stripDomain(rawHeader);
-
     try {
-        const request = await OnboardingRequest.findOne({
-            where: { currentStageToken: actionToken }
-        });
+        const request = await OnboardingRequest.findOne({ where: { currentStageToken: actionToken } });
         if (!request) return res.redirect(`/portal/${roleSlug}?expired=1`);
 
-        // Auto-correct if the request has moved to a different stage.
+        // Auto-correct slug if the request has moved to a different stage.
         const expectedSlug = STATUS_TO_SLUG[request.status];
         if (expectedSlug && expectedSlug !== roleSlug) {
             return res.redirect(`/portal/${expectedSlug}/enter?action=${actionToken}`);
         }
 
-        if (!username) {
-            logger.warn(`[Portal] No Windows identity on ${roleSlug}/enter — redirecting to login`);
-            return res.redirect(`/portal/${roleSlug}`);
+        // Fast path: X-Auth-User present.
+        const username = stripDomain(req.headers['x-auth-user'] || '');
+        if (username) {
+            try {
+                const { accesses, email } = await resolveAccess(username, roleKey);
+                if (accesses.length > 0) {
+                    const meta  = ROLE_META[roleKey];
+                    const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
+                    logger.info(`[Portal] Enter via action token (X-Auth-User) → ${username} for ${roleKey} req#${request.id}`);
+                    return res.redirect(`/portal/${roleSlug}/view?token=${token}&expand=${request.id}`);
+                }
+            } catch (_) { /* fall through to sidecar path */ }
         }
 
-        const { accesses, email } = await resolveAccess(username, roleKey);
-        if (accesses.length === 0) {
-            logger.warn(`[Portal] ${username} not authorised for ${roleKey} (action-token path)`);
-            return res.status(403).render('pages/message', {
-                title:      'Portal Access Denied',
-                heading:    'Not Authorised',
-                titleClass: 'error',
-                icon:       '⛔',
-                iconClass:  'error-icon',
-                message:    `Your Windows account "${username}" is not configured as an approver for the ${ROLE_META[roleKey].label} portal. Contact your administrator.`,
-            });
-        }
+        // Sidecar path: render loading page; client JS calls /api/portal-auth with action token.
+        const meta = ROLE_META[roleKey];
+        return res.render('pages/portal_loading', {
+            roleSlug,
+            roleName: meta.label,
+            authUrl:  `/api/portal-auth/${roleSlug}?action=${encodeURIComponent(actionToken)}`,
+        });
 
-        const meta  = ROLE_META[roleKey];
-        const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
-        logger.info(`[Portal] Enter via action token → ${username} for ${roleKey} (req #${request.id})`);
-        return res.redirect(`/portal/${roleSlug}/view?token=${token}&expand=${request.id}`);
     } catch (err) {
         logger.error(`[Portal] enterViaActionToken error: ${err.message}`);
         return res.redirect(`/portal/${roleSlug}`);
