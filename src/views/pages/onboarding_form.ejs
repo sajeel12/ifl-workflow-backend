@@ -199,7 +199,7 @@
                                         if (_locModule) locDisplay = _locModule;
                                     } catch(_) {}
                                 %>
-                                <input type="text" name="location" value="<%= locDisplay %>"
+                                <input type="text" value="<%= locDisplay %>"
                                        readonly style="background:#f1f5f9;">
                             </div>
                         </div>
@@ -705,6 +705,21 @@
                 } catch (_) { /* leave value empty; server will return a clear 401 */ }
             };
 
+            // Re-submit the form preserving the original submitter button so its
+            // name=value pair is included in the POST body.
+            // form.requestSubmit(btn) is spec-correct and always sets e.submitter.
+            // Fall back to btn.click() for very old browsers (pre-2020).
+            function reSubmit(form, submitter) {
+                if (submitter && typeof form.requestSubmit === 'function') {
+                    try { form.requestSubmit(submitter); return; } catch (_) {}
+                }
+                if (submitter && typeof submitter.click === 'function') {
+                    submitter.click();
+                } else {
+                    form.submit();
+                }
+            }
+
             document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('form').forEach(form => {
                     form.addEventListener('submit', async (e) => {
@@ -725,9 +740,7 @@
                             });
                             if (!ok) return;
                             form.dataset.iflConfirmed = '1';
-                            // Re-fire so the rest of the handler proceeds normally.
-                            if (submitter && typeof submitter.click === 'function') submitter.click();
-                            else form.submit();
+                            reSubmit(form, submitter);
                             return;
                         }
 
@@ -738,13 +751,9 @@
                             e.preventDefault();
                             await ensureTokenField(form);
                             form.dataset.iflTokenAttached = '1';
-                            // Re-fire submission preserving the original submitter
-                            // so name=value pairs from action buttons (Approve/Reject) survive.
-                            if (submitter && typeof submitter.click === 'function') {
-                                submitter.click();
-                            } else {
-                                form.submit();
-                            }
+                            // Re-fire preserving the original submitter so action
+                            // button name=value pairs (Approve/Reject/RequestChanges) survive.
+                            reSubmit(form, submitter);
                             return;
                         }
 

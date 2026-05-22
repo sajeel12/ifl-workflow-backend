@@ -340,8 +340,11 @@ export const updateITDetails = async (token, data) => {
 
         const newToken = crypto.randomBytes(20).toString('hex');
         const hodRecipient = await resolveRecipient('HOD', { employeeId: request.employeeId, location: request.location });
+        // Strip location from the submitted data — the form renders it as a
+        // display-only field but it must not overwrite the stored group key.
+        const { location: _loc1, ...itSafeData } = data;
         await request.update({
-            ...data,
+            ...itSafeData,
             status: 'PendingHOD',
             currentStageToken: newToken,
             currentStageAssigneeEmail:    hodRecipient.email    || null,
@@ -404,8 +407,9 @@ export const updateDCIDetails = async (token, data) => {
 
         const newToken = crypto.randomBytes(20).toString('hex');
         const dciMgrRecipient = await resolveRecipient('DCI_MANAGER', { location: request.location, requestId: request.id });
+        const { location: _loc2, ...dciSafeData } = data;
         await request.update({
-            ...data,
+            ...dciSafeData,
             status: 'PendingDCIManager',
             currentStageToken: newToken,
             currentStageAssigneeEmail:    dciMgrRecipient.email    || null,
