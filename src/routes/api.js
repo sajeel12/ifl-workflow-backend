@@ -67,12 +67,8 @@ router.get('/onboarding/history/:id', onboardingController.renderHistory);
 // history-row detail popup. SSO-gated.
 router.get('/onboarding/:id/details', ssoMiddleware, onboardingController.getRequestDetails);
 
-// Role-scoped queue: pending actions or full history for a given role (JSON)
-// Requires SSO so a malicious caller can't enumerate every role's queue.
-router.get('/onboarding/queue', ssoMiddleware, onboardingController.getRoleQueue);
-
-// Role-scoped queue (rendered page) — the user-facing "My Pending Actions" view
-router.get('/my/queue', ssoMiddleware, onboardingController.renderRoleQueue);
+// /onboarding/queue and /my/queue removed — role-based portal (/portal/:slug/view)
+// is the single source of truth for pending and history.
 
 
 router.get('/health', (req, res) => {

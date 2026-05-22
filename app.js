@@ -3,6 +3,8 @@ import cors from 'cors';
 import apiRoutes from './src/routes/api.js';
 import adminRoutes from './src/routes/admin.js';
 import portalRoutes from './src/routes/portal.js';
+import { ssoMiddleware } from './src/middleware/ssoMiddleware.js';
+import { adminMiddleware } from './src/middleware/adminMiddleware.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 

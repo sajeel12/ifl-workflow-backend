@@ -27,20 +27,30 @@ const WorkflowApproverConfig = sequelize.define('WorkflowApproverConfig', {
         comment: 'Human-readable workflow step this approver belongs to'
     },
     // Primary
+    approverUsername: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'AD sAMAccountName (e.g. "israr.haq") — used for portal access control'
+    },
     approverEmail: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: { isEmail: { msg: 'Invalid primary email' } }
+        comment: 'Used for sending workflow notification emails'
     },
     approverName: {
         type: DataTypes.STRING,
         allowNull: true
     },
     // Secondary (fallback after 2 days)
+    secondaryUsername: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'AD sAMAccountName for secondary approver'
+    },
     secondaryEmail: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: { isEmail: { msg: 'Invalid secondary email' } }
+        comment: 'Used for sending workflow notification emails to secondary'
     },
     secondaryName: {
         type: DataTypes.STRING,

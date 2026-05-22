@@ -122,7 +122,7 @@ describe('Role reassignment audit', () => {
 
         try {
             await onboardingService.createRequest({ location: 'LHE', requesterName: 'HR User' });
-            expect(requestUpdate).toHaveBeenCalledWith({ currentStageAssigneeEmail: 'new.it.ops@ifl.com' });
+            expect(requestUpdate).toHaveBeenCalledWith({ currentStageAssigneeEmail: 'new.it.ops@ifl.com', currentStageAssigneeUsername: null });
         } finally {
             if (originalAppUrl === undefined) {
                 delete process.env.APP_URL;

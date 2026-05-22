@@ -19,24 +19,53 @@ const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key
 // HR users), then the global fallback. Returns the matching group key or
 // null if the email isn't on any HR list. Local-part comparison only — same
 // person can appear with ifl.net or igc.com.pk domains in AD vs HRMS.
-async function resolveHRGroupForEmail(email) {
-    if (!email) return null;
+// Resolve which HR_INITIATOR location group this user belongs to.
+// Uses username (AD sAMAccountName) first — same pattern as portalController.
+// Falls back to email local-part for rows that predate the username column,
+// and to full email match when no username is available.
+async function resolveHRGroupForEmail(email, username = '') {
+    if (!email && !username) return null;
+    const uname = (username || '').toLowerCase();
     const overrides = await WorkflowApproverLocationOverride.findAll({
         where: { roleKey: 'HR_INITIATOR', isActive: true }
     });
-    for (const o of overrides) {
-        if (emailsMatch(email, o.approverEmail) || emailsMatch(email, o.secondaryEmail)) {
-            return o.location;
-        }
+    const rowMatches = (o) => {
+        const inPrimary = uname
+            ? (o.approverUsername  ? o.approverUsername.toLowerCase()  === uname
+                                   : o.approverEmail  ? o.approverEmail.split('@')[0].toLowerCase()  === uname : false)
+            : (email && emailsMatch(email, o.approverEmail));
+        const inSecondary = uname
+            ? (o.secondaryUsername ? o.secondaryUsername.toLowerCase() === uname
+                                   : o.secondaryEmail ? o.secondaryEmail.split('@')[0].toLowerCase() === uname : false)
+            : (email && emailsMatch(email, o.secondaryEmail));
+        return inPrimary || inSecondary;
+    };
+    const matches = overrides.filter(rowMatches);
+    if (matches.length > 1) {
+        // Data-integrity violation — admin guard should have prevented this.
+        // Reject rather than route randomly.
+        throw new Error(
+            `HR routing error: "${username || email}" is assigned to ${matches.length} location groups ` +
+            `(${matches.map(m => m.location).join(', ')}). ` +
+            `Remove the duplicate assignment in the Workflow Approvers admin panel.`
+        );
     }
-    // Global fallback — HR row in WorkflowApproverConfig (no group). If the
-    // initiator matches the global HR, we allow the submission but can't
-    // route to a specific location group. Caller decides what to do.
+    if (matches.length === 1) return matches[0].location;
+
+    // Global fallback — WorkflowApproverConfig row (no location group).
     const globalCfg = await WorkflowApproverConfig.findOne({
         where: { roleKey: 'HR_INITIATOR', isActive: true }
     });
-    if (globalCfg && (emailsMatch(email, globalCfg.approverEmail) || emailsMatch(email, globalCfg.secondaryEmail))) {
-        return '__GLOBAL__';
+    if (globalCfg) {
+        const inPrimary = uname
+            ? (globalCfg.approverUsername  ? globalCfg.approverUsername.toLowerCase()  === uname
+                                           : globalCfg.approverEmail  ? globalCfg.approverEmail.split('@')[0].toLowerCase()  === uname : false)
+            : (email && emailsMatch(email, globalCfg.approverEmail));
+        const inSecondary = uname
+            ? (globalCfg.secondaryUsername ? globalCfg.secondaryUsername.toLowerCase() === uname
+                                           : globalCfg.secondaryEmail ? globalCfg.secondaryEmail.split('@')[0].toLowerCase() === uname : false)
+            : (email && emailsMatch(email, globalCfg.secondaryEmail));
+        if (inPrimary || inSecondary) return '__GLOBAL__';
     }
     return null;
 }
@@ -76,33 +105,48 @@ const resolveCurrentRecipient = async (status, location = null) => {
         if (!cfg) {
             cfg = await WorkflowApproverConfig.findOne({ where: { roleKey: map.key, isActive: true } });
         }
-        if (!cfg) return { role: map.label, name: '', email: '' };
+        if (!cfg) return { role: map.label, name: '', email: '', username: '' };
         const usingSecondary = cfg.primaryExpiredAt && cfg.secondaryEmail;
         return {
-            role: map.label + (usingSecondary ? ' (Secondary)' : ''),
-            name: usingSecondary ? cfg.secondaryName : cfg.approverName,
-            email: usingSecondary ? cfg.secondaryEmail : cfg.approverEmail
+            role:     map.label + (usingSecondary ? ' (Secondary)' : ''),
+            name:     usingSecondary ? cfg.secondaryName     : cfg.approverName,
+            email:    usingSecondary ? cfg.secondaryEmail    : cfg.approverEmail,
+            username: usingSecondary ? (cfg.secondaryUsername || '') : (cfg.approverUsername || '')
         };
     } catch {
         return { role: map.label, name: '', email: '' };
     }
 };
 
-// Given a location-aware roleKey and a signed-in user email, return the location
-// group key that user belongs to by checking both seats (approverEmail /
-// secondaryEmail) in the override table. Returns null if the user is not in any
-// override row (e.g. they are in the global config, or not configured at all).
-async function resolveUserLocationForRole(roleKey, userEmail) {
-    if (!userEmail) return null;
+// Given a location-aware roleKey and the signed-in user's identity, return the
+// location group key the user belongs to. Mirrors the rowMatchesPrimary /
+// rowMatchesSecondary logic in portalController: username (AD sAMAccountName) is
+// checked first; email local-part is the backward-compat fallback for rows that
+// predate the approverUsername column.
+async function resolveUserLocationForRole(roleKey, userEmail, username = '') {
+    if (!userEmail && !username) return null;
+    const uname = username.toLowerCase();
     const overrides = await WorkflowApproverLocationOverride.findAll({
         where: { roleKey, isActive: true }
     });
+    const matches = [];
     for (const o of overrides) {
-        if (emailsMatch(userEmail, o.approverEmail) || emailsMatch(userEmail, o.secondaryEmail)) {
-            return o.location;
-        }
+        const inPrimary = uname
+            ? (o.approverUsername  ? o.approverUsername.toLowerCase()  === uname
+                                   : o.approverEmail  ? o.approverEmail.split('@')[0].toLowerCase()  === uname : false)
+            : emailsMatch(userEmail, o.approverEmail);
+        const inSecondary = uname
+            ? (o.secondaryUsername ? o.secondaryUsername.toLowerCase() === uname
+                                   : o.secondaryEmail ? o.secondaryEmail.split('@')[0].toLowerCase() === uname : false)
+            : emailsMatch(userEmail, o.secondaryEmail);
+        if (inPrimary || inSecondary) matches.push(o.location);
     }
-    return null;
+    if (matches.length > 1) {
+        // Admin guard should have prevented this — log and refuse to guess.
+        logger.warn(`[Location] ${username || userEmail} matched ${matches.length} overrides for ${roleKey}: ${matches.join(', ')}`);
+        return null;
+    }
+    return matches[0] ?? null;
 }
 
 export const handleRequest = async (req, res) => {
@@ -127,6 +171,9 @@ export const handleRequest = async (req, res) => {
 
 const handleSubmission = async (req, res, token) => {
     const data = req.body;
+    const portalToken = data.pt || null;
+    // Local wrapper: automatically carries res + portalToken to every success render.
+    const success = (title, msg, next = {}) => renderSuccess(res, title, msg, { ...next, portalToken });
     // Normalize checkbox values
     const checkboxFields = [
         'intranetAccess', 'internetAccess', 'specificWebsites', 'emailIncoming',
@@ -160,7 +207,7 @@ const handleSubmission = async (req, res, token) => {
             // and WorkflowApproverConfig (global). The matching group becomes
             // the request's location, so IT Ops routing in Step 2 lands in
             // the same group.
-            const hrGroupKey = await resolveHRGroupForEmail(req.user.email);
+            const hrGroupKey = await resolveHRGroupForEmail(req.user.email, req.user.username);
             if (!hrGroupKey) {
                 return res.status(403).render('pages/message', {
                     title: 'Not authorized',
@@ -168,7 +215,7 @@ const handleSubmission = async (req, res, token) => {
                     titleClass: 'error',
                     icon: '⛔',
                     iconClass: 'error-icon',
-                    message: `You are signed in as ${req.user.email}, but you are not on the HR Initiator list. Please contact the workflow administrator to be added.`
+                    message: `You are signed in as ${req.user.email || req.user.username}, but you are not on the HR Initiator list. Please contact the workflow administrator to be added.`
                 });
             }
             if (hrGroupKey !== '__GLOBAL__') {
@@ -276,8 +323,7 @@ const handleSubmission = async (req, res, token) => {
             if (role === 'IT') {
                 // Step 2: IT Ops records the configuration.
                 await onboardingService.updateITDetails(token, data);
-                return renderSuccess(
-                    res,
+                return success(
                     'Record Submitted',
                     'Required Services configured and recorded. The request has been forwarded to HOD for review.',
                     { status: 'PendingHOD', requestId: request.id, actorRole: 'IT' }
@@ -288,15 +334,13 @@ const handleSubmission = async (req, res, token) => {
                 const { action, hodRemarks } = data;
                 await onboardingService.handleHODApproval(token, action, hodRemarks);
                 if (action === 'Reject') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Request Rejected',
                         'Request rejected by HOD. The process has been stopped and notified to the relevant team.',
                         { status: 'Rejected', requestId: request.id, actorRole: 'HOD' }
                     );
                 }
-                return renderSuccess(
-                    res,
+                return success(
                     'Request Approved',
                     'Approved by HOD. The request has been forwarded to the DCI Team for Window login and access setup.',
                     { status: 'PendingDCI', requestId: request.id, actorRole: 'HOD' }
@@ -305,8 +349,7 @@ const handleSubmission = async (req, res, token) => {
             else if (role === 'DCI') {
                 // Step 5: DCI Team records identity configuration.
                 await onboardingService.updateDCIDetails(token, data);
-                return renderSuccess(
-                    res,
+                return success(
                     'Record Submitted',
                     'Windows login and required access details have been recorded. The request has been forwarded to the DCI Manager for final approval.',
                     { status: 'PendingDCIManager', requestId: request.id, actorRole: 'DCI' }
@@ -317,16 +360,14 @@ const handleSubmission = async (req, res, token) => {
                 const { action, dciRemarks } = data;
                 const updated = await onboardingService.handleDCIManagerApproval(token, action, dciRemarks);
                 if (action === 'Reject') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Request Rejected',
                         'Request rejected by DCI Manager. The workflow has been stopped and notified to the DCI team.',
                         { status: 'Rejected', requestId: request.id, actorRole: 'DCIManager' }
                     );
                 }
                 if (action === 'RequestChanges') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Changes Requested',
                         'Change request sent back to the DCI Team with your remarks.',
                         { status: 'PendingDCI', requestId: request.id, actorRole: 'DCIManager' }
@@ -334,15 +375,13 @@ const handleSubmission = async (req, res, token) => {
                 }
                 // Approve — branches based on whether email approval is needed.
                 if (updated && updated.status === 'PendingITHOD') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Approve Request (Email Yes)',
                         'Approved by DCI Manager. The request has been forwarded to IT HOD for email service authorization.',
                         { status: 'PendingITHOD', requestId: request.id, actorRole: 'DCIManager' }
                     );
                 }
-                return renderSuccess(
-                    res,
+                return success(
                     'Approved (No Email)',
                     'Approved by DCI Manager. PDF summary has been generated for record and notification sent for implementation.',
                     { status: 'PendingDCIImplementation', requestId: request.id, actorRole: 'DCIManager' }
@@ -353,15 +392,13 @@ const handleSubmission = async (req, res, token) => {
                 const { action, itHodRemarks } = data;
                 await onboardingService.handleITHODApproval(token, action, itHodRemarks);
                 if (action === 'Reject') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Request Rejected',
                         'Request rejected by IT HOD. The workflow has been stopped and notified to the relevant team.',
                         { status: 'Rejected', requestId: request.id, actorRole: 'ITHOD' }
                     );
                 }
-                return renderSuccess(
-                    res,
+                return success(
                     'Request Approved',
                     'Approved by IT HOD. The request is finalized — PDF summary has been generated for record and notification sent for implementation.',
                     { status: 'PendingDCIImplementation', requestId: request.id, actorRole: 'ITHOD' }
@@ -377,8 +414,7 @@ const handleSubmission = async (req, res, token) => {
                     }
                 });
                 await onboardingService.handleOPSAction(token, checklistData, opsName);
-                return renderSuccess(
-                    res,
+                return success(
                     'Mark as Verified',
                     'Verification completed successfully. The onboarding process has been completed.',
                     { status: 'Completed', requestId: request.id, actorRole: 'OPS' }
@@ -445,34 +481,41 @@ const renderForm = async (req, res, token) => {
         // The HARD enforcement happens at POST time: handleSubmission
         // refuses any submit whose req.user.email doesn't match the stored
         // currentStageAssigneeEmail.
-        if (req.user && req.user.email) {
+        if (req.user && (req.user.email || req.user.username)) {
             // Use the LIVE configured approver (location-aware) for the gate so
             // that delegation changes are reflected immediately — even at the
-            // GET (form-view) stage. Fall back to stored email if no live config.
+            // GET (form-view) stage. Fall back to stored values if no live config.
             const liveRecipient = await resolveCurrentRecipient(request.status, request.location);
-            const gateEmail = (liveRecipient && liveRecipient.email) || request.currentStageAssigneeEmail || '';
-            if (gateEmail && !emailsMatch(req.user.email, gateEmail)) {
+            // Username gate — unambiguous, works across email domain changes.
+            const gateUsername = (liveRecipient && liveRecipient.username) || request.currentStageAssigneeUsername || '';
+            // Email gate — backward-compat fallback when no username is stored.
+            const gateEmail    = (liveRecipient && liveRecipient.email)    || request.currentStageAssigneeEmail    || '';
+            const actorUsername = (req.user.username || '').toLowerCase();
+            const isMismatch = gateUsername
+                ? (actorUsername !== gateUsername.toLowerCase())
+                : (gateEmail && !emailsMatch(req.user.email, gateEmail));
+            if (isMismatch) {
                 try {
                     await TimelineEvent.create({
                         requestId: request.id,
                         action: 'Unauthorized Click',
                         actorRole: 'System',
-                        details: `Configured approver: ${gateEmail}, clicked by: ${req.user.email}`,
+                        details: `Configured: ${gateUsername || gateEmail}, clicked by: ${req.user.username || req.user.email}`,
                         timestamp: new Date()
                     });
                 } catch (e) {
                     logger.warn('[Onboarding] Could not record unauthorized-click audit event: ' + e.message);
                 }
                 const delegateName = (liveRecipient && liveRecipient.name && liveRecipient.name.trim())
-                    ? `${liveRecipient.name} (${gateEmail})`
-                    : gateEmail;
+                    ? `${liveRecipient.name} (${gateEmail || gateUsername})`
+                    : (gateEmail || gateUsername);
                 return res.status(403).render('pages/message', {
                     title: 'Not authorized',
                     heading: 'This stage has been delegated',
                     titleClass: 'error',
                     icon: '⛔',
                     iconClass: 'error-icon',
-                    message: `This stage is currently assigned to ${delegateName}. You are signed in as ${req.user.email} and are no longer the configured approver. Please use the portal to check your own pending actions.`
+                    message: `This stage is currently assigned to ${delegateName}. You are signed in as ${req.user.email || req.user.username} and are no longer the configured approver. Please use the portal to check your own pending actions.`
                 });
             }
         }
@@ -510,10 +553,15 @@ const renderForm = async (req, res, token) => {
         // known HR, pre-set their location group so the form renders the
         // right readonly label. A non-HR user simply sees the form and is
         // blocked cleanly on submit.
-        if (req.user && req.user.email) {
-            const hrGroupKey = await resolveHRGroupForEmail(req.user.email);
-            if (hrGroupKey && hrGroupKey !== '__GLOBAL__') {
-                request.location = hrGroupKey;
+        if (req.user && (req.user.email || req.user.username)) {
+            try {
+                const hrGroupKey = await resolveHRGroupForEmail(req.user.email, req.user.username);
+                if (hrGroupKey && hrGroupKey !== '__GLOBAL__') {
+                    request.location = hrGroupKey;
+                }
+            } catch (routingErr) {
+                // Non-fatal at GET — just log. The form renders; POST will reject.
+                logger.warn(`[Onboarding] HR routing warning at GET: ${routingErr.message}`);
             }
         }
 
@@ -720,8 +768,9 @@ const renderForm = async (req, res, token) => {
         // Resolved here (rather than in the .ejs) so partials/portal_shell.ejs
         // and partials/portal_scripts.ejs can read it directly as a top-level
         // local — EJS does not propagate <% const %> into included templates.
-        showPortal: !!(token && FORM_ROLE_TO_QUEUE_KEY[role]),
-        portalCurrentRequestId: (request && request.id) || null
+        showPortal: false,
+        portalCurrentRequestId: (request && request.id) || null,
+        portalToken: req.query.pt || null,
     });
 };
 
@@ -827,8 +876,8 @@ export const renderRoleQueue = async (req, res) => {
         // Location-aware roles (IT_OPS, HR_INITIATOR) filter to the signed-in
         // user's location group so each person only sees their own site's work.
         let locationFilter = {};
-        if (LOCATION_AWARE_ROLE_KEYS.has(safeRole) && req.user && req.user.email) {
-            const userLocation = await resolveUserLocationForRole(safeRole, req.user.email);
+        if (LOCATION_AWARE_ROLE_KEYS.has(safeRole) && req.user && (req.user.email || req.user.username)) {
+            const userLocation = await resolveUserLocationForRole(safeRole, req.user.email, req.user.username);
             if (userLocation) locationFilter = { location: userLocation };
         }
 
@@ -942,8 +991,8 @@ export const getRoleQueue = async (req, res) => {
 
         // Resolve location filter once — applies to both history and pending modes.
         let locationWhere = {};
-        if (LOCATION_AWARE_ROLE_KEYS.has(role) && req.user && req.user.email) {
-            const userLocation = await resolveUserLocationForRole(role, req.user.email);
+        if (LOCATION_AWARE_ROLE_KEYS.has(role) && req.user && (req.user.email || req.user.username)) {
+            const userLocation = await resolveUserLocationForRole(role, req.user.email, req.user.username);
             if (userLocation) locationWhere = { location: userLocation };
         }
 
@@ -1122,21 +1171,24 @@ export const getRequestDetails = async (req, res) => {
 export const lookupExistingRequest = async (req, res) => {
     try {
         const { employeeId } = req.query;
-        if (!employeeId) return res.json({ existingRequestId: null });
+        if (!employeeId) return res.json({ existingRequestId: null, state: null });
 
-        const existing = await OnboardingRequest.findOne({
-            where: {
-                employeeId,
-                status: { [Op.notIn]: ['Rejected', 'Completed'] }
-            },
+        // Check active (in-flight) request first — highest priority block.
+        const active = await OnboardingRequest.findOne({
+            where: { employeeId, status: { [Op.notIn]: ['Rejected', 'Completed'] } },
             attributes: ['id']
         });
+        if (active) return res.json({ existingRequestId: active.id, state: 'active' });
 
-        // HR is the only caller of this endpoint and must not see workflow
-        // state (status, name, current stage) — return only a boolean signal.
-        return res.json({
-            existingRequestId: existing ? existing.id : null
+        // Check for a previously completed request — HR should switch to Change mode.
+        const completed = await OnboardingRequest.findOne({
+            where: { employeeId, status: 'Completed' },
+            order: [['updatedAt', 'DESC']],
+            attributes: ['id']
         });
+        if (completed) return res.json({ existingRequestId: completed.id, state: 'completed' });
+
+        return res.json({ existingRequestId: null, state: null });
     } catch (err) {
         logger.error(`[Onboarding Lookup] ${err.message}`);
         return res.status(500).json({ error: err.message });
@@ -1212,7 +1264,7 @@ const FORM_ROLE_TO_PORTAL = {
 function portalLocalsForRole(role) {
     const cfg = role && FORM_ROLE_TO_PORTAL[role];
     if (!cfg) return {};
-    return { showPortal: true, roleKey: cfg.key, roleLabel: cfg.label };
+    return { showPortal: false, roleKey: cfg.key, roleLabel: cfg.label };
 }
 
 const renderSuccess = (res, title, message, next = {}) => {
@@ -1230,7 +1282,8 @@ const renderSuccess = (res, title, message, next = {}) => {
         view.nextOwner       = statusOwnerFor(next.status);
         view.nextStatusColor = statusColorFor(next.status);
     }
-    if (next.requestId) view.requestRef = next.requestId;
+    if (next.requestId)  view.requestRef  = next.requestId;
+    if (next.portalToken) view.portalToken = next.portalToken;
     return res.render('pages/message', view);
 };
 

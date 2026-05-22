@@ -160,7 +160,7 @@
     const msgEl = document.getElementById('initiateMessage');
     if (!empId) return;
     try {
-      const res = await fetch('/api/offboarding/initiate', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ employeeId: empId }) });
+      const res = await window.iflFetch('/api/offboarding/initiate', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ employeeId: empId }) });
       const data = await res.json();
       if (data.success) { msgEl.style.color = 'var(--a-green)'; msgEl.innerText = data.message; document.getElementById('initEmployeeId').value = ''; }
       else { msgEl.style.color = 'var(--a-red)'; msgEl.innerText = data.error; }
@@ -171,7 +171,7 @@
     const tbody = document.getElementById('managerTableBody');
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--a-text-muted);">Loading…</td></tr>';
     try {
-      const res = await fetch('/api/offboarding/pending-manager');
+      const res = await window.iflFetch('/api/offboarding/pending-manager');
       const data = await res.json();
       if (!data.success || data.data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--a-text-muted);">No pending approvals.</td></tr>'; return; }
       tbody.innerHTML = data.data.map(req => `
@@ -195,7 +195,7 @@
     const remarks = document.getElementById('modalManagerRemarks').value;
     if (!agentId) { IflDialog.warning('Please select an agent.'); return; }
     try {
-      const res = await fetch('/api/offboarding/approve', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:reqId, assignedSystemAgentId:agentId, managerRemarks:remarks }) });
+      const res = await window.iflFetch('/api/offboarding/approve', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:reqId, assignedSystemAgentId:agentId, managerRemarks:remarks }) });
       const data = await res.json();
       if (data.success) { document.getElementById('managerApprovalModal').classList.remove('active'); loadManagerRequests(); IflDialog.success('Request approved and forwarded.'); }
       else IflDialog.error(data.error || 'Failed to approve.');
@@ -206,7 +206,7 @@
     const tbody = document.getElementById('systemTableBody');
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--a-text-muted);">Loading…</td></tr>';
     try {
-      const res = await fetch('/api/offboarding/pending-system');
+      const res = await window.iflFetch('/api/offboarding/pending-system');
       const data = await res.json();
       if (!data.success || data.data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--a-text-muted);">No pending IT tasks.</td></tr>'; return; }
       tbody.innerHTML = data.data.map(req => `
@@ -233,7 +233,7 @@
     const physCheck= document.getElementById('modalPhysRevoked').checked;
     const notes    = document.getElementById('modalSysNotes').value;
     try {
-      const res = await fetch('/api/offboarding/complete-task', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:reqId, adRevoked:adCheck, physicalAccessRevoked:physCheck, checklistNotes:notes }) });
+      const res = await window.iflFetch('/api/offboarding/complete-task', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:reqId, adRevoked:adCheck, physicalAccessRevoked:physCheck, checklistNotes:notes }) });
       const data = await res.json();
       if (data.success) { document.getElementById('systemTaskModal').classList.remove('active'); loadSystemRequests(); IflDialog.success('Task completed.'); }
       else IflDialog.error(data.error || 'Failed to complete task.');
@@ -244,7 +244,7 @@
     const tbody = document.getElementById('historyTableBody');
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--a-text-muted);">Loading…</td></tr>';
     try {
-      const res = await fetch('/api/offboarding/all');
+      const res = await window.iflFetch('/api/offboarding/all');
       const data = await res.json();
       if (!data.success || data.data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--a-text-muted);">No history found.</td></tr>'; return; }
       tbody.innerHTML = data.data.map(req => `

@@ -101,6 +101,7 @@
         </div>
 
         <form method="POST" action="<%- formAction %>" <%- formEnctype %>>
+            <% if (locals.portalToken) { %><input type="hidden" name="pt" value="<%= locals.portalToken %>"><% } %>
             <% if (role==='DCIImplementer' ) { %>
                 <input type="hidden" name="token" value="<%= token %>">
                 <% } %>
@@ -803,74 +804,103 @@
             togglePrinterLocation('laser');
             togglePrinterLocation('dotmatrix');
 
-            const btn = document.getElementById('btnGetEmployee');
-            if (btn) {
-                btn.addEventListener('click', async () => {
-                    const empIdInput = document.getElementById('employeeIdInput');
-                    const empId = empIdInput.value.trim();
+            // ── Employee ID auto-fill + state guard ────────────────────────
+            // Runs on both "Get Employee Data" button click AND on field blur,
+            // so HR doesn't have to manually press the button every time.
+            const empIdInput   = document.getElementById('employeeIdInput');
+            const btn          = document.getElementById('btnGetEmployee');
+            const requestModeEl = document.querySelector('select[name="requestMode"]');
 
-                    if (!empId) {
-                        IflDialog.warning('Please enter an Employee ID');
-                        empIdInput.focus();
-                        return;
+            // Remove any previously injected state banner
+            const clearStateBanner = () => {
+                const prev = document.getElementById('empStateBanner');
+                if (prev) prev.remove();
+            };
+
+            // Inject an info/warning banner just below the Employee ID block
+            const showStateBanner = (message, type) => {
+                clearStateBanner();
+                const empBlock = empIdInput && empIdInput.closest('.form-group.full-width');
+                if (!empBlock) return;
+                const div = document.createElement('div');
+                div.id = 'empStateBanner';
+                const colors = {
+                    info:    { bg: '#eff6ff', border: '#93c5fd', text: '#1d4ed8' },
+                    warning: { bg: '#fff7ed', border: '#fdba74', text: '#c2410c' },
+                };
+                const c = colors[type] || colors.info;
+                div.style.cssText = `background:${c.bg};border:1px solid ${c.border};border-radius:8px;padding:10px 14px;margin-top:10px;color:${c.text};font-size:0.86rem;font-weight:500;`;
+                div.textContent = message;
+                empBlock.appendChild(div);
+            };
+
+            const lookupAndFill = async () => {
+                const empId = empIdInput ? empIdInput.value.trim() : '';
+                if (!empId) return;
+
+                if (btn) { btn.textContent = 'Fetching…'; btn.disabled = true; }
+
+                try {
+                    // 1 — HRMS data fill
+                    const hrmsRes = await fetch('/api/hrms/employee/' + encodeURIComponent(empId));
+                    if (!hrmsRes.ok) throw new Error('Employee not found in HRMS');
+                    const data = await hrmsRes.json();
+
+                    const setVal = (name, val) => {
+                        const el = document.querySelector('[name="' + name + '"]');
+                        if (el && val != null && val !== '') el.value = val;
+                    };
+                    setVal('fullName',        data.fullName);
+                    setVal('department',      data.department);
+                    setVal('subDepartment',   data.subDepartment);
+                    setVal('designation',     data.designation);
+                    setVal('location',        data.location || data.projectUnit);
+                    setVal('hod',             data.hod);
+                    setVal('mobile',          data.mobile);
+                    setVal('officeExtension', data.officeExtension);
+                    if (data.joiningDate) {
+                        const d = new Date(data.joiningDate);
+                        if (!isNaN(d.getTime())) setVal('joiningDate', d.toISOString().split('T')[0]);
                     }
 
-                    const originalText = btn.textContent;
-                    btn.textContent = 'Fetching...';
-                    btn.disabled = true;
-
+                    // 2 — Existing request check
+                    clearStateBanner();
                     try {
-                        const res = await fetch('/api/hrms/employee/' + empId);
-                        if (!res.ok) throw new Error('Employee not found');
-                        const data = await res.json();
+                        const lkRes  = await fetch('/api/onboarding/lookup?employeeId=' + encodeURIComponent(empId));
+                        const lkData = lkRes.ok ? await lkRes.json() : {};
 
-                        // Populate fields
-                        const setVal = (name, val) => {
-                            const el = document.querySelector('input[name="' + name + '"]');
-                            if (el && val) el.value = val;
-                        };
-
-                        setVal('fullName', data.fullName);
-                        setVal('department', data.department);
-                        setVal('subDepartment', data.subDepartment);
-                        setVal('designation', data.designation);
-                        setVal('location', data.location || data.projectUnit);
-                        setVal('hod', data.hod);
-                        setVal('mobile', data.mobile);
-                        setVal('officeExtension', data.officeExtension);
-
-                        // Safely parse Joining Date to YYYY-MM-DD format for HTML5 date input
-                        if (data.joiningDate) {
-                            const d = new Date(data.joiningDate);
-                            if (!isNaN(d.getTime())) {
-                                setVal('joiningDate', d.toISOString().split('T')[0]);
-                            }
+                        if (lkData.state === 'active') {
+                            // Block: in-flight request — HR must not duplicate
+                            IflDialog.warning(
+                                'An onboarding request for this employee is already in progress. Please wait for it to complete before initiating a new one.',
+                                { title: 'Already in progress' }
+                            );
+                            empIdInput.value = '';
+                            clearStateBanner();
+                            empIdInput.focus();
+                            return;
                         }
 
-                        // Check if an active onboarding request already exists for this employee.
-                        // HR is not allowed to view in-flight workflow data (least-privilege).
-                        // We tell them the employee is locked and stop the flow — no link to trail.
-                        try {
-                            const existRes = await fetch('/api/onboarding/lookup?employeeId=' + encodeURIComponent(empId));
-                            if (existRes.ok) {
-                                const existData = await existRes.json();
-                                if (existData && existData.existingRequestId) {
-                                    IflDialog.warning('An onboarding request for this employee is already in progress. Please wait for it to complete before initiating a new one.', { title: 'Already in progress' });
-                                    // Reset the field so HR doesn't try to submit anyway
-                                    empIdInput.value = '';
-                                    empIdInput.focus();
-                                    return;
-                                }
-                            }
-                        } catch (_) { /* non-fatal */ }
-                    } catch (err) {
-                        IflDialog.error(err.message || 'Could not look up the employee.');
-                    } finally {
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    }
-                });
-            }
+                        if (lkData.state === 'completed') {
+                            // Completed — auto-switch to Change Request mode
+                            if (requestModeEl) requestModeEl.value = 'Change';
+                            showStateBanner(
+                                'This employee already has a completed onboarding record. Request mode has been automatically set to "Change / Modification".',
+                                'info'
+                            );
+                        }
+                        // state === null → new employee, leave requestMode as-is (New Hiring default)
+                    } catch (_) { /* non-fatal — lookup failure doesn't block submission */ }
+
+                } catch (err) {
+                    IflDialog.error(err.message || 'Could not look up the employee.');
+                } finally {
+                    if (btn) { btn.textContent = 'Get Employee Data'; btn.disabled = false; }
+                }
+            };
+
+            if (btn)        btn.addEventListener('click', lookupAndFill);
+            if (empIdInput) empIdInput.addEventListener('blur', () => { if (empIdInput.value.trim()) lookupAndFill(); });
         });
     </script>
 

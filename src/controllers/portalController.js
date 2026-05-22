@@ -3,7 +3,6 @@ import OnboardingRequest from '../models/OnboardingRequest.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import { issueToken, validateToken } from '../services/portalTokenService.js';
-import { sendPortalAccessLink } from '../services/emailService.js';
 import { emailsMatch } from '../utils/emailMatch.js';
 import { groupLabel } from '../utils/locationGroups.js';
 import logger from '../utils/logger.js';
@@ -19,104 +18,54 @@ const ROLE_SLUGS = {
     'hr-initiator':    'HR_INITIATOR',
 };
 
-// pendingStatuses: statuses this role is responsible for acting on.
-// historyField:    DB column set when this role finishes their step (null = not applicable).
-// roleModel:       fallback | delegation | parallel
-// isLocationAware: whether location scoping applies.
 const ROLE_META = {
     IT_OPS: {
-        label:          'IT Operations',
+        label:           'IT Operations',
         pendingStatuses: ['PendingIT', 'PendingOPSAction'],
-        historyField:   'itSubmittedAt',
-        roleModel:      'fallback',
+        historyField:    'itSubmittedAt',
+        roleModel:       'fallback',
         isLocationAware: true,
     },
     DCI_TEAM: {
-        label:          'DCI Team',
+        label:           'DCI Team',
         pendingStatuses: ['PendingDCI'],
-        historyField:   'dciSubmittedAt',
-        roleModel:      'fallback',
+        historyField:    'dciSubmittedAt',
+        roleModel:       'fallback',
         isLocationAware: false,
     },
     DCI_IMPLEMENTER: {
-        label:          'DCI Implementer',
+        label:           'DCI Implementer',
         pendingStatuses: ['PendingDCIImplementation'],
-        historyField:   'dciImplementedAt',
-        roleModel:      'fallback',
+        historyField:    'dciImplementedAt',
+        roleModel:       'fallback',
         isLocationAware: false,
     },
     IT_HOD: {
-        label:          'IT Head of Department',
+        label:           'IT Head of Department',
         pendingStatuses: ['PendingITHOD'],
-        historyField:   'itHodDecidedAt',
-        roleModel:      'delegation',
+        historyField:    'itHodDecidedAt',
+        roleModel:       'delegation',
         isLocationAware: false,
     },
     DCI_MANAGER: {
-        label:          'DCI Manager',
+        label:           'DCI Manager',
         pendingStatuses: ['PendingDCIManager'],
-        historyField:   'dciManagerDecidedAt',
-        roleModel:      'delegation',
+        historyField:    'dciManagerDecidedAt',
+        roleModel:       'delegation',
         isLocationAware: false,
     },
     HR_INITIATOR: {
-        label:          'HR Initiator',
-        pendingStatuses: [], // HR sees all active requests (not stage-specific)
-        historyField:   null,
-        roleModel:      'parallel',
+        label:           'HR Initiator',
+        pendingStatuses: [],
+        historyField:    null,
+        roleModel:       'parallel',
         isLocationAware: true,
     },
 };
 
-const LOCATION_AWARE = new Set(['IT_OPS', 'HR_INITIATOR']);
+const LOCATION_AWARE   = new Set(['IT_OPS', 'HR_INITIATOR']);
 const TERMINAL_STATUSES = ['Completed', 'Rejected'];
 
-// ── Access resolution ──────────────────────────────────────────────────────────
-
-// Returns [{location, isPrimary}] — empty means no access.
-// location = null means global (all locations). Override rows take precedence.
-async function resolveAccess(email, roleKey) {
-    const accesses = [];
-
-    if (LOCATION_AWARE.has(roleKey)) {
-        const overrides = await WorkflowApproverLocationOverride.findAll({
-            where: { roleKey, isActive: true }
-        });
-        for (const ov of overrides) {
-            if (emailsMatch(email, ov.approverEmail)) {
-                accesses.push({ location: ov.location, isPrimary: true });
-            } else if (emailsMatch(email, ov.secondaryEmail)) {
-                accesses.push({ location: ov.location, isPrimary: false });
-            }
-        }
-    }
-
-    // If no override matched, fall through to global config.
-    if (accesses.length === 0) {
-        const globalCfg = await WorkflowApproverConfig.findOne({
-            where: { roleKey, isActive: true }
-        });
-        if (globalCfg) {
-            if (emailsMatch(email, globalCfg.approverEmail)) {
-                accesses.push({ location: null, isPrimary: true });
-            } else if (emailsMatch(email, globalCfg.secondaryEmail)) {
-                accesses.push({ location: null, isPrimary: false });
-            }
-        }
-    }
-
-    return accesses;
-}
-
-// Build the Sequelize location WHERE clause from the accesses list.
-function locationWhere(accesses) {
-    if (accesses.some(a => a.location === null)) return {}; // global — no filter
-    const locs = [...new Set(accesses.map(a => a.location))];
-    return { location: { [Op.in]: locs } };
-}
-
-// Status → portal slug (for auto-routing from an action token).
-// PendingHOD has no portal — HOD is an ad-hoc approver, not a configured role.
 const STATUS_TO_SLUG = {
     PendingIT:                'it-ops',
     PendingDCI:               'dci-team',
@@ -126,48 +75,184 @@ const STATUS_TO_SLUG = {
     PendingOPSAction:         'it-ops',
 };
 
+// ── Identity helpers ───────────────────────────────────────────────────────────
+
+// Strip "DOMAIN\" prefix from the IIS X-Auth-User header value.
+function stripDomain(s) {
+    if (!s) return '';
+    const parts = String(s).split('\\');
+    return (parts.length > 1 ? parts[1] : parts[0]).trim().toLowerCase();
+}
+
+// Does a config row's PRIMARY slot match this Windows username?
+// Check order:
+//   1. Explicit approverUsername field (new — set by admin UI going forward).
+//   2. Email local part (backward compat for rows configured before username was added).
+function rowMatchesPrimary(row, username) {
+    if (row.approverUsername) return row.approverUsername.toLowerCase() === username;
+    if (row.approverEmail)    return row.approverEmail.split('@')[0].toLowerCase() === username;
+    return false;
+}
+
+function rowMatchesSecondary(row, username) {
+    if (row.secondaryUsername) return row.secondaryUsername.toLowerCase() === username;
+    if (row.secondaryEmail)    return row.secondaryEmail.split('@')[0].toLowerCase() === username;
+    return false;
+}
+
+// ── Access resolution ──────────────────────────────────────────────────────────
+//
+// Returns { accesses: [{location, isPrimary}], email: string }
+// accesses = [] means the user is not configured for this role.
+// email is the stored approverEmail (used for canAct comparison with
+// currentStageAssigneeEmail — kept for backward compat until that field
+// is replaced with currentStageAssigneeUsername).
+async function resolveAccess(username, roleKey) {
+    const accesses = [];
+    let email = '';
+
+    if (LOCATION_AWARE.has(roleKey)) {
+        const overrides = await WorkflowApproverLocationOverride.findAll({
+            where: { roleKey, isActive: true }
+        });
+        for (const ov of overrides) {
+            if (rowMatchesPrimary(ov, username)) {
+                accesses.push({ location: ov.location, isPrimary: true });
+                if (!email) email = ov.approverEmail || '';
+            } else if (rowMatchesSecondary(ov, username)) {
+                accesses.push({ location: ov.location, isPrimary: false });
+                if (!email) email = ov.secondaryEmail || '';
+            }
+        }
+    }
+
+    if (accesses.length === 0) {
+        const globalCfg = await WorkflowApproverConfig.findOne({
+            where: { roleKey, isActive: true }
+        });
+        if (globalCfg) {
+            if (rowMatchesPrimary(globalCfg, username)) {
+                accesses.push({ location: null, isPrimary: true });
+                email = globalCfg.approverEmail || '';
+            } else if (rowMatchesSecondary(globalCfg, username)) {
+                accesses.push({ location: null, isPrimary: false });
+                email = globalCfg.secondaryEmail || '';
+            }
+        }
+    }
+
+    return { accesses, email };
+}
+
+// Build the Sequelize location WHERE clause from the accesses list.
+function locationWhere(accesses) {
+    if (accesses.some(a => a.location === null)) return {};
+    const locs = [...new Set(accesses.map(a => a.location))];
+    return { location: { [Op.in]: locs } };
+}
+
 // ── Route handlers ─────────────────────────────────────────────────────────────
 
-// Auto-authenticate from an action token embedded in an email link.
-// Flow: email link → /portal/:roleSlug/enter?action=ACTION_TOKEN
-//        → validates token, issues portal session, redirects to dashboard
-//        with ?expand=REQUEST_ID so the correct card is highlighted.
+// GET /portal/:roleSlug
+// IIS has already authenticated the user via Windows Auth and injected X-Auth-User.
+// We read that identity, check the approver config, and auto-redirect to the dashboard.
+// No email entry form, no email link — Windows login name IS the identity.
+export async function showLogin(req, res) {
+    const roleSlug = req.params.roleSlug;
+    const roleKey  = ROLE_SLUGS[roleSlug];
+    if (!roleKey) return res.status(404).send('Unknown portal.');
+
+    const rawHeader = req.headers['x-auth-user'] || '';
+    const username  = stripDomain(rawHeader);
+
+    if (!username) {
+        return res.status(403).render('pages/message', {
+            title:      'Intranet Access Required',
+            heading:    'Intranet Access Required',
+            titleClass: 'error',
+            icon:       '🔒',
+            iconClass:  'error-icon',
+            message:    'This portal is only accessible from within the IFL intranet. Please open it from a domain-joined computer on the company network.',
+        });
+    }
+
+    try {
+        const { accesses, email } = await resolveAccess(username, roleKey);
+
+        if (accesses.length === 0) {
+            logger.warn(`[Portal] ${username} not configured for ${roleKey}`);
+            return res.status(403).render('pages/message', {
+                title:      'Portal Access Denied',
+                heading:    'Not Authorised',
+                titleClass: 'error',
+                icon:       '⛔',
+                iconClass:  'error-icon',
+                message:    `Your Windows account "${username}" is not configured as an approver for the ${ROLE_META[roleKey].label} portal. Contact your administrator to be added.`,
+            });
+        }
+
+        const meta  = ROLE_META[roleKey];
+        const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
+        logger.info(`[Portal] Auto-login → ${username} for ${roleKey}`);
+        return res.redirect(`/portal/${roleSlug}/view?token=${token}`);
+    } catch (err) {
+        logger.error(`[Portal] showLogin error: ${err.message}`);
+        return res.status(500).render('pages/message', {
+            title:   'Portal Error',
+            heading: 'Something went wrong',
+            message: 'Could not load the portal. Please try again.',
+        });
+    }
+}
+
+// GET /portal/:roleSlug/enter?action=TOKEN
+// Entry point from an emailed action link.
+// Action token proves the user received the email; we then verify their
+// Windows identity is still a configured approver and issue a portal session.
+// Never returns 401 — no popup loop risk.
 export async function enterViaActionToken(req, res) {
-    const roleSlug   = req.params.roleSlug;
-    const roleKey    = ROLE_SLUGS[roleSlug];
+    const roleSlug    = req.params.roleSlug;
+    const roleKey     = ROLE_SLUGS[roleSlug];
     const actionToken = req.query.action;
 
     if (!roleKey || !actionToken) return res.redirect(`/portal/${roleSlug || ''}`);
+
+    const rawHeader = req.headers['x-auth-user'] || '';
+    const username  = stripDomain(rawHeader);
 
     try {
         const request = await OnboardingRequest.findOne({
             where: { currentStageToken: actionToken }
         });
+        if (!request) return res.redirect(`/portal/${roleSlug}?expired=1`);
 
-        if (!request) {
-            // Token already consumed (stage moved on) — send to login with message
-            return res.redirect(`/portal/${roleSlug}?expired=1`);
-        }
-
-        const userEmail = request.currentStageAssigneeEmail;
-        if (!userEmail) return res.redirect(`/portal/${roleSlug}?expired=1`);
-
-        // Confirm this action token is actually for this portal's role
+        // Auto-correct if the request has moved to a different stage.
         const expectedSlug = STATUS_TO_SLUG[request.status];
         if (expectedSlug && expectedSlug !== roleSlug) {
             return res.redirect(`/portal/${expectedSlug}/enter?action=${actionToken}`);
         }
 
-        const accesses = await resolveAccess(userEmail, roleKey);
-        // If email isn't in config yet (edge case), create a minimal context from the request
-        const effectiveAccesses = accesses.length > 0
-            ? accesses
-            : [{ location: request.location || null, isPrimary: false }];
+        if (!username) {
+            logger.warn(`[Portal] No Windows identity on ${roleSlug}/enter — redirecting to login`);
+            return res.redirect(`/portal/${roleSlug}`);
+        }
+
+        const { accesses, email } = await resolveAccess(username, roleKey);
+        if (accesses.length === 0) {
+            logger.warn(`[Portal] ${username} not authorised for ${roleKey} (action-token path)`);
+            return res.status(403).render('pages/message', {
+                title:      'Portal Access Denied',
+                heading:    'Not Authorised',
+                titleClass: 'error',
+                icon:       '⛔',
+                iconClass:  'error-icon',
+                message:    `Your Windows account "${username}" is not configured as an approver for the ${ROLE_META[roleKey].label} portal. Contact your administrator.`,
+            });
+        }
 
         const meta  = ROLE_META[roleKey];
-        const token = issueToken({ roleKey, email: userEmail, accesses: effectiveAccesses, roleName: meta.label });
-
-        logger.info(`[Portal] Auto-auth via action token → ${userEmail} for ${roleKey} (req #${request.id})`);
+        const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
+        logger.info(`[Portal] Enter via action token → ${username} for ${roleKey} (req #${request.id})`);
         return res.redirect(`/portal/${roleSlug}/view?token=${token}&expand=${request.id}`);
     } catch (err) {
         logger.error(`[Portal] enterViaActionToken error: ${err.message}`);
@@ -175,62 +260,7 @@ export async function enterViaActionToken(req, res) {
     }
 }
 
-export function showLogin(req, res) {
-    const roleSlug = req.params.roleSlug;
-    const roleKey  = ROLE_SLUGS[roleSlug];
-    if (!roleKey) return res.status(404).send('Unknown portal.');
-    const meta = ROLE_META[roleKey];
-    res.render('pages/portal_login', {
-        roleSlug,
-        roleName: meta.label,
-        sent:     false,
-        error:    null,
-    });
-}
-
-export async function requestAccess(req, res) {
-    const roleSlug = req.params.roleSlug;
-    const roleKey  = ROLE_SLUGS[roleSlug];
-    if (!roleKey) return res.status(404).send('Unknown portal.');
-    const meta  = ROLE_META[roleKey];
-    const email = (req.body.email || '').trim().toLowerCase();
-
-    if (!email) {
-        return res.render('pages/portal_login', {
-            roleSlug, roleName: meta.label, sent: false,
-            error: 'Please enter your email address.',
-        });
-    }
-
-    try {
-        const accesses = await resolveAccess(email, roleKey);
-
-        if (accesses.length === 0) {
-            logger.warn(`[Portal] Access denied — ${email} is not configured for ${roleKey}`);
-            return res.render('pages/portal_login', {
-                roleSlug, roleName: meta.label, sent: false,
-                error: 'Your email is not authorised for this portal. Contact your administrator.',
-            });
-        }
-
-        const token = issueToken({ roleKey, email, accesses, roleName: meta.label });
-        const portalUrl = `${process.env.APP_URL}/portal/${roleSlug}/view?token=${token}`;
-
-        await sendPortalAccessLink(email, meta.label, portalUrl);
-        logger.info(`[Portal] Access link sent to ${email} for ${roleKey} (${accesses.length} location(s))`);
-
-        return res.render('pages/portal_login', {
-            roleSlug, roleName: meta.label, sent: true, error: null,
-        });
-    } catch (err) {
-        logger.error(`[Portal] requestAccess error: ${err.message}`);
-        return res.render('pages/portal_login', {
-            roleSlug, roleName: meta.label, sent: false,
-            error: 'Something went wrong. Please try again.',
-        });
-    }
-}
-
+// GET /portal/:roleSlug/view?token=SESSION
 export async function showDashboard(req, res) {
     const roleSlug = req.params.roleSlug;
     const roleKey  = ROLE_SLUGS[roleSlug];
@@ -241,8 +271,8 @@ export async function showDashboard(req, res) {
         return res.redirect(`/portal/${roleSlug}?expired=1`);
     }
 
-    const meta    = ROLE_META[roleKey];
-    const { email, accesses, roleName } = session;
+    const meta = ROLE_META[roleKey];
+    const { username, email, accesses, roleName } = session;
     const locWhere = locationWhere(accesses);
 
     try {
@@ -250,7 +280,6 @@ export async function showDashboard(req, res) {
         let historyRequests = [];
 
         if (roleKey === 'HR_INITIATOR') {
-            // HR sees all active (non-terminal) requests from their location(s).
             pendingRequests = await OnboardingRequest.findAll({
                 where: {
                     ...locWhere,
@@ -267,7 +296,6 @@ export async function showDashboard(req, res) {
                 limit: 100,
             });
         } else {
-            // For all other roles: pending = requests in their stage(s).
             pendingRequests = await OnboardingRequest.findAll({
                 where: {
                     ...locWhere,
@@ -276,8 +304,6 @@ export async function showDashboard(req, res) {
                 order: [['createdAt', 'ASC']],
             });
 
-            // History = requests where the role's timestamp field is set
-            // AND the request has moved past this role's stage.
             if (meta.historyField) {
                 historyRequests = await OnboardingRequest.findAll({
                     where: {
@@ -291,12 +317,18 @@ export async function showDashboard(req, res) {
             }
         }
 
-        // Annotate each pending request with whether this user can act on it.
+        const portalSessionToken = req.query.token || '';
+
         const pending = pendingRequests.map(r => ({
             ...r.toJSON(),
-            canAct: emailsMatch(r.currentStageAssigneeEmail, email),
+            // canAct: this request is assigned to this user.
+            // Compared by email for now (currentStageAssigneeEmail is set by
+            // recipientService which returns the stored approverEmail).
+            canAct: email
+                ? emailsMatch(r.currentStageAssigneeEmail, email)
+                : r.currentStageAssigneeEmail?.split('@')[0]?.toLowerCase() === username,
             actionUrl: r.currentStageToken
-                ? `${process.env.APP_URL}/api/onboarding/handle?token=${r.currentStageToken}`
+                ? `${process.env.APP_URL}/api/onboarding/handle?token=${r.currentStageToken}&pt=${portalSessionToken}`
                 : null,
         }));
 
@@ -305,31 +337,28 @@ export async function showDashboard(req, res) {
             historyUrl: `${process.env.APP_URL}/api/onboarding/history/${r.id}`,
         }));
 
-        // Convert group keys (e.g. "HO_FSD") to display labels
-        // (e.g. "HO / ISB / MUL / P10 / SIDHUPURA / KHI") for the view.
         const locationLabels = accesses.some(a => a.location === null)
             ? ['All Locations']
             : [...new Set(accesses.map(a => a.location))].map(k => groupLabel(k) || k);
 
         const isPrimary = accesses.some(a => a.isPrimary);
-
-        const expandId = parseInt(req.query.expand, 10) || null;
+        const expandId  = parseInt(req.query.expand, 10) || null;
 
         res.render('pages/portal_dashboard', {
             roleSlug,
             roleKey,
             roleName,
-            roleModel: meta.roleModel,
-            userEmail: email,
+            roleModel:      meta.roleModel,
+            userEmail:      email,
             locationLabels,
             isPrimary,
             pending,
             history,
-            pendingCount: pending.length,
-            actionCount:  pending.filter(r => r.canAct).length,
+            pendingCount:   pending.length,
+            actionCount:    pending.filter(r => r.canAct).length,
             expandId,
-            token: req.query.token,
-            appUrl: process.env.APP_URL,
+            token:          req.query.token,
+            appUrl:         process.env.APP_URL,
         });
     } catch (err) {
         logger.error(`[Portal] showDashboard error: ${err.message}`);

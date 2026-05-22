@@ -238,7 +238,7 @@ async function loadRequests(page = 1) {
   });
 
   try {
-    const res = await fetch(`/admin/onboarding-requests?${params}`);
+    const res = await window.iflFetch(`/admin/onboarding-requests?${params}`);
     const json = await res.json();
 
     if (!json.success || !json.data.length) {
@@ -284,7 +284,7 @@ let currentModalStatus = null;
 
 async function loadTimeline(id, name, empId) {
   try {
-    const res = await fetch(`/admin/onboarding-timeline/${id}`);
+    const res = await window.iflFetch(`/admin/onboarding-timeline/${id}`);
     const json = await res.json();
 
     if (!json.success) {
@@ -330,7 +330,7 @@ async function resendStageEmail() {
   if (btn) { btn.disabled = true; btn.innerHTML = 'Sending…'; }
 
   try {
-    const res = await fetch(`/admin/onboarding/${currentModalRequestId}/resend-email`, {
+    const res = await window.iflFetch(`/admin/onboarding/${currentModalRequestId}/resend-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(overrideEmail ? { toEmail: overrideEmail } : {})

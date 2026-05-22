@@ -53,6 +53,15 @@
     color:var(--a-red); padding:5px 12px; border-radius:var(--a-radius-sm);
     cursor:pointer; font-size:.75rem; font-weight:600; }
   .a-clear-override-btn:hover { background:var(--a-red-bg); }
+
+  .a-input--mono { font-family:'Consolas','Monaco','Courier New',monospace; font-size:.83rem; }
+  .a-label-hint  { font-size:.62rem; font-weight:400; color:var(--a-text-muted); margin-left:3px; }
+  .uname-badge   { display:inline-flex; align-items:center; font-size:.64rem; font-weight:700;
+    padding:2px 8px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+  .uname-badge--ok      { background:#dcfce7; color:#16a34a; }
+  .uname-badge--warn    { background:#fef3c7; color:#b45309; }
+  .uname-badge--loading { background:#f1f5f9; color:#64748b; }
+  .uname-badge--err     { background:#fee2e2; color:#dc2626; }
 </style>
 
 <%
@@ -114,10 +123,20 @@
     </div>
     <div class="a-field-row">
       <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
-        <input type="email" id="email-<%= itOps.id %>" class="a-input <%= !itOps.approverEmail ? 'a-input--warn' : '' %>"
-               value="<%= itOps.approverEmail || '' %>" placeholder="primary@company.com" oninput="onInput(<%= itOps.id %>, this)"></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="email" id="email-<%= itOps.id %>" class="a-input <%= !itOps.approverEmail ? 'a-input--warn' : '' %>" style="flex:1;"
+                 value="<%= itOps.approverEmail || '' %>" placeholder="primary@company.com" oninput="onInput(<%= itOps.id %>, this)">
+          <span id="email-badge-<%= itOps.id %>" class="uname-badge"></span>
+        </div></div>
       <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
         <input type="text" id="name-<%= itOps.id %>" class="a-input" value="<%= itOps.approverName || '' %>" placeholder="Person name"></div>
+    </div>
+    <div class="a-field" style="margin-top:4px;">
+      <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName — required for portal access</span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="username-<%= itOps.id %>" class="a-input a-input--mono" value="<%= itOps.approverUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+        <span id="uname-badge-<%= itOps.id %>" class="uname-badge"></span>
+      </div>
     </div>
   </div>
 
@@ -132,10 +151,20 @@
     </div>
     <div class="a-field-row">
       <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
-        <input type="email" id="semail-<%= itOps.id %>" class="a-input" value="<%= itOps.secondaryEmail || '' %>" placeholder="secondary@company.com"
-               oninput="document.getElementById('st-<%= itOps.id %>').textContent=''"></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="email" id="semail-<%= itOps.id %>" class="a-input" style="flex:1;" value="<%= itOps.secondaryEmail || '' %>" placeholder="secondary@company.com"
+                 oninput="onSEmailInput(<%= itOps.id %>, this)">
+          <span id="semail-badge-<%= itOps.id %>" class="uname-badge"></span>
+        </div></div>
       <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
         <input type="text" id="sname-<%= itOps.id %>" class="a-input" value="<%= itOps.secondaryName || '' %>" placeholder="Person name"></div>
+    </div>
+    <div class="a-field" style="margin-top:4px;">
+      <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName</span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="susername-<%= itOps.id %>" class="a-input a-input--mono" value="<%= itOps.secondaryUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+        <span id="suname-badge-<%= itOps.id %>" class="uname-badge"></span>
+      </div>
     </div>
   </div>
 
@@ -187,10 +216,20 @@
     </div>
     <div class="a-field-row">
       <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
-        <input type="email" id="email-<%= hrInit.id %>" class="a-input" value="<%= hrInit.approverEmail || '' %>" placeholder="seat-a@company.com"
-               oninput="onInput(<%= hrInit.id %>, this)"></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="email" id="email-<%= hrInit.id %>" class="a-input" style="flex:1;" value="<%= hrInit.approverEmail || '' %>" placeholder="seat-a@company.com"
+                 oninput="onInput(<%= hrInit.id %>, this)">
+          <span id="email-badge-<%= hrInit.id %>" class="uname-badge"></span>
+        </div></div>
       <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
         <input type="text" id="name-<%= hrInit.id %>" class="a-input" value="<%= hrInit.approverName || '' %>" placeholder="Person name"></div>
+    </div>
+    <div class="a-field" style="margin-top:4px;">
+      <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName — required for portal access</span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="username-<%= hrInit.id %>" class="a-input a-input--mono" value="<%= hrInit.approverUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+        <span id="uname-badge-<%= hrInit.id %>" class="uname-badge"></span>
+      </div>
     </div>
   </div>
 
@@ -204,10 +243,20 @@
     </div>
     <div class="a-field-row">
       <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
-        <input type="email" id="semail-<%= hrInit.id %>" class="a-input" value="<%= hrInit.secondaryEmail || '' %>" placeholder="seat-b@company.com"
-               oninput="document.getElementById('st-<%= hrInit.id %>').textContent=''"></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="email" id="semail-<%= hrInit.id %>" class="a-input" style="flex:1;" value="<%= hrInit.secondaryEmail || '' %>" placeholder="seat-b@company.com"
+                 oninput="onSEmailInput(<%= hrInit.id %>, this)">
+          <span id="semail-badge-<%= hrInit.id %>" class="uname-badge"></span>
+        </div></div>
       <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
         <input type="text" id="sname-<%= hrInit.id %>" class="a-input" value="<%= hrInit.secondaryName || '' %>" placeholder="Person name"></div>
+    </div>
+    <div class="a-field" style="margin-top:4px;">
+      <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName</span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="susername-<%= hrInit.id %>" class="a-input a-input--mono" value="<%= hrInit.secondaryUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+        <span id="suname-badge-<%= hrInit.id %>" class="uname-badge"></span>
+      </div>
     </div>
   </div>
 
@@ -259,12 +308,22 @@
     <input type="text" id="psearch-<%= ap.id %>" class="a-input" placeholder="Search to change assignee…" autocomplete="off"
            oninput="onApproverSearch(<%= ap.id %>, 'primary', this.value)" onkeydown="onApproverKey(event)">
   </div>
-  <div class="a-field-row" style="margin-bottom:14px;">
+  <div class="a-field-row" style="margin-bottom:4px;">
     <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
-      <input type="email" id="email-<%= ap.id %>" class="a-input <%= !ap.approverEmail ? 'a-input--warn' : '' %>"
-             value="<%= ap.approverEmail || '' %>" placeholder="assignee@company.com" oninput="onInput(<%= ap.id %>, this)"></div>
+      <div style="display:flex;gap:5px;align-items:center;">
+        <input type="email" id="email-<%= ap.id %>" class="a-input <%= !ap.approverEmail ? 'a-input--warn' : '' %>" style="flex:1;"
+               value="<%= ap.approverEmail || '' %>" placeholder="assignee@company.com" oninput="onInput(<%= ap.id %>, this)">
+        <span id="email-badge-<%= ap.id %>" class="uname-badge"></span>
+      </div></div>
     <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
       <input type="text" id="name-<%= ap.id %>" class="a-input" value="<%= ap.approverName || '' %>" placeholder="Person name"></div>
+  </div>
+  <div class="a-field" style="margin-bottom:14px;">
+    <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName — required for portal access</span></label>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <input type="text" id="username-<%= ap.id %>" class="a-input a-input--mono" value="<%= ap.approverUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+      <span id="uname-badge-<%= ap.id %>" class="uname-badge"></span>
+    </div>
   </div>
 
   <div class="wf-dtype-box">
@@ -337,10 +396,20 @@
     </div>
     <div class="a-field-row">
       <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
-        <input type="email" id="email-<%= ap.id %>" class="a-input <%= !ap.approverEmail ? 'a-input--warn' : '' %>"
-               value="<%= ap.approverEmail || '' %>" placeholder="primary@company.com" oninput="onInput(<%= ap.id %>, this)"></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="email" id="email-<%= ap.id %>" class="a-input <%= !ap.approverEmail ? 'a-input--warn' : '' %>" style="flex:1;"
+                 value="<%= ap.approverEmail || '' %>" placeholder="primary@company.com" oninput="onInput(<%= ap.id %>, this)">
+          <span id="email-badge-<%= ap.id %>" class="uname-badge"></span>
+        </div></div>
       <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
         <input type="text" id="name-<%= ap.id %>" class="a-input" value="<%= ap.approverName || '' %>" placeholder="Person name"></div>
+    </div>
+    <div class="a-field" style="margin-top:4px;">
+      <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName — required for portal access</span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="username-<%= ap.id %>" class="a-input a-input--mono" value="<%= ap.approverUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+        <span id="uname-badge-<%= ap.id %>" class="uname-badge"></span>
+      </div>
     </div>
   </div>
 
@@ -355,10 +424,20 @@
     </div>
     <div class="a-field-row">
       <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
-        <input type="email" id="semail-<%= ap.id %>" class="a-input" value="<%= ap.secondaryEmail || '' %>" placeholder="secondary@company.com"
-               oninput="document.getElementById('st-<%= ap.id %>').textContent=''"></div>
+        <div style="display:flex;gap:5px;align-items:center;">
+          <input type="email" id="semail-<%= ap.id %>" class="a-input" style="flex:1;" value="<%= ap.secondaryEmail || '' %>" placeholder="secondary@company.com"
+                 oninput="onSEmailInput(<%= ap.id %>, this)">
+          <span id="semail-badge-<%= ap.id %>" class="uname-badge"></span>
+        </div></div>
       <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
         <input type="text" id="sname-<%= ap.id %>" class="a-input" value="<%= ap.secondaryName || '' %>" placeholder="Person name"></div>
+    </div>
+    <div class="a-field" style="margin-top:4px;">
+      <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName</span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="susername-<%= ap.id %>" class="a-input a-input--mono" value="<%= ap.secondaryUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+        <span id="suname-badge-<%= ap.id %>" class="uname-badge"></span>
+      </div>
     </div>
   </div>
 
@@ -396,7 +475,10 @@
   <% } %>
   <div class="a-field-row">
     <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
-      <input type="email" id="email-<%= ap.id %>" class="a-input" value="<%= ap.approverEmail || '' %>" placeholder="approver@company.com" oninput="onInput(<%= ap.id %>, this)"></div>
+      <div style="display:flex;gap:5px;align-items:center;">
+        <input type="email" id="email-<%= ap.id %>" class="a-input" style="flex:1;" value="<%= ap.approverEmail || '' %>" placeholder="approver@company.com" oninput="onInput(<%= ap.id %>, this)">
+        <span id="email-badge-<%= ap.id %>" class="uname-badge"></span>
+      </div></div>
     <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
       <input type="text" id="name-<%= ap.id %>" class="a-input" value="<%= ap.approverName || '' %>" placeholder="Person name"></div>
   </div>
@@ -507,16 +589,15 @@ function suggestLoading() {
 function suggestEmpty(q) {
   return `<div class="a-suggest-empty">No results for "<strong>${q}</strong>"</div>`;
 }
-function empHTML(emp, q) {
+function adUserHTML(user, q) {
   return `<div class="a-suggest-item">
-    <div class="a-suggest-item__avatar">${(emp.name || '?').charAt(0).toUpperCase()}</div>
+    <div class="a-suggest-item__avatar">${(user.displayName || '?').charAt(0).toUpperCase()}</div>
     <div class="a-suggest-item__body">
-      <div class="a-suggest-item__name">${highlight(emp.name, q)}</div>
+      <div class="a-suggest-item__name">${highlight(user.displayName, q)}</div>
       <div class="a-suggest-item__meta">
-        <strong>${emp.employeeId}</strong>
-        ${emp.department ? ' · ' + highlight(emp.department, q) : ''}
-        ${emp.designation ? ' · ' + emp.designation : ''}
-        ${emp.email ? ' · ' + highlight(emp.email, q) : ''}
+        <strong style="font-family:monospace;font-size:.8rem;">${highlight(user.sAMAccountName, q)}</strong>
+        ${user.email ? ' · ' + highlight(user.email, q) : ''}
+        ${user.title ? ' · ' + user.title : ''}
       </div>
     </div>
     <span class="a-suggest-item__badge" style="background:var(--a-brand-light);color:var(--a-brand);">Select</span>
@@ -535,24 +616,58 @@ async function _approverSuggestFetch(id, which, q) {
 
   FloatSuggest.show(inp, suggestLoading(), () => {});
   try {
-    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
+    const res  = await window.iflFetch(`/admin/ad-search?q=${encodeURIComponent(q)}`);
     const json = await res.json();
-    if (!json.success || !json.data.length) { FloatSuggest.show(inp, suggestEmpty(q), () => {}); return; }
-    const html = json.data.map(emp => empHTML(emp, q)).join('');
+    if (!json.success || !json.results || !json.results.length) {
+      FloatSuggest.show(inp, suggestEmpty(q), () => {});
+      return;
+    }
+    const html = json.results.map(u => adUserHTML(u, q)).join('');
     FloatSuggest.show(inp, html, (item, i) => {
-      const emp = json.data[i];
-      const emailId = (which === 'primary' ? 'email-' : 'semail-') + id;
-      const nameId  = (which === 'primary' ? 'name-'  : 'sname-')  + id;
-      const emailInp = document.getElementById(emailId);
-      const nameInp  = document.getElementById(nameId);
-      if (emp.email && emailInp) { emailInp.value = emp.email; emailInp.classList.remove('a-input--warn'); }
-      if (emp.name  && nameInp)  nameInp.value = emp.name;
+      const user       = json.results[i];
+      const emailId      = (which === 'primary' ? 'email-'       : 'semail-')      + id;
+      const nameId       = (which === 'primary' ? 'name-'        : 'sname-')       + id;
+      const usernameId   = (which === 'primary' ? 'username-'    : 'susername-')   + id;
+      const badgeId      = (which === 'primary' ? 'uname-badge-' : 'suname-badge-')+ id;
+      const emailBadgeId = (which === 'primary' ? 'email-badge-' : 'semail-badge-')+ id;
+      const emailInp   = document.getElementById(emailId);
+      const nameInp    = document.getElementById(nameId);
+      const userInp    = document.getElementById(usernameId);
+      const badgeEl    = document.getElementById(badgeId);
+      const emailBadge = document.getElementById(emailBadgeId);
+      if (user.email && emailInp) {
+        emailInp.value = user.email;
+        emailInp.classList.remove('a-input--warn');
+        if (emailBadge) { emailBadge.className = 'uname-badge uname-badge--ok'; emailBadge.textContent = '✓ from AD'; }
+      }
+      if (user.displayName && nameInp) nameInp.value = user.displayName;
+      if (user.sAMAccountName && userInp) {
+        userInp.value = user.sAMAccountName.toLowerCase();
+        if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--ok'; badgeEl.textContent = '✓ from AD'; }
+      }
       inp.value = '';
       FloatSuggest.close();
       setStatus(id, 'ing', 'Unsaved changes');
     });
   } catch {
     FloatSuggest.show(inp, '<div class="a-suggest-empty" style="color:var(--a-red);">Error fetching results</div>', () => {});
+  }
+}
+
+async function lookupAdLoginName(email, userInp, badgeEl) {
+  if (!email || !userInp) return;
+  if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--loading'; badgeEl.textContent = 'Looking up…'; }
+  try {
+    const r = await window.iflFetch('/admin/ad-user?email=' + encodeURIComponent(email));
+    const d = await r.json();
+    if (d.found && d.sAMAccountName) {
+      userInp.value = d.sAMAccountName.toLowerCase();
+      if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--ok'; badgeEl.textContent = '✓ from AD'; }
+    } else {
+      if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--warn'; badgeEl.textContent = '⚠ not in AD — enter manually'; }
+    }
+  } catch {
+    if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--err'; badgeEl.textContent = 'lookup failed'; }
   }
 }
 
@@ -587,6 +702,14 @@ function onToggle(id) {
 function onInput(id, el) {
   el.classList.toggle('a-input--warn', !el.value.trim());
   document.getElementById('st-' + id).textContent = '';
+  const b = document.getElementById('email-badge-' + id);
+  if (b) { b.className = 'uname-badge'; b.textContent = ''; }
+}
+
+function onSEmailInput(id, el) {
+  document.getElementById('st-' + id).textContent = '';
+  const b = document.getElementById('semail-badge-' + id);
+  if (b) { b.className = 'uname-badge'; b.textContent = ''; }
 }
 
 /* ================================================================
@@ -600,21 +723,34 @@ function snapCard(id) {
   const g = (eid) => { const el = document.getElementById(eid + id); return el ? el.value : ''; };
   const act = document.getElementById('active-' + id);
   return {
-    approverEmail:  g('email-'),
-    approverName:   g('name-'),
-    secondaryEmail: g('semail-'),
-    secondaryName:  g('sname-'),
-    isActive:       act ? act.checked : true
+    approverEmail:     g('email-'),
+    approverName:      g('name-'),
+    approverUsername:  g('username-'),
+    secondaryEmail:    g('semail-'),
+    secondaryName:     g('sname-'),
+    secondaryUsername: g('susername-'),
+    isActive:          act ? act.checked : true
   };
 }
 
 function applyCardData(id, ap, { isOverride, isDefault }) {
   if (!ap) return;
   const set = (eid, val) => { const el = document.getElementById(eid + id); if (el) el.value = val || ''; };
-  set('email-',  ap.approverEmail);
-  set('name-',   ap.approverName);
-  set('semail-', ap.secondaryEmail);
-  set('sname-',  ap.secondaryName);
+  set('email-',     ap.approverEmail);
+  set('name-',      ap.approverName);
+  set('username-',  ap.approverUsername);
+  set('semail-',    ap.secondaryEmail);
+  set('sname-',     ap.secondaryName);
+  set('susername-', ap.secondaryUsername);
+  const clrBadge = (bid) => { const b = document.getElementById(bid + id); if (b) { b.className = 'uname-badge'; b.textContent = ''; } };
+  const setBadgeOk = (bid) => { const b = document.getElementById(bid + id); if (b) { b.className = 'uname-badge uname-badge--ok'; b.textContent = '✓ from AD'; } };
+  clrBadge('uname-badge-');
+  clrBadge('suname-badge-');
+  clrBadge('email-badge-');
+  clrBadge('semail-badge-');
+  // Restore AD badges for fields that were previously verified and saved.
+  if (ap.approverUsername)  { setBadgeOk('uname-badge-');  if (ap.approverEmail)  setBadgeOk('email-badge-');  }
+  if (ap.secondaryUsername) { setBadgeOk('suname-badge-'); if (ap.secondaryEmail) setBadgeOk('semail-badge-'); }
 
   const act = document.getElementById('active-' + id);
   if (act && typeof ap.isActive === 'boolean') {
@@ -672,7 +808,7 @@ async function onLocChange(id, roleKey) {
 async function loadForLocation(id, roleKey, location) {
   setStatus(id, 'ing', 'Loading…');
   try {
-    const r = await fetch('/admin/workflow-approvers/by-location?location=' + encodeURIComponent(location));
+    const r = await window.iflFetch('/admin/workflow-approvers/by-location?location=' + encodeURIComponent(location));
     const j = await r.json();
     if (!j.success || !Array.isArray(j.data)) { showToast('err', j.error || 'Load failed'); return; }
     const row = j.data.find(x => x.roleKey === roleKey);
@@ -687,12 +823,14 @@ async function loadForLocation(id, roleKey, location) {
 }
 
 async function saveLocCard(id, roleKey) {
-  const location       = locScope[id] || '';
-  const email          = (document.getElementById('email-'  + id) || {}).value?.trim() || '';
-  const name           = (document.getElementById('name-'   + id) || {}).value?.trim() || '';
-  const secondaryEmail = (document.getElementById('semail-' + id) || {}).value?.trim() || '';
-  const secondaryName  = (document.getElementById('sname-'  + id) || {}).value?.trim() || '';
-  const active         = document.getElementById('active-' + id)?.checked ?? true;
+  const location        = locScope[id] || '';
+  const email             = document.getElementById('email-'      + id)?.value?.trim() || '';
+  const name              = document.getElementById('name-'       + id)?.value?.trim() || '';
+  const username          = document.getElementById('username-'   + id)?.value?.trim().toLowerCase() || '';
+  const secondaryEmail    = document.getElementById('semail-'     + id)?.value?.trim() || '';
+  const secondaryName     = document.getElementById('sname-'      + id)?.value?.trim() || '';
+  const secondaryUsername = document.getElementById('susername-'  + id)?.value?.trim().toLowerCase() || '';
+  const active          = document.getElementById('active-' + id)?.checked ?? true;
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid email'); return; }
@@ -706,16 +844,16 @@ async function saveLocCard(id, roleKey) {
   try {
     let res;
     if (location) {
-      res = await fetch('/admin/workflow-approvers/by-location', {
+      res = await window.iflFetch('/admin/workflow-approvers/by-location', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roleKey, location, approverEmail: email, approverName: name, secondaryEmail, secondaryName, isActive: active })
+        body: JSON.stringify({ roleKey, location, approverEmail: email, approverName: name, approverUsername: username, secondaryEmail, secondaryName, secondaryUsername, isActive: active })
       });
     } else {
-      res = await fetch('/admin/workflow-approvers/' + id, {
+      res = await window.iflFetch('/admin/workflow-approvers/' + id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approverEmail: email || null, approverName: name || null, secondaryEmail: secondaryEmail || null, secondaryName: secondaryName || null, isActive: active })
+        body: JSON.stringify({ approverEmail: email || null, approverName: name || null, approverUsername: username || null, secondaryEmail: secondaryEmail || null, secondaryName: secondaryName || null, secondaryUsername: secondaryUsername || null, isActive: active })
       });
     }
     const data = await res.json();
@@ -745,10 +883,10 @@ async function clearLocOverride(id, roleKey) {
   );
   if (!ok) return;
   try {
-    const res = await fetch('/admin/workflow-approvers/by-location', {
+    const res = await window.iflFetch('/admin/workflow-approvers/by-location', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roleKey, location, approverEmail: '', approverName: '', secondaryEmail: '', secondaryName: '', isActive: true })
+      body: JSON.stringify({ roleKey, location, approverEmail: '', approverName: '', approverUsername: '', secondaryEmail: '', secondaryName: '', secondaryUsername: '', isActive: true })
     });
     const data = await res.json();
     if (data.success) {
@@ -774,9 +912,10 @@ function updateDtypeNote(id, val) {
 }
 
 async function saveDelegation(id) {
-  const email  = document.getElementById('email-' + id)?.value?.trim() || '';
-  const name   = document.getElementById('name-'  + id)?.value?.trim() || '';
-  const active = document.getElementById('active-' + id)?.checked ?? true;
+  const email    = document.getElementById('email-'    + id)?.value?.trim() || '';
+  const name     = document.getElementById('name-'     + id)?.value?.trim() || '';
+  const username = document.getElementById('username-' + id)?.value?.trim().toLowerCase() || '';
+  const active   = document.getElementById('active-' + id)?.checked ?? true;
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid email'); return; }
@@ -787,10 +926,10 @@ async function saveDelegation(id) {
   setStatus(id, 'ing', 'Saving…');
 
   try {
-    const res = await fetch('/admin/workflow-approvers/' + id, {
+    const res = await window.iflFetch('/admin/workflow-approvers/' + id, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approverEmail: email || null, approverName: name || null, secondaryEmail: null, secondaryName: null, isActive: active })
+      body: JSON.stringify({ approverEmail: email || null, approverName: name || null, approverUsername: username || null, secondaryEmail: null, secondaryName: null, secondaryUsername: null, isActive: active })
     });
     const data = await res.json();
     if (data.success) {
@@ -813,11 +952,13 @@ async function saveDelegation(id) {
    2-DAY FALLBACK CARDS (DCI_TEAM, DCI_IMPLEMENTER)
 ================================================================ */
 async function saveFallback(id) {
-  const email          = document.getElementById('email-'  + id)?.value?.trim() || '';
-  const name           = document.getElementById('name-'   + id)?.value?.trim() || '';
-  const secondaryEmail = document.getElementById('semail-' + id)?.value?.trim() || '';
-  const secondaryName  = document.getElementById('sname-'  + id)?.value?.trim() || '';
-  const active         = document.getElementById('active-' + id)?.checked ?? true;
+  const email             = document.getElementById('email-'      + id)?.value?.trim() || '';
+  const name              = document.getElementById('name-'       + id)?.value?.trim() || '';
+  const username          = document.getElementById('username-'   + id)?.value?.trim().toLowerCase() || '';
+  const secondaryEmail    = document.getElementById('semail-'     + id)?.value?.trim() || '';
+  const secondaryName     = document.getElementById('sname-'      + id)?.value?.trim() || '';
+  const secondaryUsername = document.getElementById('susername-'  + id)?.value?.trim().toLowerCase() || '';
+  const active            = document.getElementById('active-' + id)?.checked ?? true;
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
@@ -829,10 +970,10 @@ async function saveFallback(id) {
   setStatus(id, 'ing', 'Saving…');
 
   try {
-    const res = await fetch('/admin/workflow-approvers/' + id, {
+    const res = await window.iflFetch('/admin/workflow-approvers/' + id, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approverEmail: email || null, approverName: name || null, secondaryEmail: secondaryEmail || null, secondaryName: secondaryName || null, isActive: active })
+      body: JSON.stringify({ approverEmail: email || null, approverName: name || null, approverUsername: username || null, secondaryEmail: secondaryEmail || null, secondaryName: secondaryName || null, secondaryUsername: secondaryUsername || null, isActive: active })
     });
     const data = await res.json();
     if (data.success) {

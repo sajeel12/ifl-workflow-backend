@@ -68,7 +68,8 @@ describe('Recipient fallback audit', () => {
                 email: 'secondary@ifl.com',
                 name: 'Secondary User',
                 isFallback: true,
-                source: 'DB_Secondary_LOC[KHI]'
+                source: 'DB_Secondary_LOC[KHI]',
+                username: null
             });
             expect(update).toHaveBeenCalledWith({ primaryExpiredAt: expect.any(Date) });
         } finally {

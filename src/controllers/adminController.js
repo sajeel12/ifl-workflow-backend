@@ -443,20 +443,22 @@ class AdminController {
             // re-rendered cards on the client can PUT to /workflow-approvers/:id.
             if (isDefault) {
                 const data = globals.map(g => ({
-                    id:               g.id,
-                    roleKey:          g.roleKey,
-                    label:            g.label,
-                    description:      g.description,
-                    workflowStage:    g.workflowStage,
-                    approverEmail:    g.approverEmail,
-                    approverName:     g.approverName,
-                    secondaryEmail:   g.secondaryEmail,
-                    secondaryName:    g.secondaryName,
-                    primaryExpiredAt: g.primaryExpiredAt,
-                    isActive:         g.isActive,
-                    isOverride:       false,
-                    overrideId:       null,
-                    location:         null
+                    id:                 g.id,
+                    roleKey:            g.roleKey,
+                    label:              g.label,
+                    description:        g.description,
+                    workflowStage:      g.workflowStage,
+                    approverEmail:      g.approverEmail,
+                    approverName:       g.approverName,
+                    approverUsername:   g.approverUsername,
+                    secondaryEmail:     g.secondaryEmail,
+                    secondaryName:      g.secondaryName,
+                    secondaryUsername:  g.secondaryUsername,
+                    primaryExpiredAt:   g.primaryExpiredAt,
+                    isActive:           g.isActive,
+                    isOverride:         false,
+                    overrideId:         null,
+                    location:           null
                 }));
                 return res.json({ success: true, location: null, data });
             }
@@ -474,35 +476,39 @@ class AdminController {
                 const o = overrideByRole.get(g.roleKey);
                 if (o) {
                     return {
-                        roleKey:          g.roleKey,
-                        label:            g.label,
-                        description:      g.description,
-                        workflowStage:    g.workflowStage,
-                        approverEmail:    o.approverEmail,
-                        approverName:     o.approverName,
-                        secondaryEmail:   o.secondaryEmail,
-                        secondaryName:    o.secondaryName,
-                        primaryExpiredAt: o.primaryExpiredAt,
-                        isActive:         o.isActive,
-                        isOverride:       true,
-                        overrideId:       o.id,
+                        roleKey:            g.roleKey,
+                        label:              g.label,
+                        description:        g.description,
+                        workflowStage:      g.workflowStage,
+                        approverEmail:      o.approverEmail,
+                        approverName:       o.approverName,
+                        approverUsername:   o.approverUsername,
+                        secondaryEmail:     o.secondaryEmail,
+                        secondaryName:      o.secondaryName,
+                        secondaryUsername:  o.secondaryUsername,
+                        primaryExpiredAt:   o.primaryExpiredAt,
+                        isActive:           o.isActive,
+                        isOverride:         true,
+                        overrideId:         o.id,
                         location
                     };
                 }
                 return {
-                    roleKey:          g.roleKey,
-                    label:            g.label,
-                    description:      g.description,
-                    workflowStage:    g.workflowStage,
+                    roleKey:            g.roleKey,
+                    label:              g.label,
+                    description:        g.description,
+                    workflowStage:      g.workflowStage,
                     // Show the global value as a "ghost" so admins know what would be used.
-                    approverEmail:    g.approverEmail,
-                    approverName:     g.approverName,
-                    secondaryEmail:   g.secondaryEmail,
-                    secondaryName:    g.secondaryName,
-                    primaryExpiredAt: null,
-                    isActive:         g.isActive,
-                    isOverride:       false,
-                    overrideId:       null,
+                    approverEmail:      g.approverEmail,
+                    approverName:       g.approverName,
+                    approverUsername:   g.approverUsername,
+                    secondaryEmail:     g.secondaryEmail,
+                    secondaryName:      g.secondaryName,
+                    secondaryUsername:  g.secondaryUsername,
+                    primaryExpiredAt:   null,
+                    isActive:           g.isActive,
+                    isOverride:         false,
+                    overrideId:         null,
                     location
                 };
             });
@@ -548,6 +554,9 @@ class AdminController {
             const secondaryName  = (req.body.secondaryName  || '').trim() || null;
             const isActive       = req.body.isActive !== undefined ? Boolean(req.body.isActive) : true;
 
+            const approverUsername  = (req.body.approverUsername  || '').trim().toLowerCase() || null;
+            const secondaryUsername = (req.body.secondaryUsername || '').trim().toLowerCase() || null;
+
             // Verify the global role exists; we won't accept overrides for
             // unknown roleKeys to keep the data clean.
             const globalCfg = await WorkflowApproverConfig.findOne({ where: { roleKey } });
@@ -556,7 +565,7 @@ class AdminController {
             }
 
             // No useful override content → drop any existing row.
-            if (!approverEmail && !approverName && !secondaryEmail && !secondaryName) {
+            if (!approverEmail && !approverName && !secondaryEmail && !secondaryName && !approverUsername && !secondaryUsername) {
                 const deleted = await WorkflowApproverLocationOverride.destroy({ where: { roleKey, location: location.trim() } });
                 return res.json({
                     success: true,
@@ -567,12 +576,44 @@ class AdminController {
                 });
             }
 
+            // Guard: one person can only appear in ONE location override per role.
+            // Multiple locations for the same person makes routing non-deterministic
+            // (resolveHRGroupForEmail / resolveCurrentRecipient return the first DB row,
+            // which has no guaranteed order). Check both username and email fields since
+            // older rows may lack a username.
+            const uniquenessConditions = [];
+            if (approverUsername)  uniquenessConditions.push({ approverUsername }, { secondaryUsername: approverUsername });
+            if (secondaryUsername) uniquenessConditions.push({ approverUsername: secondaryUsername }, { secondaryUsername });
+            if (approverEmail)     uniquenessConditions.push({ approverEmail }, { secondaryEmail: approverEmail });
+            if (secondaryEmail)    uniquenessConditions.push({ approverEmail: secondaryEmail }, { secondaryEmail });
+
+            if (uniquenessConditions.length > 0) {
+                const conflict = await WorkflowApproverLocationOverride.findOne({
+                    where: {
+                        roleKey,
+                        location: { [Op.ne]: location.trim() },
+                        isActive: true,
+                        [Op.or]: uniquenessConditions
+                    }
+                });
+                if (conflict) {
+                    return res.status(409).json({
+                        success: false,
+                        error: `This person is already assigned to "${roleKey}" at location "${conflict.location}". ` +
+                               `Each person can only be assigned to one location per role — ` +
+                               `otherwise request routing becomes non-deterministic.`
+                    });
+                }
+            }
+
+            const fields = { approverEmail, approverName, approverUsername, secondaryEmail, secondaryName, secondaryUsername, isActive, primaryExpiredAt: null };
+
             const [row, created] = await WorkflowApproverLocationOverride.findOrCreate({
                 where: { roleKey, location: location.trim() },
-                defaults: { approverEmail, approverName, secondaryEmail, secondaryName, isActive }
+                defaults: fields
             });
             if (!created) {
-                await row.update({ approverEmail, approverName, secondaryEmail, secondaryName, isActive });
+                await row.update(fields);
             }
 
             return res.json({
@@ -592,19 +633,33 @@ class AdminController {
     async updateWorkflowApprover(req, res) {
         try {
             const { id } = req.params;
-            const { approverEmail, approverName, secondaryEmail, secondaryName, isActive } = req.body;
+            const {
+                approverEmail, approverName, approverUsername,
+                secondaryEmail, secondaryName, secondaryUsername,
+                isActive
+            } = req.body;
 
             const config = await WorkflowApproverConfig.findByPk(id);
             if (!config) {
                 return res.status(404).json({ success: false, error: 'Approver config not found' });
             }
 
+            const pEmail = approverEmail?.trim()   || null;
+            const sEmail = secondaryEmail?.trim()   || null;
+
+            const pUser  = approverUsername?.trim()?.toLowerCase()  || null;
+            const sUser  = secondaryUsername?.trim()?.toLowerCase() || null;
+
             await config.update({
-                approverEmail:  approverEmail?.trim()  || null,
-                approverName:   approverName?.trim()   || null,
-                secondaryEmail: secondaryEmail?.trim() || null,
-                secondaryName:  secondaryName?.trim()  || null,
-                isActive:       isActive !== undefined ? Boolean(isActive) : config.isActive
+                approverEmail:     pEmail,
+                approverName:      approverName?.trim()  || null,
+                approverUsername:  pUser,
+                secondaryEmail:    sEmail,
+                secondaryName:     secondaryName?.trim() || null,
+                secondaryUsername: sUser,
+                isActive:          isActive !== undefined ? Boolean(isActive) : config.isActive,
+                primaryExpiredAt:  null,
+                lastAssignedAt:    null,
             });
 
             res.json({ success: true, message: `Approver "${config.label}" updated successfully`, data: config });
