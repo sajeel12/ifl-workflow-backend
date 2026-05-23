@@ -42,6 +42,15 @@
     padding:8px 10px; margin-bottom:12px; line-height:1.45; border:1px solid; }
   .wf-callout--green  { background:#f0fdf4; border-color:#bbf7d0; }
   .wf-callout--yellow { background:#fffbeb; border-color:#fde68a; }
+  .wf-callout--orange { background:#fff7ed; border-color:#fed7aa; color:#92400E; }
+
+  .wf-revert-btn {
+    background: #fff7ed; border: 1px solid #F97316; color: #C2410C;
+    padding: 6px 14px; border-radius: var(--a-radius-sm);
+    cursor: pointer; font-size: .78rem; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .wf-revert-btn:hover { background: #FFEDD5; }
 
   .wf-dtype-box { background:var(--a-surface-2); border:1px solid var(--a-border);
     border-radius:var(--a-radius-sm); padding:10px 12px; margin-bottom:12px; }
@@ -299,9 +308,21 @@
   <p style="font-size:.82rem;color:var(--a-text-muted);margin:0 0 10px;line-height:1.5;"><%= ap.description %></p>
   <% } %>
 
+  <% if (ap.isDelegatedTemporarily && ap.previousApproverEmail) { %>
+  <div class="wf-callout wf-callout--orange" style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+    <div>
+      <strong>Temporarily delegated.</strong>
+      Original holder: <strong><%= ap.previousApproverName || ap.previousApproverEmail %></strong>
+      (<%= ap.previousApproverEmail %>) — they can view the portal in read-only mode.
+      Revert to restore their full access.
+    </div>
+    <button class="wf-revert-btn" onclick="revertDelegation('<%= ap.id %>')">&#8635; Revert</button>
+  </div>
+  <% } else { %>
   <div class="wf-callout wf-callout--yellow">
     Reassigning takes effect immediately. The new person sees all pending requests in their portal. Previous email links are blocked and display the new delegate's name.
   </div>
+  <% } %>
 
   <div style="font-weight:700;font-size:.75rem;color:var(--a-text);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Current Assignee</div>
   <div class="a-field" style="margin-bottom:8px;">
@@ -331,19 +352,21 @@
     <div style="display:flex;gap:20px;flex-wrap:wrap;">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.83rem;">
         <input type="radio" name="dtype-<%= ap.id %>" value="permanent"
-               style="accent-color:var(--a-brand);" checked
+               style="accent-color:var(--a-brand);" <%= !ap.isDelegatedTemporarily ? 'checked' : '' %>
                onchange="updateDtypeNote('<%= ap.id %>', this.value)">
         Permanent role change
       </label>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.83rem;">
         <input type="radio" name="dtype-<%= ap.id %>" value="temporary"
-               style="accent-color:var(--a-brand);"
+               style="accent-color:var(--a-brand);" <%= ap.isDelegatedTemporarily ? 'checked' : '' %>
                onchange="updateDtypeNote('<%= ap.id %>', this.value)">
         Temporary delegation
       </label>
     </div>
     <div id="dtype-note-<%= ap.id %>" class="wf-dtype-note">
-      This person permanently holds the role. No expectation of reverting.
+      <%= ap.isDelegatedTemporarily
+            ? "Covering temporarily. Previous person's email links will show they've been delegated to this person."
+            : "This person permanently holds the role. No expectation of reverting." %>
     </div>
   </div>
 
@@ -916,6 +939,7 @@ async function saveDelegation(id) {
   const name     = document.getElementById('name-'     + id)?.value?.trim() || '';
   const username = document.getElementById('username-' + id)?.value?.trim().toLowerCase() || '';
   const active   = document.getElementById('active-' + id)?.checked ?? true;
+  const dtype    = document.querySelector(`input[name="dtype-${id}"]:checked`)?.value || 'permanent';
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid email'); return; }
@@ -929,13 +953,24 @@ async function saveDelegation(id) {
     const res = await window.iflFetch('/admin/workflow-approvers/' + id, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approverEmail: email || null, approverName: name || null, approverUsername: username || null, secondaryEmail: null, secondaryName: null, secondaryUsername: null, isActive: active })
+      body: JSON.stringify({
+        approverEmail:    email    || null,
+        approverName:     name     || null,
+        approverUsername: username || null,
+        secondaryEmail:   null,
+        secondaryName:    null,
+        secondaryUsername: null,
+        isActive:         active,
+        delegationType:   dtype
+      })
     });
     const data = await res.json();
     if (data.success) {
       setStatus(id, 'ok', 'Updated ✓');
       showToast('ok', data.message || 'Assignee updated');
       document.getElementById('email-' + id)?.classList.toggle('a-input--warn', !email);
+      // Reload the card area so the temp-delegation banner and revert button appear/disappear.
+      setTimeout(() => location.reload(), 1200);
     } else {
       setStatus(id, 'err', data.error || 'Failed');
       showToast('err', data.error || 'Save failed');
@@ -945,6 +980,25 @@ async function saveDelegation(id) {
     showToast('err', 'Network error. Please retry.');
   } finally {
     if (btn) btn.disabled = false;
+  }
+}
+
+async function revertDelegation(id) {
+  if (!confirm('Revert the temporary delegation and restore the original holder?')) return;
+  setStatus(id, 'ing', 'Reverting…');
+  try {
+    const res  = await window.iflFetch('/admin/workflow-approvers/' + id + '/revert', { method: 'PUT' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('ok', data.message || 'Delegation reverted');
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      setStatus(id, 'err', data.error || 'Failed');
+      showToast('err', data.error || 'Revert failed');
+    }
+  } catch {
+    setStatus(id, 'err', 'Network error');
+    showToast('err', 'Network error. Please retry.');
   }
 }
 

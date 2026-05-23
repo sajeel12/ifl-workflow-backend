@@ -102,14 +102,20 @@ function rowMatchesSecondary(row, username) {
 
 // ── Access resolution ──────────────────────────────────────────────────────────
 //
-// Returns { accesses: [{location, isPrimary}], email: string }
+// Returns { accesses: [{location, isPrimary}], email: string, delegatorInfo }
 // accesses = [] means the user is not configured for this role.
 // email is the stored approverEmail (used for canAct comparison with
 // currentStageAssigneeEmail — kept for backward compat until that field
 // is replaced with currentStageAssigneeUsername).
+//
+// delegatorInfo is set when the user is the ORIGINAL holder of a delegation
+// role that is currently temporarily covered by someone else. In that case
+// accesses contains one entry with isOriginalDelegator: true, and the portal
+// renders in read-only mode with an informational banner instead of a 403.
 async function resolveAccess(username, roleKey) {
     const accesses = [];
     let email = '';
+    let delegatorInfo = null;
 
     if (LOCATION_AWARE.has(roleKey)) {
         const overrides = await WorkflowApproverLocationOverride.findAll({
@@ -137,11 +143,26 @@ async function resolveAccess(username, roleKey) {
             } else if (rowMatchesSecondary(globalCfg, username)) {
                 accesses.push({ location: null, isPrimary: false });
                 email = globalCfg.secondaryEmail || '';
+            } else if (globalCfg.isDelegatedTemporarily) {
+                // Third path: user is the original holder who temporarily delegated
+                // the role to someone else. Let them in as read-only so they can see
+                // the queue state without seeing a confusing 403.
+                const prevUser  = globalCfg.previousApproverUsername?.toLowerCase();
+                const prevLocal = globalCfg.previousApproverEmail?.split('@')[0].toLowerCase();
+                const matchesPrev = prevUser ? prevUser === username : (prevLocal === username);
+                if (matchesPrev) {
+                    accesses.push({ location: null, isPrimary: false, isOriginalDelegator: true });
+                    email = globalCfg.previousApproverEmail || '';
+                    delegatorInfo = {
+                        delegateName:  globalCfg.approverName  || globalCfg.approverEmail || '',
+                        delegateEmail: globalCfg.approverEmail || '',
+                    };
+                }
             }
         }
     }
 
-    return { accesses, email };
+    return { accesses, email, delegatorInfo };
 }
 
 // Build the Sequelize location WHERE clause from the accesses list.
@@ -195,15 +216,21 @@ export async function apiPortalAuth(req, res) {
             // actionToken not found in DB — treat as expired (let dashboard redirect handle it)
         }
 
-        const { accesses, email } = await resolveAccess(username, roleKey);
+        const { accesses, email, delegatorInfo } = await resolveAccess(username, roleKey);
         if (accesses.length === 0) {
             logger.warn(`[Portal] ${username} not configured for ${roleKey} (sidecar path)`);
             return res.status(403).json({ error: `Account "${username}" is not configured for the ${ROLE_META[roleKey].label} portal. Contact your administrator.` });
         }
 
-        const meta  = ROLE_META[roleKey];
-        const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
-        logger.info(`[Portal] Sidecar auth → ${username} for ${roleKey}${expandId ? ` req#${expandId}` : ''}`);
+        const meta         = ROLE_META[roleKey];
+        const tokenPayload = { roleKey, username, email, accesses, roleName: meta.label };
+        if (delegatorInfo) {
+            tokenPayload.isDelegator   = true;
+            tokenPayload.delegateName  = delegatorInfo.delegateName;
+            tokenPayload.delegateEmail = delegatorInfo.delegateEmail;
+        }
+        const token = issueToken(tokenPayload);
+        logger.info(`[Portal] Sidecar auth${delegatorInfo ? ' (original delegator, read-only)' : ''} → ${username} for ${roleKey}${expandId ? ` req#${expandId}` : ''}`);
         const redirect = `/portal/${roleSlug}/view?token=${token}${expandId ? `&expand=${expandId}` : ''}`;
         return res.json({ redirect });
 
@@ -227,11 +254,17 @@ export async function showLogin(req, res) {
     const username = stripDomain(req.headers['x-auth-user'] || '');
     if (username) {
         try {
-            const { accesses, email } = await resolveAccess(username, roleKey);
+            const { accesses, email, delegatorInfo } = await resolveAccess(username, roleKey);
             if (accesses.length > 0) {
-                const meta  = ROLE_META[roleKey];
-                const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
-                logger.info(`[Portal] Auto-login (X-Auth-User) → ${username} for ${roleKey}`);
+                const meta         = ROLE_META[roleKey];
+                const tokenPayload = { roleKey, username, email, accesses, roleName: meta.label };
+                if (delegatorInfo) {
+                    tokenPayload.isDelegator   = true;
+                    tokenPayload.delegateName  = delegatorInfo.delegateName;
+                    tokenPayload.delegateEmail = delegatorInfo.delegateEmail;
+                }
+                const token = issueToken(tokenPayload);
+                logger.info(`[Portal] Auto-login (X-Auth-User)${delegatorInfo ? ' (original delegator, read-only)' : ''} → ${username} for ${roleKey}`);
                 return res.redirect(`/portal/${roleSlug}/view?token=${token}`);
             }
         } catch (_) { /* fall through to sidecar path */ }
@@ -273,11 +306,17 @@ export async function enterViaActionToken(req, res) {
         const username = stripDomain(req.headers['x-auth-user'] || '');
         if (username) {
             try {
-                const { accesses, email } = await resolveAccess(username, roleKey);
+                const { accesses, email, delegatorInfo } = await resolveAccess(username, roleKey);
                 if (accesses.length > 0) {
-                    const meta  = ROLE_META[roleKey];
-                    const token = issueToken({ roleKey, username, email, accesses, roleName: meta.label });
-                    logger.info(`[Portal] Enter via action token (X-Auth-User) → ${username} for ${roleKey} req#${request.id}`);
+                    const meta         = ROLE_META[roleKey];
+                    const tokenPayload = { roleKey, username, email, accesses, roleName: meta.label };
+                    if (delegatorInfo) {
+                        tokenPayload.isDelegator   = true;
+                        tokenPayload.delegateName  = delegatorInfo.delegateName;
+                        tokenPayload.delegateEmail = delegatorInfo.delegateEmail;
+                    }
+                    const token = issueToken(tokenPayload);
+                    logger.info(`[Portal] Enter via action token (X-Auth-User)${delegatorInfo ? ' (original delegator, read-only)' : ''} → ${username} for ${roleKey} req#${request.id}`);
                     return res.redirect(`/portal/${roleSlug}/view?token=${token}&expand=${request.id}`);
                 }
             } catch (_) { /* fall through to sidecar path */ }
@@ -309,7 +348,10 @@ export async function showDashboard(req, res) {
     }
 
     const meta = ROLE_META[roleKey];
-    const { username, email, accesses, roleName } = session;
+    const { username, email, accesses, roleName,
+            isDelegator   = false,
+            delegateName  = '',
+            delegateEmail = '' } = session;
     const locWhere = locationWhere(accesses);
 
     try {
@@ -358,12 +400,13 @@ export async function showDashboard(req, res) {
 
         const pending = pendingRequests.map(r => ({
             ...r.toJSON(),
-            // canAct: this request is assigned to this user.
-            // Compared by email for now (currentStageAssigneeEmail is set by
-            // recipientService which returns the stored approverEmail).
-            canAct: email
-                ? emailsMatch(r.currentStageAssigneeEmail, email)
-                : r.currentStageAssigneeEmail?.split('@')[0]?.toLowerCase() === username,
+            // canAct: this request is assigned to this user AND they are not the
+            // original delegator viewing in read-only mode.
+            canAct: isDelegator ? false : (
+                email
+                    ? emailsMatch(r.currentStageAssigneeEmail, email)
+                    : r.currentStageAssigneeEmail?.split('@')[0]?.toLowerCase() === username
+            ),
             actionUrl: r.currentStageToken
                 ? `${process.env.APP_URL}/api/onboarding/handle?token=${r.currentStageToken}&pt=${portalSessionToken}`
                 : null,
@@ -389,6 +432,9 @@ export async function showDashboard(req, res) {
             userEmail:      email,
             locationLabels,
             isPrimary,
+            isDelegator,
+            delegateName,
+            delegateEmail,
             pending,
             history,
             pendingCount:   pending.length,

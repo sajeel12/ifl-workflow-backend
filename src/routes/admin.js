@@ -36,6 +36,7 @@ router.get('/locations',                        ...guard, adminController.getLoc
 router.get('/workflow-approvers/by-location',   ...guard, adminController.getApproversForLocation);
 router.put('/workflow-approvers/by-location',   ...guard, adminController.upsertApproverForLocation);
 router.get('/workflow-approvers/api',           ...guard, adminController.getWorkflowApprovers);
+router.put('/workflow-approvers/:id/revert',    ...guard, adminController.revertDelegation);
 router.put('/workflow-approvers/:id',           ...guard, adminController.updateWorkflowApprover);
 router.get('/onboarding-requests',              ...guard, adminController.getOnboardingRequests);
 router.get('/onboarding-timeline/:id',          ...guard, adminController.getOnboardingTimeline);

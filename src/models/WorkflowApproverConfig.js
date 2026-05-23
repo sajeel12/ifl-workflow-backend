@@ -56,6 +56,29 @@ const WorkflowApproverConfig = sequelize.define('WorkflowApproverConfig', {
         type: DataTypes.STRING,
         allowNull: true
     },
+    // Temporary delegation — DCI_MANAGER and IT_HOD only.
+    // When admin temporarily delegates the role, the original person's details
+    // are snapshotted here so they can (a) still view the portal in read-only
+    // mode and (b) be restored with a single admin revert action.
+    isDelegatedTemporarily: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'True while a temporary cover is active for DCI_MANAGER / IT_HOD'
+    },
+    previousApproverEmail: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Original person email before temporary delegation'
+    },
+    previousApproverName: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    previousApproverUsername: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Original person AD sAMAccountName before temporary delegation'
+    },
     // Tracking for 2-day fallback logic
     lastAssignedAt: {
         type: DataTypes.DATE,
