@@ -45,6 +45,25 @@ const DELEGATION_ROLE_TO_STATUS = {
     IT_HOD:      'PendingITHOD',
 };
 
+// Send the stage action email to a specific recipient for an in-flight request.
+// Used by the delegation and revert rebind loops so the new (or restored)
+// person gets notified immediately without admin having to resend manually.
+// Failures are logged but do NOT abort the rebind — a missed email is better
+// than a failed save.
+async function sendDelegationNotification(inflightReq, recipientEmail) {
+    try {
+        const map = STATUS_TO_RESEND[inflightReq.status];
+        if (!map || !inflightReq.currentStageToken) return;
+        const portalSlug = EMAIL_TYPE_TO_PORTAL_SLUG[map.type];
+        const actionLink = portalSlug
+            ? `${process.env.APP_URL}/portal/${portalSlug}/enter?action=${inflightReq.currentStageToken}`
+            : `${process.env.APP_URL}/api/onboarding/handle?token=${inflightReq.currentStageToken}`;
+        await emailService.sendOnboardingNotification(recipientEmail, inflightReq, actionLink, map.type);
+    } catch (err) {
+        console.error(`[Delegation] Failed to send notification for request #${inflightReq.id} to ${recipientEmail}:`, err.message);
+    }
+}
+
 // Per client policy, only the IT Operations role is split by location.
 // All other roles use the global default everywhere. The admin UI hides
 // non-location-aware roles from the per-location editor.
@@ -723,6 +742,7 @@ class AdminController {
                         details:   `${config.label} reassigned to ${pEmail} (${delegationKind}). Portal access and action gate updated immediately.`,
                         timestamp: new Date()
                     });
+                    await sendDelegationNotification(inflightReq, pEmail);
                     rebound++;
                 }
             }
@@ -790,6 +810,7 @@ class AdminController {
                         details:   `${config.label} restored to original holder ${restoredEmail}. Temporary delegation ended.`,
                         timestamp: new Date()
                     });
+                    await sendDelegationNotification(inflightReq, restoredEmail);
                     rebound++;
                 }
             }

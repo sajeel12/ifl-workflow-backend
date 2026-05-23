@@ -125,10 +125,10 @@ function mockRes() {
 
 describe('Admin delegation rebind — updateWorkflowApprover', () => {
 
-    test('updating DCI_MANAGER rebinds all PendingDCIManager in-flight requests', async () => {
+    test('updating DCI_MANAGER rebinds all PendingDCIManager in-flight requests and emails new delegate', async () => {
         const config = makeConfig({ roleKey: 'DCI_MANAGER', label: 'DCI Manager' });
-        const request = makeRequest({ status: 'PendingDCIManager' });
-        const { adminController, timelineCreate } = await loadController({
+        const request = makeRequest({ status: 'PendingDCIManager', currentStageToken: 'tok-mgr' });
+        const { adminController, timelineCreate, sendOnboardingNotification } = await loadController({
             config, inFlightRequests: [request]
         });
 
@@ -150,16 +150,23 @@ describe('Admin delegation rebind — updateWorkflowApprover', () => {
         expect(timelineCreate).toHaveBeenCalledWith(
             expect.objectContaining({ action: 'Admin Delegation Update', actorRole: 'Admin' })
         );
+        // Action email sent to new delegate
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'new.mgr@ifl.com',
+            expect.objectContaining({ id: 42 }),
+            expect.stringContaining('/portal/dci-manager/enter?action=tok-mgr'),
+            'DCI_MANAGER_APPROVAL'
+        );
         // Response confirms rebound count
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({ success: true, message: expect.stringContaining('1 in-flight request(s) rebound') })
         );
     });
 
-    test('updating IT_HOD rebinds all PendingITHOD in-flight requests', async () => {
+    test('updating IT_HOD rebinds all PendingITHOD in-flight requests and emails new HOD', async () => {
         const config = makeConfig({ roleKey: 'IT_HOD', label: 'IT Head of Department' });
-        const request = makeRequest({ status: 'PendingITHOD', currentStageAssigneeEmail: 'old.hod@ifl.com' });
-        const { adminController } = await loadController({
+        const request = makeRequest({ status: 'PendingITHOD', currentStageAssigneeEmail: 'old.hod@ifl.com', currentStageToken: 'tok-hod' });
+        const { adminController, sendOnboardingNotification } = await loadController({
             config, inFlightRequests: [request]
         });
 
@@ -172,6 +179,12 @@ describe('Admin delegation rebind — updateWorkflowApprover', () => {
 
         expect(request.update).toHaveBeenCalledWith(
             expect.objectContaining({ currentStageAssigneeEmail: 'new.hod@ifl.com' })
+        );
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'new.hod@ifl.com',
+            expect.objectContaining({ status: 'PendingITHOD' }),
+            expect.stringContaining('/portal/it-hod/enter?action=tok-hod'),
+            'IT_HOD_APPROVAL'
         );
     });
 
@@ -407,8 +420,9 @@ describe('revertDelegation', () => {
         await jest.unstable_mockModule('../src/models/TimelineEvent.js', () => ({
             default: { create: timelineCreate, findAll: jest.fn().mockResolvedValue([]) }
         }));
+        const sendOnboardingNotification = jest.fn().mockResolvedValue(undefined);
         await jest.unstable_mockModule('../src/services/emailService.js', () => ({
-            sendOnboardingNotification: jest.fn().mockResolvedValue(undefined)
+            sendOnboardingNotification
         }));
         await jest.unstable_mockModule('../src/services/recipientService.js', () => ({
             default: { get: jest.fn().mockResolvedValue('mgr@ifl.com') }
@@ -433,7 +447,7 @@ describe('revertDelegation', () => {
         }));
 
         const { default: adminController } = await import('../src/controllers/adminController.js');
-        return { adminController, timelineCreate };
+        return { adminController, timelineCreate, sendOnboardingNotification };
     }
 
     test('revert swaps previous* back to approver* and clears isDelegatedTemporarily', async () => {
@@ -470,7 +484,7 @@ describe('revertDelegation', () => {
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
 
-    test('revert rebinds in-flight requests to the restored original person', async () => {
+    test('revert rebinds in-flight requests to original person and emails them', async () => {
         const config = {
             id: 1,
             roleKey: 'DCI_MANAGER',
@@ -484,9 +498,9 @@ describe('revertDelegation', () => {
             previousApproverUsername: 'original',
             update: jest.fn().mockResolvedValue(undefined),
         };
-        const r1 = makeRequest({ id: 20, status: 'PendingDCIManager' });
-        const r2 = makeRequest({ id: 21, status: 'PendingDCIManager' });
-        const { adminController, timelineCreate } = await loadForRevert({ config, inFlightRequests: [r1, r2] });
+        const r1 = makeRequest({ id: 20, status: 'PendingDCIManager', currentStageToken: 'tok-r1' });
+        const r2 = makeRequest({ id: 21, status: 'PendingDCIManager', currentStageToken: 'tok-r2' });
+        const { adminController, timelineCreate, sendOnboardingNotification } = await loadForRevert({ config, inFlightRequests: [r1, r2] });
 
         const req = { params: { id: '1' }, body: {} };
         const res = mockRes();
@@ -503,6 +517,20 @@ describe('revertDelegation', () => {
         expect(timelineCreate).toHaveBeenCalledTimes(2);
         expect(timelineCreate).toHaveBeenCalledWith(
             expect.objectContaining({ action: 'Admin Delegation Reverted' })
+        );
+        // Original person emailed for each rebound request
+        expect(sendOnboardingNotification).toHaveBeenCalledTimes(2);
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'original@ifl.com',
+            expect.objectContaining({ id: 20 }),
+            expect.stringContaining('/portal/dci-manager/enter?action=tok-r1'),
+            'DCI_MANAGER_APPROVAL'
+        );
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'original@ifl.com',
+            expect.objectContaining({ id: 21 }),
+            expect.stringContaining('/portal/dci-manager/enter?action=tok-r2'),
+            'DCI_MANAGER_APPROVAL'
         );
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({ message: expect.stringContaining('2 in-flight request(s) rebound') })
