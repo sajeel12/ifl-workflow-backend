@@ -188,12 +188,12 @@ describe('Admin delegation rebind — updateWorkflowApprover', () => {
         );
     });
 
-    test('multiple in-flight requests are all rebound and each gets a timeline event', async () => {
+    test('multiple in-flight requests are all rebound, each gets a timeline event and an email', async () => {
         const config = makeConfig({ roleKey: 'DCI_MANAGER', label: 'DCI Manager' });
-        const r1 = makeRequest({ id: 10 });
-        const r2 = makeRequest({ id: 11 });
-        const r3 = makeRequest({ id: 12 });
-        const { adminController, timelineCreate } = await loadController({
+        const r1 = makeRequest({ id: 10, currentStageToken: 'tok-10' });
+        const r2 = makeRequest({ id: 11, currentStageToken: 'tok-11' });
+        const r3 = makeRequest({ id: 12, currentStageToken: 'tok-12' });
+        const { adminController, timelineCreate, sendOnboardingNotification } = await loadController({
             config, inFlightRequests: [r1, r2, r3]
         });
 
@@ -208,14 +208,19 @@ describe('Admin delegation rebind — updateWorkflowApprover', () => {
         expect(r2.update).toHaveBeenCalled();
         expect(r3.update).toHaveBeenCalled();
         expect(timelineCreate).toHaveBeenCalledTimes(3);
+        // One action email per rebound request, all sent to the new delegate
+        expect(sendOnboardingNotification).toHaveBeenCalledTimes(3);
+        expect(sendOnboardingNotification).toHaveBeenCalledWith('new.mgr@ifl.com', expect.objectContaining({ id: 10 }), expect.stringContaining('tok-10'), 'DCI_MANAGER_APPROVAL');
+        expect(sendOnboardingNotification).toHaveBeenCalledWith('new.mgr@ifl.com', expect.objectContaining({ id: 11 }), expect.stringContaining('tok-11'), 'DCI_MANAGER_APPROVAL');
+        expect(sendOnboardingNotification).toHaveBeenCalledWith('new.mgr@ifl.com', expect.objectContaining({ id: 12 }), expect.stringContaining('tok-12'), 'DCI_MANAGER_APPROVAL');
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({ message: expect.stringContaining('3 in-flight request(s) rebound') })
         );
     });
 
-    test('non-delegation role (IT_OPS) does NOT trigger any request rebinding', async () => {
+    test('non-delegation role (IT_OPS) does NOT trigger any request rebinding or emails', async () => {
         const config = makeConfig({ roleKey: 'IT_OPS', label: 'IT Operations' });
-        const { adminController, timelineCreate } = await loadController({
+        const { adminController, timelineCreate, sendOnboardingNotification } = await loadController({
             config, inFlightRequests: []
         });
 
@@ -227,15 +232,16 @@ describe('Admin delegation rebind — updateWorkflowApprover', () => {
         await adminController.updateWorkflowApprover(req, res);
 
         expect(timelineCreate).not.toHaveBeenCalled();
+        expect(sendOnboardingNotification).not.toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({ message: expect.stringContaining('updated successfully') })
         );
     });
 
-    test('clearing email (null) on delegation role does NOT rebind requests', async () => {
+    test('clearing email (null) on delegation role does NOT rebind requests or send emails', async () => {
         const config = makeConfig({ roleKey: 'DCI_MANAGER' });
         const request = makeRequest();
-        const { adminController, timelineCreate } = await loadController({
+        const { adminController, timelineCreate, sendOnboardingNotification } = await loadController({
             config, inFlightRequests: [request]
         });
 
@@ -246,14 +252,15 @@ describe('Admin delegation rebind — updateWorkflowApprover', () => {
         const res = mockRes();
         await adminController.updateWorkflowApprover(req, res);
 
-        // Email is empty — no rebind, no timeline events
+        // Email is empty — no rebind, no timeline events, no emails
         expect(request.update).not.toHaveBeenCalled();
         expect(timelineCreate).not.toHaveBeenCalled();
+        expect(sendOnboardingNotification).not.toHaveBeenCalled();
     });
 
-    test('when no in-flight requests exist, response message says "updated successfully" (no rebound count)', async () => {
+    test('when no in-flight requests exist, response says "updated successfully" and no emails sent', async () => {
         const config = makeConfig({ roleKey: 'DCI_MANAGER' });
-        const { adminController } = await loadController({ config, inFlightRequests: [] });
+        const { adminController, sendOnboardingNotification } = await loadController({ config, inFlightRequests: [] });
 
         const req = {
             params: { id: '1' },
@@ -262,6 +269,7 @@ describe('Admin delegation rebind — updateWorkflowApprover', () => {
         const res = mockRes();
         await adminController.updateWorkflowApprover(req, res);
 
+        expect(sendOnboardingNotification).not.toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({ message: expect.stringContaining('updated successfully') })
         );
@@ -342,10 +350,10 @@ describe('Temporary delegation — updateWorkflowApprover', () => {
         );
     });
 
-    test('timeline event records the delegation kind (Temporary Delegation) when delegationType=temporary', async () => {
+    test('delegationType=temporary: timeline says Temporary Delegation and email sent to temp delegate', async () => {
         const config  = makeConfig({ roleKey: 'DCI_MANAGER', approverEmail: 'orig@ifl.com', approverUsername: 'orig' });
-        const request = makeRequest({ status: 'PendingDCIManager' });
-        const { adminController, timelineCreate } = await loadController({ config, inFlightRequests: [request] });
+        const request = makeRequest({ status: 'PendingDCIManager', currentStageToken: 'tok-temp' });
+        const { adminController, timelineCreate, sendOnboardingNotification } = await loadController({ config, inFlightRequests: [request] });
 
         const req = {
             params: { id: '1' },
@@ -360,12 +368,18 @@ describe('Temporary delegation — updateWorkflowApprover', () => {
                 details: expect.stringContaining('Temporary Delegation'),
             })
         );
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'temp@ifl.com',
+            expect.objectContaining({ id: 42 }),
+            expect.stringContaining('/portal/dci-manager/enter?action=tok-temp'),
+            'DCI_MANAGER_APPROVAL'
+        );
     });
 
-    test('timeline event records Permanent Role Change when delegationType=permanent', async () => {
+    test('delegationType=permanent: timeline says Permanent Role Change and email sent to new person', async () => {
         const config  = makeConfig({ roleKey: 'DCI_MANAGER' });
-        const request = makeRequest({ status: 'PendingDCIManager' });
-        const { adminController, timelineCreate } = await loadController({ config, inFlightRequests: [request] });
+        const request = makeRequest({ status: 'PendingDCIManager', currentStageToken: 'tok-perm' });
+        const { adminController, timelineCreate, sendOnboardingNotification } = await loadController({ config, inFlightRequests: [request] });
 
         const req = {
             params: { id: '1' },
@@ -378,6 +392,12 @@ describe('Temporary delegation — updateWorkflowApprover', () => {
             expect.objectContaining({
                 details: expect.stringContaining('Permanent Role Change'),
             })
+        );
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'new@ifl.com',
+            expect.objectContaining({ id: 42 }),
+            expect.stringContaining('/portal/dci-manager/enter?action=tok-perm'),
+            'DCI_MANAGER_APPROVAL'
         );
     });
 
@@ -450,7 +470,7 @@ describe('revertDelegation', () => {
         return { adminController, timelineCreate, sendOnboardingNotification };
     }
 
-    test('revert swaps previous* back to approver* and clears isDelegatedTemporarily', async () => {
+    test('revert swaps previous* back to approver*, clears isDelegatedTemporarily, sends no email when no in-flight', async () => {
         const config = {
             id: 1,
             roleKey: 'DCI_MANAGER',
@@ -464,7 +484,7 @@ describe('revertDelegation', () => {
             previousApproverUsername: 'original.mgr',
             update: jest.fn().mockResolvedValue(undefined),
         };
-        const { adminController } = await loadForRevert({ config });
+        const { adminController, sendOnboardingNotification } = await loadForRevert({ config });
 
         const req = { params: { id: '1' }, body: {} };
         const res = mockRes();
@@ -481,6 +501,7 @@ describe('revertDelegation', () => {
                 previousApproverUsername: null,
             })
         );
+        expect(sendOnboardingNotification).not.toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
 
