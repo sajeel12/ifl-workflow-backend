@@ -16,6 +16,7 @@ const ROLE_SLUGS = {
     'it-hod':          'IT_HOD',
     'dci-manager':     'DCI_MANAGER',
     'hr-initiator':    'HR_INITIATOR',
+    'it-ops-mgr':      'IT_OPS_MGR',
 };
 
 const ROLE_META = {
@@ -60,6 +61,13 @@ const ROLE_META = {
         historyField:    null,
         roleModel:       'parallel',
         isLocationAware: true,
+    },
+    IT_OPS_MGR: {
+        label:           'IT Operations Manager',
+        pendingStatuses: [],   // sees IT_OPS statuses directly — not its own pending queue
+        historyField:    null,
+        roleModel:       'delegation',
+        isLocationAware: false,
     },
 };
 
@@ -357,6 +365,65 @@ export async function showDashboard(req, res) {
     try {
         let pendingRequests = [];
         let historyRequests = [];
+
+        // ── IT Ops Manager: monitoring view across all locations ───────────────
+        if (roleKey === 'IT_OPS_MGR') {
+            const STAGE_START = { PendingIT: 'hrSubmittedAt', PendingOPSAction: 'dciImplementedAt' };
+
+            const [locationConfigs, globalITOPS, allPending] = await Promise.all([
+                WorkflowApproverLocationOverride.findAll({
+                    where: { roleKey: 'IT_OPS' },
+                    order: [['location', 'ASC']],
+                }),
+                WorkflowApproverConfig.findOne({ where: { roleKey: 'IT_OPS', isActive: true } }),
+                OnboardingRequest.findAll({
+                    where: { status: { [Op.in]: ['PendingIT', 'PendingOPSAction'] } },
+                    order: [['createdAt', 'ASC']],
+                }),
+            ]);
+
+            const enrichedRequests = allPending.map(r => {
+                const json       = r.toJSON();
+                const locCfg     = locationConfigs.find(c => c.location === r.location) || globalITOPS;
+                const startField = STAGE_START[r.status] || 'updatedAt';
+                const stageAgeHours = Math.round(
+                    (Date.now() - new Date(json[startField] || json.updatedAt)) / 3600000
+                );
+                return {
+                    ...json,
+                    stageAgeHours,
+                    isStale:       stageAgeHours > 48,
+                    isEscalated:   !!(locCfg?.primaryExpiredAt),
+                    primaryName:   locCfg?.approverName   || locCfg?.approverEmail   || 'Unassigned',
+                    secondaryName: locCfg?.secondaryName  || locCfg?.secondaryEmail  || '—',
+                };
+            });
+
+            const locationSummary = locationConfigs.map(cfg => ({
+                location:      cfg.location,
+                primaryName:   cfg.approverName   || cfg.approverEmail   || 'Unassigned',
+                primaryEmail:  cfg.approverEmail  || '',
+                secondaryName: cfg.secondaryName  || cfg.secondaryEmail  || '—',
+                secondaryEmail:cfg.secondaryEmail || '',
+                isEscalated:   !!(cfg.primaryExpiredAt),
+                activeCount:   allPending.filter(r => r.location === cfg.location).length,
+            }));
+
+            return res.render('pages/portal_it_ops_mgr', {
+                roleSlug,
+                roleKey,
+                roleName,
+                userEmail:      email,
+                isDelegator,
+                delegateName,
+                delegateEmail,
+                locationSummary,
+                pendingRequests: enrichedRequests,
+                pendingCount:    enrichedRequests.length,
+                token:          req.query.token,
+                appUrl:         process.env.APP_URL || '',
+            });
+        }
 
         if (roleKey === 'HR_INITIATOR') {
             pendingRequests = await OnboardingRequest.findAll({

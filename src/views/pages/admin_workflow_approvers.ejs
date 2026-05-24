@@ -76,9 +76,9 @@
 <%
   const itOps  = approvers.find(a => a.roleKey === 'IT_OPS');
   const hrInit = approvers.find(a => a.roleKey === 'HR_INITIATOR');
-  const delegationKeys = ['IT_HOD', 'DCI_MANAGER'];
+  const delegationKeys = ['IT_HOD', 'DCI_MANAGER', 'IT_OPS_MGR'];
   const fallbackKeys   = ['DCI_TEAM', 'DCI_IMPLEMENTER'];
-  const knownKeys      = new Set(['IT_OPS','HR_INITIATOR','IT_HOD','DCI_MANAGER','DCI_TEAM','DCI_IMPLEMENTER']);
+  const knownKeys      = new Set(['IT_OPS','HR_INITIATOR','IT_HOD','DCI_MANAGER','DCI_TEAM','DCI_IMPLEMENTER','IT_OPS_MGR']);
 %>
 
 <!-- ══════════════════════════════════════════════════════════════════════
