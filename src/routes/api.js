@@ -19,6 +19,19 @@ router.get('/test/request/:requestId/status', workflowTestController.getRequestS
 router.post('/test/approve/:token', workflowTestController.testApproveReject);
 
 
+// Manually fire the escalation check — for testing the 5-min threshold.
+// Remove or guard this before going to production.
+router.post('/test/trigger-escalation', async (req, res) => {
+    const { runEscalationCheck } = await import('../services/escalationService.js');
+    try {
+        const result = await runEscalationCheck();
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+
 router.all('/approvals/handle', approvalController.handleApprovalClick);
 
 

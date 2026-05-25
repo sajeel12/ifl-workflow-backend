@@ -42,7 +42,10 @@ afterEach(() => {
 });
 
 describe('Recipient fallback audit', () => {
-    test('uses the configured secondary recipient after the primary is stale for 2 days', async () => {
+    test('new request always routes to primary regardless of stale lastAssignedAt — resets the clock', async () => {
+        // Fix for: secondary HR seat initiating → secondary IT Ops receiving email.
+        // A new request (requestId provided) must always start at primary,
+        // no matter what state a previous escalation left on the config row.
         const update = jest.fn().mockResolvedValue(undefined);
         const staleAssignedAt = new Date(Date.now() - (3 * 24 * 60 * 60 * 1000));
 
@@ -65,13 +68,16 @@ describe('Recipient fallback audit', () => {
             });
 
             expect(resolved).toEqual({
-                email: 'secondary@ifl.com',
-                name: 'Secondary User',
-                isFallback: true,
-                source: 'DB_Secondary_LOC[KHI]',
+                email: 'primary@ifl.com',
+                name: 'Primary User',
+                isFallback: false,
+                source: 'DB_Primary_LOC[KHI]',
                 username: null
             });
-            expect(update).toHaveBeenCalledWith({ primaryExpiredAt: expect.any(Date) });
+            // Clock must be reset — lastAssignedAt updated, primaryExpiredAt cleared
+            expect(update).toHaveBeenCalledWith(
+                expect.objectContaining({ lastAssignedAt: expect.any(Date), primaryExpiredAt: null })
+            );
         } finally {
             restoreEnv();
         }

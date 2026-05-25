@@ -1,4 +1,14 @@
 <%- include('../partials/header', { title: 'IT Operations Manager — IFL' }) %>
+<%
+function humanAge(hours) {
+    if (hours < 1)  return 'Less than 1 hr';
+    if (hours < 24) return hours + (hours === 1 ? ' hr' : ' hrs');
+    const d = Math.floor(hours / 24);
+    const h = hours % 24;
+    if (h === 0) return d + (d === 1 ? ' day' : ' days');
+    return d + (d === 1 ? ' day' : ' days') + ', ' + h + (h === 1 ? ' hr' : ' hrs');
+}
+%>
 
 <div class="header">
     <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
@@ -323,7 +333,7 @@
                         <th>Location</th>
                         <th>Stage</th>
                         <th>Assigned To</th>
-                        <th>Stage Age</th>
+                        <th>Time in Stage</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -377,8 +387,7 @@
                         </td>
                         <td>
                             <div class="age-cell <%= r.isStale ? 'stale' : 'normal' %>">
-                                <%= r.isStale ? '&#9888; ' : '&#9679; ' %><%= r.stageAgeHours %>h
-                                <% if (r.isStale) { %><br><span style="font-size:0.68rem">PAST 48h</span><% } %>
+                                <%= humanAge(r.stageAgeHours) %>
                             </div>
                         </td>
                     </tr>

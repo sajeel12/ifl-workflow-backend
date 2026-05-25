@@ -470,7 +470,7 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
     switch (type) {
         case 'IT_OPS':
             subject = `Onboarding ${reqNo} — IT Configuration`;
-            body = buildBullets('Configure intranet, email, printers, file shares.', 'Forwarded to HOD for review.');
+            body = buildBullets('Configure intranet, email, printers, file shares.');
             break;
         case 'HOD_REVIEW':
             subject = `Onboarding ${reqNo} — HOD Approval`;
@@ -478,7 +478,7 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
             break;
         case 'DCI_INPUT':
             subject = `Onboarding ${reqNo} — DCI Setup`;
-            body = buildBullets('Configure NT user, SMTP, mailbox limits, GPO.', 'Forwarded to DCI Manager.');
+            body = buildBullets('Configure NT user, SMTP, mailbox limits, GPO.');
             break;
         case 'DCI_CHANGES_REQUESTED':
             subject = `Onboarding ${reqNo} — Changes Requested`;
@@ -494,7 +494,7 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
             break;
         case 'DCI_IMPLEMENTATION':
             subject = `Onboarding ${reqNo} — Account Provisioning`;
-            body = buildBullets('Create AD/Exchange account and upload proofs.', 'Forwarded to OPS Team.');
+            body = buildBullets('Create AD/Exchange account and upload proofs.');
             break;
         case 'OPS_ACTION':
             subject = `Onboarding ${reqNo} — Desk Setup`;

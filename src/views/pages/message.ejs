@@ -109,11 +109,39 @@
                   padding:11px 24px;background:#0078D4;color:#fff;
                   border-radius:8px;font-size:0.92rem;font-weight:600;
                   text-decoration:none;">
-            &#8592; Return to <%= locals.roleLabel %> Portal Queue
+            &#8592; Return to <%= locals.roleLabel %> Portal
         </a>
+        <% if (locals.titleClass === 'success') { %>
+        <p id="ar-msg" style="font-size:0.8rem;color:#64748b;margin-top:10px;">
+            Returning automatically in <span id="ar-countdown">5</span>s &nbsp;
+            <a id="ar-cancel" href="#"
+               style="color:#94a3b8;font-size:0.78rem;text-decoration:underline;">Cancel</a>
+        </p>
+        <script>
+        (function () {
+            var target  = '<%- portalBackUrl %>';
+            var secs    = 5;
+            var display = document.getElementById('ar-countdown');
+            var msg     = document.getElementById('ar-msg');
+            var cancel  = document.getElementById('ar-cancel');
+            var timer   = setInterval(function () {
+                secs--;
+                if (display) display.textContent = secs;
+                if (secs <= 0) { clearInterval(timer); window.location.replace(target); }
+            }, 1000);
+            if (cancel) {
+                cancel.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    clearInterval(timer);
+                    if (msg) msg.style.display = 'none';
+                });
+            }
+        })();
+        </script>
+        <% } %>
         <% if (!locals.portalToken) { %>
         <p style="font-size:0.78rem;color:#94a3b8;margin-top:10px;">
-            Enter your email on the next page to open your full queue.
+            You may need to sign in again on the next page.
         </p>
         <% } %>
     </div>

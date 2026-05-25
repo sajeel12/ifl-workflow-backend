@@ -12,6 +12,11 @@ const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 // are ignored even if rows exist — keeps the model honest.
 const LOCATION_AWARE_ROLES = new Set(['IT_OPS', 'HR_INITIATOR']);
 
+// Only these three roles participate in the 2-day primary→secondary expiry
+// timer. DCI_MANAGER and IT_HOD are "delegation" roles — the admin reassigns
+// them directly from the approver dashboard; no automatic expiry applies.
+const FALLBACK_TIMER_ROLES = new Set(['IT_OPS', 'DCI_TEAM', 'DCI_IMPLEMENTER']);
+
 /**
  * Resolve the per-(role, location) approver row, or return null if no
  * override exists for this location AND this role is location-aware.
@@ -124,41 +129,47 @@ const RecipientService = {
                 return { email, name: '', isFallback: false, source: 'ENV' };
             }
 
+            // Delegation roles (DCI_MANAGER, IT_HOD) — admin reassigns via the
+            // approver dashboard; no automatic 2-day expiry applies. Return the
+            // current primary directly, preserving username for portal auth.
+            if (!FALLBACK_TIMER_ROLES.has(roleKey)) {
+                if (cfg.approverEmail) {
+                    return RecipientService._applyTestMode(cfg.approverEmail, cfg.approverName || '', false, `DB_Primary_${sourceTag}`, roleKey, cfg.approverUsername || null);
+                }
+                const email = await RecipientService.get(roleKey, context);
+                return { email, name: '', isFallback: false, source: 'ENV' };
+            }
+
+            // 2-day fallback timer (IT_OPS, DCI_TEAM, DCI_IMPLEMENTER only)
             const now = new Date();
+
+            // New-request routing: ALWAYS assign to primary and reset the clock.
+            // Each request starts fresh — a previousescalation's primaryExpiredAt
+            // must not permanently reroute all subsequent new assignments to secondary.
+            // The escalation service re-routes in-flight requests independently.
+            if (cfg.approverEmail && context.requestId) {
+                await cfg.update({ lastAssignedAt: now, primaryExpiredAt: null });
+                return RecipientService._applyTestMode(cfg.approverEmail, cfg.approverName || '', false, `DB_Primary_${sourceTag}`, roleKey, cfg.approverUsername || null);
+            }
+
+            // Non-new-request resolution (display / info only — no requestId):
+            // apply stale/expired state so callers can see current routing status.
             const primaryStale =
                 cfg.lastAssignedAt &&
                 (now - new Date(cfg.lastAssignedAt)) > TWO_DAYS_MS &&
                 !cfg.primaryExpiredAt;
 
-            // If primary expired, mark it and use secondary
             if (primaryStale && cfg.secondaryEmail) {
                 await cfg.update({ primaryExpiredAt: now });
-                logger.info(`[RecipientService] Primary expired for ${roleKey}/${sourceTag} — using secondary ${cfg.secondaryEmail}`);
+                logger.info(`[RecipientService] Primary stale for ${roleKey}/${sourceTag} — secondary is ${cfg.secondaryEmail}`);
                 return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, `DB_Secondary_${sourceTag}`, roleKey, cfg.secondaryUsername || null);
             }
 
-            // If primary missing and already expired, use secondary
             if ((!cfg.approverEmail || cfg.primaryExpiredAt) && cfg.secondaryEmail) {
                 return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, `DB_Secondary_${sourceTag}`, roleKey, cfg.secondaryUsername || null);
             }
 
-            // Special-case cross-backup for DCI_MANAGER ↔ IT_HOD — cross-backup
-            // looks at the same location's override first, then global config.
-            if ((roleKey === 'DCI_MANAGER' || roleKey === 'IT_HOD') && !cfg.approverEmail && !cfg.secondaryEmail) {
-                const backupRole = roleKey === 'DCI_MANAGER' ? 'IT_HOD' : 'DCI_MANAGER';
-                const backupOverride = await findLocationOverride(backupRole, context.location);
-                const backup = backupOverride || await WorkflowApproverConfig.findOne({ where: { roleKey: backupRole, isActive: true } });
-                if (backup?.approverEmail) {
-                    logger.info(`[RecipientService] ${roleKey}/${sourceTag} empty — using ${backupRole} as cross-backup`);
-                    return RecipientService._applyTestMode(backup.approverEmail, backup.approverName || '', true, `DB_CrossBackup_${sourceTag}`, roleKey, backup.approverUsername || null);
-                }
-            }
-
-            // Happy path: use primary and stamp lastAssignedAt if this is a new routing
             if (cfg.approverEmail) {
-                if (context.requestId) {
-                    await cfg.update({ lastAssignedAt: now, primaryExpiredAt: null });
-                }
                 return RecipientService._applyTestMode(cfg.approverEmail, cfg.approverName || '', false, `DB_Primary_${sourceTag}`, roleKey, cfg.approverUsername || null);
             }
 

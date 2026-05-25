@@ -141,4 +141,34 @@ describe('Stage routing fallback audit', () => {
             expect.objectContaining({ location: 'KHI', requestId: 30 })
         );
     });
+
+    // Delegation roles — still go through getWithFallback so username is preserved
+    // for portal auth, but the timer logic is bypassed inside the service.
+
+    test('updateDCIDetails routes DCI_MANAGER through getWithFallback (delegation role — primary only, no timer)', async () => {
+        const { onboardingService, getWithFallback } = await loadService({
+            status: 'PendingDCI'
+        });
+
+        await onboardingService.updateDCIDetails('tok', {});
+
+        expect(getWithFallback).toHaveBeenCalledWith(
+            'DCI_MANAGER',
+            expect.objectContaining({ location: 'KHI', requestId: 30 })
+        );
+    });
+
+    test('handleDCIManagerApproval (Approve, email required) routes IT_HOD through getWithFallback (delegation role — primary only, no timer)', async () => {
+        const { onboardingService, getWithFallback } = await loadService({
+            status: 'PendingDCIManager',
+            extraRequestFields: { emailIncoming: true }
+        });
+
+        await onboardingService.handleDCIManagerApproval('tok', 'Approve', 'Approved');
+
+        expect(getWithFallback).toHaveBeenCalledWith(
+            'IT_HOD',
+            expect.objectContaining({ location: 'KHI', requestId: 30 })
+        );
+    });
 });

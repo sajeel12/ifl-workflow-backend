@@ -1271,7 +1271,7 @@ const FORM_ROLE_TO_PORTAL = {
 function portalLocalsForRole(role) {
     const cfg = role && FORM_ROLE_TO_PORTAL[role];
     if (!cfg) return {};
-    return { showPortal: false, roleKey: cfg.key, roleLabel: cfg.label };
+    return { showPortal: true, roleKey: cfg.key, roleLabel: cfg.label };
 }
 
 const renderSuccess = (res, title, message, next = {}) => {
