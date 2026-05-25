@@ -25,9 +25,11 @@ function humanAge(hours) {
         display: flex; flex-wrap: wrap; gap: 14px;
         align-items: center; justify-content: space-between;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        border-top: 4px solid #64748B;
     }
-    .pm-hero-left h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 4px; }
-    .pm-hero-left p  { font-size: 0.84rem; color: #64748b; margin: 0; }
+    .pm-hero-left h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+    .pm-hero-left .pm-role-desc { font-size: 0.8rem; color: #64748b; margin: 0 0 4px; line-height: 1.4; }
+    .pm-hero-left .pm-user-email { font-size: 0.78rem; color: #94a3b8; margin: 0; }
 
     .pm-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pm-badge {
@@ -179,6 +181,12 @@ function humanAge(hours) {
 
     .req-link { color: #0078D4; text-decoration: none; font-weight: 600; }
     .req-link:hover { text-decoration: underline; }
+    .btn-view {
+        padding: 5px 13px; background: transparent; color: #64748b;
+        border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.8rem;
+        text-decoration: none; white-space: nowrap;
+    }
+    .btn-view:hover { border-color: #94a3b8; color: #334155; }
 
     .pm-empty { padding: 40px; text-align: center; color: #94a3b8; }
 
@@ -191,6 +199,14 @@ function humanAge(hours) {
     .pm-coming-soon .cs-icon { font-size: 2.5rem; margin-bottom: 14px; }
     .pm-coming-soon h3 { font-size: 1rem; font-weight: 600; color: #64748b; margin: 0 0 8px; }
     .pm-coming-soon p  { font-size: 0.875rem; margin: 0; }
+
+    /* ── All-requests tab ───────────────────────────────── */
+    .sp-completed  { background: #D1FAE5; color: #065F46; }
+    .sp-rejected   { background: #FEE2E2; color: #991B1B; }
+    .sp-pending-it { background: #FEF3C7; color: #92400E; }
+    .sp-pending-ops{ background: #EDE9FE; color: #5B21B6; }
+    .sp-pending    { background: #DBEAFE; color: #1D4ED8; }
+    .sp-other      { background: #F1F5F9; color: #475569; }
 </style>
 
 <% const staleCount = pendingRequests.filter(r => r.isStale).length; %>
@@ -202,7 +218,8 @@ function humanAge(hours) {
     <div class="pm-hero">
         <div class="pm-hero-left">
             <h1>IT Operations Manager Portal</h1>
-            <p><%= userEmail %></p>
+            <p class="pm-role-desc">Monitor IT Operations workload across all locations and manage escalations.</p>
+            <p class="pm-user-email"><%= userEmail %></p>
         </div>
         <div class="pm-badges">
             <% if (isDelegator) { %>
@@ -244,6 +261,10 @@ function humanAge(hours) {
             <div class="s-val"><%= locationSummary.length %></div>
             <div class="s-lbl">Active locations</div>
         </div>
+        <div class="pm-stat">
+            <div class="s-val"><%= totalCount %></div>
+            <div class="s-lbl">All requests (ever)</div>
+        </div>
     </div>
 
     <!-- ── Module tabs ── -->
@@ -251,6 +272,9 @@ function humanAge(hours) {
         <a class="pm-tab is-active" onclick="switchTab('it-ops')" id="tab-it-ops">
             IT Operations
             <% if (pendingCount > 0) { %> (<%= pendingCount %>)<% } %>
+        </a>
+        <a class="pm-tab" onclick="switchTab('all-requests')" id="tab-all-requests">
+            All Requests (<%= totalCount %>)
         </a>
         <a class="pm-tab is-disabled" title="Network Operations monitoring is coming soon">
             Network Operations
@@ -399,6 +423,109 @@ function humanAge(hours) {
 
     </div><!-- end IT Ops panel -->
 
+    <!-- ══ All Requests Panel ══ -->
+    <div class="pm-panel" id="panel-all-requests">
+        <div class="pm-section">
+            <div class="pm-search-wrap">
+                <span class="search-icon">&#128269;</span>
+                <input type="text" id="all-search" class="pm-search"
+                    placeholder="Search by name, ID, department, location…"
+                    oninput="applyAllFilters()" autocomplete="off">
+            </div>
+            <div class="pm-filters">
+                <label>Status:</label>
+                <select id="all-filter-status" onchange="applyAllFilters()">
+                    <option value="">All Statuses</option>
+                    <option value="PendingIT">PendingIT</option>
+                    <option value="PendingHOD">PendingHOD</option>
+                    <option value="PendingDCI">PendingDCI</option>
+                    <option value="PendingDCIManager">PendingDCIManager</option>
+                    <option value="PendingITHOD">PendingITHOD</option>
+                    <option value="PendingDCIImplementation">PendingDCIImplementation</option>
+                    <option value="PendingOPSAction">PendingOPSAction</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Rejected">Rejected</option>
+                </select>
+                <label>Location:</label>
+                <select id="all-filter-location" onchange="applyAllFilters()">
+                    <option value="">All Locations</option>
+                    <% [...new Set(allRequests.map(r => r.location).filter(Boolean))].sort().forEach(loc => { %>
+                        <option value="<%= loc %>"><%= loc %></option>
+                    <% }) %>
+                </select>
+                <span class="filter-count" id="all-filter-count"><%= totalCount %> requests</span>
+            </div>
+
+            <% if (allRequests.length === 0) { %>
+                <div class="pm-empty">No requests found.</div>
+            <% } else { %>
+            <table class="req-table" id="all-req-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Employee</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                        <th>Submitted</th>
+                        <th>Joining Date</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% allRequests.forEach(r => {
+                        const searchTokens = [
+                            String(r.id),
+                            r.fullName     || '',
+                            r.department   || '',
+                            r.designation  || '',
+                            r.location     || '',
+                            r.ntUserName   || '',
+                            r.smtpAddress  || '',
+                            r.employeeId   || '',
+                        ].join(' ').toLowerCase();
+
+                        let pillClass = 'sp-other';
+                        if (r.status === 'Completed')          pillClass = 'sp-completed';
+                        else if (r.status === 'Rejected')      pillClass = 'sp-rejected';
+                        else if (r.status === 'PendingIT')     pillClass = 'sp-pending-it';
+                        else if (r.status === 'PendingOPSAction') pillClass = 'sp-pending-ops';
+                        else if (r.status && r.status.startsWith('Pending')) pillClass = 'sp-pending';
+                    %>
+                    <tr data-status="<%= r.status %>"
+                        data-location="<%= r.location || '' %>"
+                        data-search="<%= searchTokens %>">
+                        <td>
+                            <a href="<%= appUrl %>/api/onboarding/history/<%= r.id %>"
+                               class="req-link" target="_blank">#<%= r.id %></a>
+                        </td>
+                        <td>
+                            <div style="font-weight:600;color:#0f172a"><%= r.fullName || '—' %></div>
+                            <div style="font-size:0.77rem;color:#64748b">
+                                <%= [r.designation, r.department].filter(Boolean).join(' · ') || '' %>
+                            </div>
+                        </td>
+                        <td style="font-size:0.84rem;color:#475569"><%= r.location || '—' %></td>
+                        <td>
+                            <span class="stage-pill <%= pillClass %>"><%= r.status || '—' %></span>
+                        </td>
+                        <td style="font-size:0.8rem;color:#64748b;white-space:nowrap">
+                            <%= r.hrSubmittedAt ? new Date(r.hrSubmittedAt).toLocaleDateString('en-GB') : '—' %>
+                        </td>
+                        <td style="font-size:0.8rem;color:#64748b;white-space:nowrap">
+                            <%= r.joiningDate ? new Date(r.joiningDate).toLocaleDateString('en-GB') : '—' %>
+                        </td>
+                        <td>
+                            <a href="<%= appUrl %>/api/onboarding/history/<%= r.id %>"
+                               class="btn-view" target="_blank">View</a>
+                        </td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+            <% } %>
+        </div>
+    </div>
+
     <!-- ══ Networks Panel (placeholder) ══ -->
     <div class="pm-panel" id="panel-networks">
         <div class="pm-coming-soon">
@@ -412,6 +539,16 @@ function humanAge(hours) {
 
 <script>
 (function () {
+    function switchTab(name) {
+        document.querySelectorAll('.pm-tab:not(.is-disabled)').forEach(t => t.classList.remove('is-active'));
+        document.querySelectorAll('.pm-panel').forEach(p => p.classList.remove('is-active'));
+        const tab   = document.getElementById('tab-' + name);
+        const panel = document.getElementById('panel-' + name);
+        if (tab)   tab.classList.add('is-active');
+        if (panel) panel.classList.add('is-active');
+    }
+    window.switchTab = switchTab;
+
     function applyFilters() {
         const locFilter    = document.getElementById('filter-location')?.value  || '';
         const statusFilter = document.getElementById('filter-status')?.value    || '';
@@ -435,12 +572,31 @@ function humanAge(hours) {
 
     window.applyFilters = applyFilters;
 
-    // Clear search on Escape
+    function applyAllFilters() {
+        const statusFilter = document.getElementById('all-filter-status')?.value  || '';
+        const locFilter    = document.getElementById('all-filter-location')?.value || '';
+        const searchRaw    = (document.getElementById('all-search')?.value || '').trim().toLowerCase();
+        const rows  = document.querySelectorAll('#all-req-table tbody tr');
+        let visible = 0;
+        rows.forEach(row => {
+            const matchStatus = !statusFilter || row.dataset.status   === statusFilter;
+            const matchLoc    = !locFilter    || row.dataset.location === locFilter;
+            const matchSearch = !searchRaw    || (row.dataset.search  || '').includes(searchRaw);
+            const show = matchStatus && matchLoc && matchSearch;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        const countEl = document.getElementById('all-filter-count');
+        if (countEl) countEl.textContent = visible + ' request' + (visible !== 1 ? 's' : '');
+    }
+    window.applyAllFilters = applyAllFilters;
+
+    // Clear search on Escape for both tables
     document.getElementById('req-search')?.addEventListener('keydown', e => {
-        if (e.key === 'Escape') {
-            e.target.value = '';
-            applyFilters();
-        }
+        if (e.key === 'Escape') { e.target.value = ''; applyFilters(); }
+    });
+    document.getElementById('all-search')?.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { e.target.value = ''; applyAllFilters(); }
     });
 })();
 </script>
