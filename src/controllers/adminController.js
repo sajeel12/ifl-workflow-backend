@@ -26,6 +26,44 @@ const STATUS_TO_RESEND = {
     PendingOPSAction: { roleKey: 'IT_OPS', type: 'OPS_ACTION' }
 };
 
+// Notification email type → portal entry slug. HOD_REVIEW has no portal.
+const EMAIL_TYPE_TO_PORTAL_SLUG = {
+    IT_OPS:               'it-ops',
+    DCI_INPUT:            'dci-team',
+    DCI_MANAGER_APPROVAL: 'dci-manager',
+    IT_HOD_APPROVAL:      'it-hod',
+    DCI_IMPLEMENTATION:   'dci-implementer',
+    OPS_ACTION:           'it-ops',
+};
+
+// Delegation roles own a single pending status. When admin reassigns the role,
+// all in-flight requests at that status must be rebound immediately so that:
+//   (a) the portal dashboard canAct flag is correct for the new delegate, and
+//   (b) the old delegate's token is rejected by the form POST guard (live config).
+const DELEGATION_ROLE_TO_STATUS = {
+    DCI_MANAGER: 'PendingDCIManager',
+    IT_HOD:      'PendingITHOD',
+};
+
+// Send the stage action email to a specific recipient for an in-flight request.
+// Used by the delegation and revert rebind loops so the new (or restored)
+// person gets notified immediately without admin having to resend manually.
+// Failures are logged but do NOT abort the rebind — a missed email is better
+// than a failed save.
+async function sendDelegationNotification(inflightReq, recipientEmail) {
+    try {
+        const map = STATUS_TO_RESEND[inflightReq.status];
+        if (!map || !inflightReq.currentStageToken) return;
+        const portalSlug = EMAIL_TYPE_TO_PORTAL_SLUG[map.type];
+        const actionLink = portalSlug
+            ? `${process.env.APP_URL}/portal/${portalSlug}/enter?action=${inflightReq.currentStageToken}`
+            : `${process.env.APP_URL}/api/onboarding/handle?token=${inflightReq.currentStageToken}`;
+        await emailService.sendOnboardingNotification(recipientEmail, inflightReq, actionLink, map.type);
+    } catch (err) {
+        console.error(`[Delegation] Failed to send notification for request #${inflightReq.id} to ${recipientEmail}:`, err.message);
+    }
+}
+
 // Per client policy, only the IT Operations role is split by location.
 // All other roles use the global default everywhere. The admin UI hides
 // non-location-aware roles from the per-location editor.
@@ -443,20 +481,22 @@ class AdminController {
             // re-rendered cards on the client can PUT to /workflow-approvers/:id.
             if (isDefault) {
                 const data = globals.map(g => ({
-                    id:               g.id,
-                    roleKey:          g.roleKey,
-                    label:            g.label,
-                    description:      g.description,
-                    workflowStage:    g.workflowStage,
-                    approverEmail:    g.approverEmail,
-                    approverName:     g.approverName,
-                    secondaryEmail:   g.secondaryEmail,
-                    secondaryName:    g.secondaryName,
-                    primaryExpiredAt: g.primaryExpiredAt,
-                    isActive:         g.isActive,
-                    isOverride:       false,
-                    overrideId:       null,
-                    location:         null
+                    id:                 g.id,
+                    roleKey:            g.roleKey,
+                    label:              g.label,
+                    description:        g.description,
+                    workflowStage:      g.workflowStage,
+                    approverEmail:      g.approverEmail,
+                    approverName:       g.approverName,
+                    approverUsername:   g.approverUsername,
+                    secondaryEmail:     g.secondaryEmail,
+                    secondaryName:      g.secondaryName,
+                    secondaryUsername:  g.secondaryUsername,
+                    primaryExpiredAt:   g.primaryExpiredAt,
+                    isActive:           g.isActive,
+                    isOverride:         false,
+                    overrideId:         null,
+                    location:           null
                 }));
                 return res.json({ success: true, location: null, data });
             }
@@ -474,35 +514,39 @@ class AdminController {
                 const o = overrideByRole.get(g.roleKey);
                 if (o) {
                     return {
-                        roleKey:          g.roleKey,
-                        label:            g.label,
-                        description:      g.description,
-                        workflowStage:    g.workflowStage,
-                        approverEmail:    o.approverEmail,
-                        approverName:     o.approverName,
-                        secondaryEmail:   o.secondaryEmail,
-                        secondaryName:    o.secondaryName,
-                        primaryExpiredAt: o.primaryExpiredAt,
-                        isActive:         o.isActive,
-                        isOverride:       true,
-                        overrideId:       o.id,
+                        roleKey:            g.roleKey,
+                        label:              g.label,
+                        description:        g.description,
+                        workflowStage:      g.workflowStage,
+                        approverEmail:      o.approverEmail,
+                        approverName:       o.approverName,
+                        approverUsername:   o.approverUsername,
+                        secondaryEmail:     o.secondaryEmail,
+                        secondaryName:      o.secondaryName,
+                        secondaryUsername:  o.secondaryUsername,
+                        primaryExpiredAt:   o.primaryExpiredAt,
+                        isActive:           o.isActive,
+                        isOverride:         true,
+                        overrideId:         o.id,
                         location
                     };
                 }
                 return {
-                    roleKey:          g.roleKey,
-                    label:            g.label,
-                    description:      g.description,
-                    workflowStage:    g.workflowStage,
+                    roleKey:            g.roleKey,
+                    label:              g.label,
+                    description:        g.description,
+                    workflowStage:      g.workflowStage,
                     // Show the global value as a "ghost" so admins know what would be used.
-                    approverEmail:    g.approverEmail,
-                    approverName:     g.approverName,
-                    secondaryEmail:   g.secondaryEmail,
-                    secondaryName:    g.secondaryName,
-                    primaryExpiredAt: null,
-                    isActive:         g.isActive,
-                    isOverride:       false,
-                    overrideId:       null,
+                    approverEmail:      g.approverEmail,
+                    approverName:       g.approverName,
+                    approverUsername:   g.approverUsername,
+                    secondaryEmail:     g.secondaryEmail,
+                    secondaryName:      g.secondaryName,
+                    secondaryUsername:  g.secondaryUsername,
+                    primaryExpiredAt:   null,
+                    isActive:           g.isActive,
+                    isOverride:         false,
+                    overrideId:         null,
                     location
                 };
             });
@@ -548,6 +592,9 @@ class AdminController {
             const secondaryName  = (req.body.secondaryName  || '').trim() || null;
             const isActive       = req.body.isActive !== undefined ? Boolean(req.body.isActive) : true;
 
+            const approverUsername  = (req.body.approverUsername  || '').trim().toLowerCase() || null;
+            const secondaryUsername = (req.body.secondaryUsername || '').trim().toLowerCase() || null;
+
             // Verify the global role exists; we won't accept overrides for
             // unknown roleKeys to keep the data clean.
             const globalCfg = await WorkflowApproverConfig.findOne({ where: { roleKey } });
@@ -556,7 +603,7 @@ class AdminController {
             }
 
             // No useful override content → drop any existing row.
-            if (!approverEmail && !approverName && !secondaryEmail && !secondaryName) {
+            if (!approverEmail && !approverName && !secondaryEmail && !secondaryName && !approverUsername && !secondaryUsername) {
                 const deleted = await WorkflowApproverLocationOverride.destroy({ where: { roleKey, location: location.trim() } });
                 return res.json({
                     success: true,
@@ -567,12 +614,44 @@ class AdminController {
                 });
             }
 
+            // Guard: one person can only appear in ONE location override per role.
+            // Multiple locations for the same person makes routing non-deterministic
+            // (resolveHRGroupForEmail / resolveCurrentRecipient return the first DB row,
+            // which has no guaranteed order). Check both username and email fields since
+            // older rows may lack a username.
+            const uniquenessConditions = [];
+            if (approverUsername)  uniquenessConditions.push({ approverUsername }, { secondaryUsername: approverUsername });
+            if (secondaryUsername) uniquenessConditions.push({ approverUsername: secondaryUsername }, { secondaryUsername });
+            if (approverEmail)     uniquenessConditions.push({ approverEmail }, { secondaryEmail: approverEmail });
+            if (secondaryEmail)    uniquenessConditions.push({ approverEmail: secondaryEmail }, { secondaryEmail });
+
+            if (uniquenessConditions.length > 0) {
+                const conflict = await WorkflowApproverLocationOverride.findOne({
+                    where: {
+                        roleKey,
+                        location: { [Op.ne]: location.trim() },
+                        isActive: true,
+                        [Op.or]: uniquenessConditions
+                    }
+                });
+                if (conflict) {
+                    return res.status(409).json({
+                        success: false,
+                        error: `This person is already assigned to "${roleKey}" at location "${conflict.location}". ` +
+                               `Each person can only be assigned to one location per role — ` +
+                               `otherwise request routing becomes non-deterministic.`
+                    });
+                }
+            }
+
+            const fields = { approverEmail, approverName, approverUsername, secondaryEmail, secondaryName, secondaryUsername, isActive, primaryExpiredAt: null };
+
             const [row, created] = await WorkflowApproverLocationOverride.findOrCreate({
                 where: { roleKey, location: location.trim() },
-                defaults: { approverEmail, approverName, secondaryEmail, secondaryName, isActive }
+                defaults: fields
             });
             if (!created) {
-                await row.update({ approverEmail, approverName, secondaryEmail, secondaryName, isActive });
+                await row.update(fields);
             }
 
             return res.json({
@@ -587,30 +666,162 @@ class AdminController {
     }
 
     /**
-     * API: Update a single workflow approver config
+     * API: Update a single workflow approver config.
+     *
+     * For delegation roles (DCI_MANAGER, IT_HOD) the caller may pass
+     * delegationType = 'temporary' | 'permanent' (default: 'permanent').
+     *
+     * temporary  — current primary is snapshotted into previousApprover* so the
+     *              original person can still open the portal in read-only mode,
+     *              and admin gets a one-click revert button.
+     * permanent  — previousApprover* columns are cleared; no revert path kept.
      */
     async updateWorkflowApprover(req, res) {
         try {
             const { id } = req.params;
-            const { approverEmail, approverName, secondaryEmail, secondaryName, isActive } = req.body;
+            const {
+                approverEmail, approverName, approverUsername,
+                secondaryEmail, secondaryName, secondaryUsername,
+                isActive,
+                delegationType   // 'temporary' | 'permanent' (delegation roles only)
+            } = req.body;
 
             const config = await WorkflowApproverConfig.findByPk(id);
             if (!config) {
                 return res.status(404).json({ success: false, error: 'Approver config not found' });
             }
 
+            const pEmail = approverEmail?.trim()   || null;
+            const sEmail = secondaryEmail?.trim()   || null;
+            const pUser  = approverUsername?.trim()?.toLowerCase()  || null;
+            const sUser  = secondaryUsername?.trim()?.toLowerCase() || null;
+
+            const isDelegationRole = !!DELEGATION_ROLE_TO_STATUS[config.roleKey];
+            const isTemporary      = isDelegationRole && delegationType === 'temporary';
+
+            // Snapshot the current primary before overwriting so the original person
+            // retains read-only portal access and can be restored in one click.
+            const prevEmail = isTemporary ? (config.approverEmail    || null) : null;
+            const prevName  = isTemporary ? (config.approverName     || null) : null;
+            const prevUser  = isTemporary ? (config.approverUsername || null) : null;
+
             await config.update({
-                approverEmail:  approverEmail?.trim()  || null,
-                approverName:   approverName?.trim()   || null,
-                secondaryEmail: secondaryEmail?.trim() || null,
-                secondaryName:  secondaryName?.trim()  || null,
-                isActive:       isActive !== undefined ? Boolean(isActive) : config.isActive
+                approverEmail:            pEmail,
+                approverName:             approverName?.trim()  || null,
+                approverUsername:         pUser,
+                secondaryEmail:           sEmail,
+                secondaryName:            secondaryName?.trim() || null,
+                secondaryUsername:        sUser,
+                isActive:                 isActive !== undefined ? Boolean(isActive) : config.isActive,
+                primaryExpiredAt:         null,
+                lastAssignedAt:           null,
+                isDelegatedTemporarily:   isTemporary,
+                previousApproverEmail:    prevEmail,
+                previousApproverName:     prevName,
+                previousApproverUsername: prevUser,
             });
 
-            res.json({ success: true, message: `Approver "${config.label}" updated successfully`, data: config });
+            // Immediately rebind every in-flight request at the corresponding stage
+            // so the new delegate's portal canAct flag is correct and the old
+            // delegate's action gate is updated (read-only portal access is handled
+            // separately via the previousApprover* columns).
+            const pendingStatus = DELEGATION_ROLE_TO_STATUS[config.roleKey];
+            let rebound = 0;
+            if (pendingStatus && pEmail) {
+                const inFlight = await OnboardingRequest.findAll({ where: { status: pendingStatus } });
+                for (const inflightReq of inFlight) {
+                    await inflightReq.update({
+                        currentStageAssigneeEmail:    pEmail,
+                        currentStageAssigneeUsername: pUser || null
+                    });
+                    const delegationKind = isTemporary ? 'Temporary Delegation' : 'Permanent Role Change';
+                    await TimelineEvent.create({
+                        requestId: inflightReq.id,
+                        action:    'Admin Delegation Update',
+                        actorRole: 'Admin',
+                        details:   `${config.label} reassigned to ${pEmail} (${delegationKind}). Portal access and action gate updated immediately.`,
+                        timestamp: new Date()
+                    });
+                    await sendDelegationNotification(inflightReq, pEmail);
+                    rebound++;
+                }
+            }
+
+            const msg = rebound > 0
+                ? `Approver "${config.label}" updated. ${rebound} in-flight request(s) rebound to new delegate.`
+                : `Approver "${config.label}" updated successfully`;
+            res.json({ success: true, message: msg, data: config });
         } catch (error) {
             console.error('Error updating approver config:', error);
             res.status(500).json({ success: false, error: 'Failed to update approver config' });
+        }
+    }
+
+    /**
+     * API: Revert a temporary delegation back to the original person.
+     * PUT /admin/workflow-approvers/:id/revert
+     *
+     * Restores previousApprover* → approver*, clears temp state, and
+     * immediately rebinds all in-flight requests at the matching status.
+     */
+    async revertDelegation(req, res) {
+        try {
+            const { id } = req.params;
+            const config = await WorkflowApproverConfig.findByPk(id);
+            if (!config) {
+                return res.status(404).json({ success: false, error: 'Approver config not found' });
+            }
+            if (!config.isDelegatedTemporarily) {
+                return res.status(400).json({ success: false, error: 'This role is not currently temporarily delegated.' });
+            }
+            if (!config.previousApproverEmail) {
+                return res.status(400).json({ success: false, error: 'No previous approver stored — cannot revert.' });
+            }
+
+            const restoredEmail = config.previousApproverEmail;
+            const restoredName  = config.previousApproverName  || null;
+            const restoredUser  = config.previousApproverUsername || null;
+
+            await config.update({
+                approverEmail:            restoredEmail,
+                approverName:             restoredName,
+                approverUsername:         restoredUser,
+                isDelegatedTemporarily:   false,
+                previousApproverEmail:    null,
+                previousApproverName:     null,
+                previousApproverUsername: null,
+                primaryExpiredAt:         null,
+                lastAssignedAt:           null,
+            });
+
+            const pendingStatus = DELEGATION_ROLE_TO_STATUS[config.roleKey];
+            let rebound = 0;
+            if (pendingStatus && restoredEmail) {
+                const inFlight = await OnboardingRequest.findAll({ where: { status: pendingStatus } });
+                for (const inflightReq of inFlight) {
+                    await inflightReq.update({
+                        currentStageAssigneeEmail:    restoredEmail,
+                        currentStageAssigneeUsername: restoredUser || null
+                    });
+                    await TimelineEvent.create({
+                        requestId: inflightReq.id,
+                        action:    'Admin Delegation Reverted',
+                        actorRole: 'Admin',
+                        details:   `${config.label} restored to original holder ${restoredEmail}. Temporary delegation ended.`,
+                        timestamp: new Date()
+                    });
+                    await sendDelegationNotification(inflightReq, restoredEmail);
+                    rebound++;
+                }
+            }
+
+            const msg = rebound > 0
+                ? `Delegation reverted. ${config.label} restored to ${restoredEmail}. ${rebound} in-flight request(s) rebound.`
+                : `Delegation reverted. ${config.label} restored to ${restoredEmail}.`;
+            res.json({ success: true, message: msg, data: config });
+        } catch (error) {
+            console.error('Error reverting delegation:', error);
+            res.status(500).json({ success: false, error: 'Failed to revert delegation' });
         }
     }
 
@@ -793,7 +1004,10 @@ class AdminController {
                 return res.status(400).json({ success: false, error: `No recipient email could be resolved for role ${map.roleKey}` });
             }
 
-            const actionLink = `${process.env.APP_URL}/api/onboarding/handle?token=${request.currentStageToken}`;
+            const portalSlug = EMAIL_TYPE_TO_PORTAL_SLUG[map.type];
+            const actionLink = portalSlug
+                ? `${process.env.APP_URL}/portal/${portalSlug}/enter?action=${request.currentStageToken}`
+                : `${process.env.APP_URL}/api/onboarding/handle?token=${request.currentStageToken}`;
             await emailService.sendOnboardingNotification(recipientEmail, request, actionLink, map.type);
 
             await TimelineEvent.create({

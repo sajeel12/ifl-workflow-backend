@@ -184,7 +184,7 @@ function _highlight(text, q) {
 async function fetchEmployeeSuggest(inp, q, onPick) {
   if (q.length < 2) { FloatSuggest.close(); return; }
   try {
-    const res = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
+    const res = await window.iflFetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
     const json = await res.json();
     const results = (json.data || []).filter(e => e.email);
     if (!results.length) {
@@ -401,7 +401,7 @@ async function saveConfig(key, value, statusId, btn) {
   statusEl.textContent = 'Saving…';
 
   try {
-    const res = await fetch('/admin/system-config/update', {
+    const res = await window.iflFetch('/admin/system-config/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, value })

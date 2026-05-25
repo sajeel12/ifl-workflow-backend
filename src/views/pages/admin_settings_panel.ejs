@@ -76,7 +76,7 @@
     const expression = document.getElementById('cronExpression').value;
     btn.disabled = true; btn.innerText = 'Saving…';
     try {
-      const res = await fetch('/admin/update-sync-config', {
+      const res = await window.iflFetch('/admin/update-sync-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled, expression })
@@ -92,7 +92,7 @@
     const btn = document.getElementById('syncBtn');
     btn.disabled = true; btn.innerText = '↺ Syncing…';
     try {
-      const res = await fetch('/admin/sync-now', { method:'POST', headers:{'Content-Type':'application/json'} });
+      const res = await window.iflFetch('/admin/sync-now', { method:'POST', headers:{'Content-Type':'application/json'} });
       const json = await res.json();
       if (json.success) {
         await IflDialog.success(json.message || 'Sync completed.');

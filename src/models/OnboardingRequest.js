@@ -24,6 +24,13 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         type: DataTypes.STRING,
         allowNull: true
     },
+    // AD sAMAccountName of the current stage assignee — unambiguous identity
+    // that doesn't break when emails change domains. Set alongside email on
+    // every stage transition. Used for gating before email as the primary check.
+    currentStageAssigneeUsername: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
 
     // Section 1: Requestor Information (HR)
     requesterName: { type: DataTypes.STRING }, // Auto-filled from logged-in initiator

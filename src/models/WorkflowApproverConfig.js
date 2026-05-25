@@ -27,24 +27,57 @@ const WorkflowApproverConfig = sequelize.define('WorkflowApproverConfig', {
         comment: 'Human-readable workflow step this approver belongs to'
     },
     // Primary
+    approverUsername: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'AD sAMAccountName (e.g. "israr.haq") — used for portal access control'
+    },
     approverEmail: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: { isEmail: { msg: 'Invalid primary email' } }
+        comment: 'Used for sending workflow notification emails'
     },
     approverName: {
         type: DataTypes.STRING,
         allowNull: true
     },
     // Secondary (fallback after 2 days)
+    secondaryUsername: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'AD sAMAccountName for secondary approver'
+    },
     secondaryEmail: {
         type: DataTypes.STRING,
         allowNull: true,
-        validate: { isEmail: { msg: 'Invalid secondary email' } }
+        comment: 'Used for sending workflow notification emails to secondary'
     },
     secondaryName: {
         type: DataTypes.STRING,
         allowNull: true
+    },
+    // Temporary delegation — DCI_MANAGER and IT_HOD only.
+    // When admin temporarily delegates the role, the original person's details
+    // are snapshotted here so they can (a) still view the portal in read-only
+    // mode and (b) be restored with a single admin revert action.
+    isDelegatedTemporarily: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'True while a temporary cover is active for DCI_MANAGER / IT_HOD'
+    },
+    previousApproverEmail: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Original person email before temporary delegation'
+    },
+    previousApproverName: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    previousApproverUsername: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Original person AD sAMAccountName before temporary delegation'
     },
     // Tracking for 2-day fallback logic
     lastAssignedAt: {

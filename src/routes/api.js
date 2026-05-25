@@ -7,6 +7,7 @@ import * as workflowTestController from '../controllers/workflowTestController.j
 import { ssoMiddleware } from '../middleware/ssoMiddleware.js';
 import * as authController from '../controllers/authController.js';
 import * as offboardingController from '../controllers/offboardingController.js';
+import * as portalController from '../controllers/portalController.js';
 
 
 router.post('/test/access-request', workflowTestController.createTestAccessRequest);
@@ -22,6 +23,13 @@ router.all('/approvals/handle', approvalController.handleApprovalClick);
 
 
 router.get('/auth/me', ssoMiddleware, authController.getCurrentUser);
+
+// Portal sidecar-token authentication.
+// IIS URL Rewrite inbound rules run before Windows Auth completes, so
+// X-Auth-User / {LOGON_USER} is always empty on proxied requests.
+// Portal pages use window.iflFetch to call this endpoint with the sidecar
+// token (which does carry the Windows identity from token.aspx) instead.
+router.get('/portal-auth/:roleSlug', ssoMiddleware, portalController.apiPortalAuth);
 
 // GET /initiate stays OPEN at Node — gating it with ssoMiddleware causes an
 // IIS Windows-auth login-prompt loop, because a fresh browser navigation
@@ -60,6 +68,10 @@ router.post('/onboarding/upload-proof', upload.array('dciProof', 5), ssoMiddlewa
 // Lookup active onboarding request by employeeId (used by HR form JS)
 router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
 
+// HR location group for the signed-in user — used by the initiate form to
+// hydrate the Location Group field client-side after SSO auth completes.
+router.get('/onboarding/my-hr-location', ssoMiddleware, onboardingController.getMyHRLocation);
+
 // History / status view for an existing onboarding request
 router.get('/onboarding/history/:id', onboardingController.renderHistory);
 
@@ -67,12 +79,8 @@ router.get('/onboarding/history/:id', onboardingController.renderHistory);
 // history-row detail popup. SSO-gated.
 router.get('/onboarding/:id/details', ssoMiddleware, onboardingController.getRequestDetails);
 
-// Role-scoped queue: pending actions or full history for a given role (JSON)
-// Requires SSO so a malicious caller can't enumerate every role's queue.
-router.get('/onboarding/queue', ssoMiddleware, onboardingController.getRoleQueue);
-
-// Role-scoped queue (rendered page) — the user-facing "My Pending Actions" view
-router.get('/my/queue', ssoMiddleware, onboardingController.renderRoleQueue);
+// /onboarding/queue and /my/queue removed — role-based portal (/portal/:slug/view)
+// is the single source of truth for pending and history.
 
 
 router.get('/health', (req, res) => {

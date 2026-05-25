@@ -7,7 +7,8 @@
     "scripts": {
         "start": "node server.js",
         "dev": "node --watch server.js",
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
+        "test:jest": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand"
     },
     "keywords": [
         "workflow",
@@ -19,6 +20,7 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "activedirectory2": "^2.2.0",
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "ejs": "^4.0.1",
@@ -35,5 +37,8 @@
         "sqlite3": "^5.1.7",
         "tedious": "^18.2.0",
         "winston": "^3.13.0"
+    },
+    "devDependencies": {
+        "jest": "^29.7.0"
     }
 }

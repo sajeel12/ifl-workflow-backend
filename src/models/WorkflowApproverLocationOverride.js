@@ -34,20 +34,30 @@ const WorkflowApproverLocationOverride = sequelize.define(
             comment: 'Employee.location value this override applies to (e.g. "Lahore", "Karachi")'
         },
         // Primary
+        approverUsername: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            comment: 'AD sAMAccountName — used for portal access control'
+        },
         approverEmail: {
             type: DataTypes.STRING,
             allowNull: true,
-            validate: { isEmail: { msg: 'Invalid primary email' } }
+            comment: 'Used for sending workflow notification emails'
         },
         approverName: {
             type: DataTypes.STRING,
             allowNull: true
         },
         // Secondary (fallback after 2 days of no response)
+        secondaryUsername: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            comment: 'AD sAMAccountName for secondary approver'
+        },
         secondaryEmail: {
             type: DataTypes.STRING,
             allowNull: true,
-            validate: { isEmail: { msg: 'Invalid secondary email' } }
+            comment: 'Used for sending workflow notification emails to secondary'
         },
         secondaryName: {
             type: DataTypes.STRING,

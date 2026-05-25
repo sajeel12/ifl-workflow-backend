@@ -134,12 +134,12 @@ const RecipientService = {
             if (primaryStale && cfg.secondaryEmail) {
                 await cfg.update({ primaryExpiredAt: now });
                 logger.info(`[RecipientService] Primary expired for ${roleKey}/${sourceTag} — using secondary ${cfg.secondaryEmail}`);
-                return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, `DB_Secondary_${sourceTag}`, roleKey);
+                return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, `DB_Secondary_${sourceTag}`, roleKey, cfg.secondaryUsername || null);
             }
 
             // If primary missing and already expired, use secondary
             if ((!cfg.approverEmail || cfg.primaryExpiredAt) && cfg.secondaryEmail) {
-                return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, `DB_Secondary_${sourceTag}`, roleKey);
+                return RecipientService._applyTestMode(cfg.secondaryEmail, cfg.secondaryName || '', true, `DB_Secondary_${sourceTag}`, roleKey, cfg.secondaryUsername || null);
             }
 
             // Special-case cross-backup for DCI_MANAGER ↔ IT_HOD — cross-backup
@@ -150,7 +150,7 @@ const RecipientService = {
                 const backup = backupOverride || await WorkflowApproverConfig.findOne({ where: { roleKey: backupRole, isActive: true } });
                 if (backup?.approverEmail) {
                     logger.info(`[RecipientService] ${roleKey}/${sourceTag} empty — using ${backupRole} as cross-backup`);
-                    return RecipientService._applyTestMode(backup.approverEmail, backup.approverName || '', true, `DB_CrossBackup_${sourceTag}`, roleKey);
+                    return RecipientService._applyTestMode(backup.approverEmail, backup.approverName || '', true, `DB_CrossBackup_${sourceTag}`, roleKey, backup.approverUsername || null);
                 }
             }
 
@@ -159,7 +159,7 @@ const RecipientService = {
                 if (context.requestId) {
                     await cfg.update({ lastAssignedAt: now, primaryExpiredAt: null });
                 }
-                return RecipientService._applyTestMode(cfg.approverEmail, cfg.approverName || '', false, `DB_Primary_${sourceTag}`, roleKey);
+                return RecipientService._applyTestMode(cfg.approverEmail, cfg.approverName || '', false, `DB_Primary_${sourceTag}`, roleKey, cfg.approverUsername || null);
             }
 
             // Nothing configured — env fallback via plain get()
@@ -173,15 +173,15 @@ const RecipientService = {
         }
     },
 
-    _applyTestMode(intended, name, isFallback, source, roleKey) {
+    _applyTestMode(intended, name, isFallback, source, roleKey, username = null) {
         const emailMode = process.env.EMAIL_MODE || 'DEV';
         if (emailMode === 'DEV') {
             const safe = process.env.TEST_RECIPIENT_EMAIL || 'developer@local.test';
             logger.info(`[RecipientService] [TEST MODE] ${roleKey}: intended=${intended} (${source}) → actual=${safe}`);
-            return { email: safe, name, isFallback, source };
+            return { email: safe, name, isFallback, source, username };
         }
         logger.info(`[RecipientService] Resolved ${roleKey} → ${intended} (${source})`);
-        return { email: intended, name, isFallback, source };
+        return { email: intended, name, isFallback, source, username };
     }
 };
 

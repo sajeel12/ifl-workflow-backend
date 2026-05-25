@@ -4,19 +4,13 @@ import crypto from 'crypto';
 const SHARED_SECRET = process.env.SSO_SHARED_SECRET || 'IFL_WORKFLOW_SECRET_KEY_2025';
 
 // SSO_MODE controls authentication behavior.
-//
-//   "PROD"      (default) — Real sidecar required. Reject any request without a
-//                           valid token or trusted proxy header.
-//   "MOCK"                — Skip everything; inject a dev identity from
-//                           SSO_MOCK_* env vars. For local dev without IIS.
-//   "OPTIONAL"            — Try sidecar/proxy-header; fall back to mock user
-//                           when neither is present.
+//   "PROD"     — Real IIS sidecar token required. Rejects unauthenticated requests.
+//   "MOCK"     — Injects a dev identity from SSO_MOCK_* env vars. No IIS needed.
+//   "OPTIONAL" — Uses sidecar/proxy-header when present; falls back to mock.
 const SSO_MODE = (process.env.SSO_MODE || 'PROD').toUpperCase();
 
-// SSO_TRUST_PROXY_HEADER — when "true" (default), accept the X-Auth-User
-// header injected by IIS URL Rewrite from {LOGON_USER}. Lets browser-navigation
-// requests (no JS to add headers) reach SSO-protected routes. Only safe when
-// Node binds to 127.0.0.1 and the IIS proxy is the sole ingress.
+// When "true", accept the X-Auth-User header injected by IIS URL Rewrite from
+// {LOGON_USER}. Only safe when Node binds to 127.0.0.1 and IIS is the sole ingress.
 const TRUST_PROXY_HEADER = String(process.env.SSO_TRUST_PROXY_HEADER || 'true').toLowerCase() !== 'false';
 
 const buildMockUser = () => ({
@@ -28,7 +22,6 @@ const buildMockUser = () => ({
     designation: process.env.SSO_MOCK_DESIGNATION || 'HR'
 });
 
-// HMAC-SHA256 signer used to verify the signed payload from token.aspx.
 function hmac(data) {
     const h = crypto.createHmac('sha256', SHARED_SECRET);
     h.update(data);
@@ -42,17 +35,14 @@ function timingSafeEqualHex(aHex, bHex) {
     return crypto.timingSafeEqual(a, b);
 }
 
-// Verify a sidecar token signature. The token.aspx page can sign two payload
-// shapes:
-//   (v2 / current)   "username|timestamp|email|displayName"
-//   (v1 / legacy)    "username|timestamp"
-// We accept either so the upgrade is non-breaking.
+// Accepts both v2 "username|timestamp|email|displayName" and v1 "username|timestamp"
+// signatures so legacy tokens remain valid during upgrades.
 function verifyTokenSignature(token) {
     if (!token || !token.signature || !token.username || token.timestamp == null) return false;
-    const username  = String(token.username);
-    const ts        = String(token.timestamp);
-    const email     = typeof token.email       === 'string' ? token.email       : '';
-    const display   = typeof token.displayName === 'string' ? token.displayName : '';
+    const username = String(token.username);
+    const ts       = String(token.timestamp);
+    const email    = typeof token.email       === 'string' ? token.email       : '';
+    const display  = typeof token.displayName === 'string' ? token.displayName : '';
 
     const v2 = hmac(`${username}|${ts}|${email}|${display}`);
     if (timingSafeEqualHex(v2, token.signature)) return true;
@@ -61,8 +51,7 @@ function verifyTokenSignature(token) {
     return timingSafeEqualHex(v1, token.signature);
 }
 
-// Only trust headers like X-Auth-User when the request came from the local
-// IIS proxy. External forgery is blocked by both this check and the firewall.
+// Only trust X-Auth-User when the request came from the local IIS proxy.
 function isLoopback(req) {
     const ip = (req.socket && req.socket.remoteAddress) || '';
     const clean = ip.replace(/^::ffff:/, '');
@@ -76,64 +65,43 @@ function stripDomain(s) {
     return (parts.length > 1 ? parts[1] : parts[0]).trim();
 }
 
-// Build req.user from the verified sidecar token. AD lookup is intentionally
-// NOT performed here — per client policy Node does not bind to AD directly.
-// Identity data is sourced from token.aspx (which runs on the IIS/SharePoint
-// host and queries AD locally).
+// email and displayName come directly from token.aspx, which queries the
+// forest Global Catalog (HODCSRV19S.IFL.NET:3268) — covers all domains
+// including child domains (lhr.ifl.net / IBRAHIM5_NT).
 function userFromToken(token) {
-    const username = stripDomain(token.username);
-    const email = (typeof token.email === 'string' ? token.email : '').trim();
+    const username    = stripDomain(token.username);
+    const email       = (typeof token.email       === 'string' ? token.email       : '').trim();
     const displayName = (typeof token.displayName === 'string' ? token.displayName : '').trim() || username;
 
-    // Temporary designation override — until proper AD-group lookup is wired up.
     let designation = '';
     if (email && email.toLowerCase() === 'sajeel.dilshad@perception-it.com') designation = 'HR';
 
-    return {
-        username,
-        email,
-        displayName,
-        manager: null,
-        raw: { source: 'sidecar-token' },
-        designation
-    };
+    return { username, email, displayName, manager: null, raw: { source: 'sidecar-token' }, designation };
 }
 
-// Build req.user from the IIS proxy header. Only username is available here —
-// no email/displayName, since those come from token.aspx. Pages that need the
-// full profile (form pre-fills, badge) hydrate via /api/auth/me using the
-// sidecar token, which is fired client-side as soon as JS runs.
+// Proxy-header path only carries the Windows username — no email/displayName.
+// The browser fires a sidecar token request client-side immediately after page
+// load (/api/auth/me) which fills the full profile.
 function userFromProxyHeader(rawHeader) {
     const username = stripDomain(rawHeader);
-    return {
-        username,
-        email: '',
-        displayName: username,
-        manager: null,
-        raw: { source: 'proxy-header' },
-        designation: ''
-    };
+    return { username, email: '', displayName: username, manager: null, raw: { source: 'proxy-header' }, designation: '' };
 }
-
 
 export const ssoMiddleware = async (req, res, next) => {
     try {
-        // ─── MOCK mode: skip everything ────────────────────────────────
+        // ─── MOCK mode ─────────────────────────────────────────────────────────
         if (SSO_MODE === 'MOCK') {
             req.user = buildMockUser();
             logger.info(`[SSO] [MOCK] ${req.user.username} for ${req.method} ${req.originalUrl}`);
             return next();
         }
 
-        // ─── 1. Sidecar HMAC token (preferred — has full profile data) ─
-        // The token can arrive on three channels in priority order:
-        //   (a) x-sidecar-token request header   — used by AJAX (window.iflFetch)
-        //   (b) x-sidecar-token form body field  — HTML form POSTs that can't
-        //                                          add custom headers
-        //   (c) sidecarToken query string        — last-resort for GETs
+        // ─── 1. Sidecar HMAC token (preferred — full profile from token.aspx) ──
+        // Arrives via: (a) x-sidecar-token header (AJAX), (b) form body field,
+        // (c) sidecarToken query string (last resort for GETs).
         const rawSidecarToken = (
             req.headers['x-sidecar-token']
-            || (req.body && req.body['x-sidecar-token'])
+            || (req.body  && req.body['x-sidecar-token'])
             || (req.query && req.query.sidecarToken)
             || ''
         ).toString().trim();
@@ -159,9 +127,7 @@ export const ssoMiddleware = async (req, res, next) => {
             return next();
         }
 
-        // ─── 2. IIS proxy header (browser-navigation fallback) ─────────
-        // Only username is available on this path; email/displayName get
-        // hydrated client-side via /api/auth/me + the sidecar token.
+        // ─── 2. IIS proxy header (browser-navigation fallback) ─────────────────
         const proxyUserRaw = req.headers['x-auth-user'];
         if (TRUST_PROXY_HEADER && proxyUserRaw && isLoopback(req)) {
             req.user = userFromProxyHeader(proxyUserRaw);
@@ -171,22 +137,21 @@ export const ssoMiddleware = async (req, res, next) => {
             }
         }
 
-        // ─── 3. OPTIONAL mode falls back to mock identity ──────────────
+        // ─── 3. OPTIONAL mode fallback ─────────────────────────────────────────
         if (SSO_MODE === 'OPTIONAL') {
             req.user = buildMockUser();
             logger.info(`[SSO] [OPTIONAL] No sidecar/proxy header; using mock ${req.user.username}`);
             return next();
         }
 
-        // ─── No identity at all → 401 with diagnostic log ──────────────
-        const seenIp = (req.socket && req.socket.remoteAddress) || 'unknown';
+        // ─── No identity → 401 ─────────────────────────────────────────────────
+        const seenIp      = (req.socket && req.socket.remoteAddress) || 'unknown';
         const seenAuthUser = req.headers['x-auth-user'] || '<missing>';
         logger.warn(
             `[SSO] 401 on ${req.method} ${req.originalUrl} | ` +
             `from=${seenIp} loopback=${isLoopback(req)} ` +
             `trustProxyHeader=${TRUST_PROXY_HEADER} ` +
-            `x-auth-user="${seenAuthUser}" ` +
-            `x-sidecar-token=<missing>`
+            `x-auth-user="${seenAuthUser}" x-sidecar-token=<missing>`
         );
         return res.status(401).json({ error: 'Unauthorized: SSO required. Please open this page from the IFL portal.' });
 
@@ -196,5 +161,4 @@ export const ssoMiddleware = async (req, res, next) => {
     }
 };
 
-// Expose the resolved mode so other modules / health checks can introspect it.
 export const getSSOMode = () => SSO_MODE;

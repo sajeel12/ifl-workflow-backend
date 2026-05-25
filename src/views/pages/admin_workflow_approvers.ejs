@@ -1,993 +1,1398 @@
 <%- include('../partials/admin_shell_top', { activeTab: 'approvers' }) %>
 
-  <!-- Page header -->
   <div class="a-page-hd">
     <h1 class="a-page-hd__title">Workflow Approver Configuration</h1>
-    <p class="a-page-hd__sub">Configure approvers globally (Default) or per-location. Onboarding requests automatically use the override matching the employee's location, falling back to the global default when no override exists.</p>
+    <p class="a-page-hd__sub">Manage who handles each stage of the onboarding workflow. Three models apply depending on
+      the role.</p>
   </div>
 
-  <!-- Info banner -->
-  <div class="a-banner a-banner--info">
+  <div class="a-banner a-banner--info" style="margin-bottom:24px;">
     <span class="a-banner__icon">ℹ</span>
-    <div>
-      <strong>Fallback:</strong> Primary first; after 2 days, Secondary takes over.
-      <strong>Cross-backup:</strong> DCI Manager ↔ IT HOD cover each other.
-      <strong>Per-location:</strong> <em>HR Initiator</em> and <em>IT Operations</em> are configured per location group (LHR, HO/ISB/MUL/…, TP3/TP4/PG, PP, TP1/TP2).
-      Only HR users on the list for a group may initiate a request; the request then routes to IT Ops in the same group.
-      All other roles (DCI Team, DCI Manager, IT HOD, DCI Implementer) are configured globally.
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:.84rem;">
+      <div><strong>2-Day Fallback</strong> (IT Operations, DCI Team, DCI Implementer) — Primary handles the stage; if no
+        action after 2 days, emails automatically fall to Secondary.</div>
+      <div><strong>Parallel Seats</strong> (HR Initiator) — Seat A and Seat B are equal. Either person can initiate a
+        request. No timer or fallback applies.</div>
+      <div><strong>Delegation</strong> (IT HOD, DCI Manager) — One person holds the role at a time. When you reassign,
+        the new person immediately takes over all pending portal actions. Previous email links are blocked and name the
+        new delegate.</div>
     </div>
   </div>
 
-  <!-- ── Card-scoped styles for the IT-Ops location picker ─────── -->
   <style>
-    .itops-loc-row {
-      display: flex; align-items: center; gap: 10px;
+    .wf-section-hd {
+      margin: 32px 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .wf-section-hd::before {
+      content: '';
+      flex: 0 0 3px;
+      height: 20px;
+      background: var(--a-brand);
+      border-radius: 2px;
+    }
+
+    .wf-section-hd__title {
+      font-size: .95rem;
+      font-weight: 700;
+      color: var(--a-text);
+    }
+
+    .wf-section-hd__sub {
+      font-size: .77rem;
+      color: var(--a-text-muted);
+    }
+
+    .wf-badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: .65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+
+    .wf-badge--fallback {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .wf-badge--parallel {
+      background: #dcfce7;
+      color: #16a34a;
+    }
+
+    .wf-badge--delegation {
+      background: #fef3c7;
+      color: #d97706;
+    }
+
+    .wf-loc-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--a-surface-2);
+      border: 1px solid var(--a-border);
+      border-radius: var(--a-radius-sm);
+      padding: 8px 12px;
+      margin-bottom: 14px;
+    }
+
+    .wf-loc-lbl {
+      font-size: .7rem;
+      font-weight: 700;
+      color: var(--a-text-muted);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .wf-loc-sel {
+      flex: 1;
+      min-width: 130px;
+      padding: 6px 10px;
+      border: 1px solid var(--a-border);
+      border-radius: var(--a-radius-sm);
+      background: #fff;
+      color: var(--a-text);
+      font-size: .85rem;
+    }
+
+    .wf-loc-sel:focus {
+      outline: 2px solid var(--a-brand);
+      outline-offset: -1px;
+    }
+
+    .wf-scope-badge {
+      font-size: .65rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .wf-scope-badge.is-override {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .wf-scope-badge.is-default {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    .wf-callout {
+      font-size: .75rem;
+      color: var(--a-text-muted);
+      border-radius: var(--a-radius-sm);
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      line-height: 1.45;
+      border: 1px solid;
+    }
+
+    .wf-callout--green {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+
+    .wf-callout--yellow {
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+
+    .wf-callout--orange {
+      background: #fff7ed;
+      border-color: #fed7aa;
+      color: #92400E;
+    }
+
+    .wf-revert-btn {
+      background: #fff7ed;
+      border: 1px solid #F97316;
+      color: #C2410C;
+      padding: 6px 14px;
+      border-radius: var(--a-radius-sm);
+      cursor: pointer;
+      font-size: .78rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .wf-revert-btn:hover {
+      background: #FFEDD5;
+    }
+
+    .wf-dtype-box {
       background: var(--a-surface-2);
       border: 1px solid var(--a-border);
       border-radius: var(--a-radius-sm);
       padding: 10px 12px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
-    .itops-loc-row__label {
-      font-size: .72rem; font-weight: 700; color: var(--a-text-muted);
-      letter-spacing: .04em; text-transform: uppercase; flex: 0 0 auto;
-    }
-    .itops-loc-select {
-      flex: 1; min-width: 160px;
-      padding: 7px 10px;
-      border: 1px solid var(--a-border); border-radius: var(--a-radius-sm);
-      background: #fff; color: var(--a-text); font-size: .88rem;
-    }
-    .itops-loc-select:focus { outline: 2px solid var(--a-brand); outline-offset: -1px; }
-    .itops-scope-badge {
-      display: inline-block; font-size: .68rem; font-weight: 700;
-      padding: 2px 8px; border-radius: 999px;
-      text-transform: uppercase; letter-spacing: .04em;
-      margin-left: 8px; flex: 0 0 auto;
-    }
-    .itops-scope-badge.is-override { background: #dbeafe; color: #1d4ed8; }
-    .itops-scope-badge.is-default  { background: #f1f5f9; color: #64748b; }
-    .a-clear-override-btn {
-      background: transparent; border: 1px solid var(--a-red);
-      color: var(--a-red); padding: 6px 12px;
-      border-radius: var(--a-radius-sm); cursor: pointer;
-      font-size: .78rem; font-weight: 600;
-    }
-    .a-clear-override-btn:hover { background: var(--a-red-bg); }
 
-    /* Merged HR + IT Ops card layout — two columns on desktop, stacked on
-       smaller screens. The card takes the full grid row so each column has
-       room for its own search/email/name fields. */
-    .a-approver-card.is-merged { grid-column: 1 / -1; }
-    .a-merged-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
+    .wf-dtype-lbl {
+      font-size: .7rem;
+      font-weight: 700;
+      color: var(--a-text-muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 8px;
     }
-    .a-merged-col {
-      padding: 14px 16px;
-      background: var(--a-surface-2);
-      border: 1px solid var(--a-border);
+
+    .wf-dtype-note {
+      font-size: .73rem;
+      color: var(--a-text-muted);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .a-clear-override-btn {
+      background: transparent;
+      border: 1px solid var(--a-red);
+      color: var(--a-red);
+      padding: 5px 12px;
       border-radius: var(--a-radius-sm);
+      cursor: pointer;
+      font-size: .75rem;
+      font-weight: 600;
     }
-    .a-merged-col__head {
-      font-size: .82rem; font-weight: 700; color: var(--a-text);
-      margin-bottom: 4px;
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+
+    .a-clear-override-btn:hover {
+      background: var(--a-red-bg);
     }
-    .a-merged-col__stage {
-      font-size: .68rem; font-weight: 600; color: var(--a-text-muted);
-      text-transform: uppercase; letter-spacing: .04em;
+
+    .a-input--mono {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: .83rem;
     }
-    @media (max-width: 880px) {
-      .a-merged-grid { grid-template-columns: 1fr; }
+
+    .a-label-hint {
+      font-size: .62rem;
+      font-weight: 400;
+      color: var(--a-text-muted);
+      margin-left: 3px;
+    }
+
+    .uname-badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: .64rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .uname-badge--ok {
+      background: #dcfce7;
+      color: #16a34a;
+    }
+
+    .uname-badge--warn {
+      background: #fef3c7;
+      color: #b45309;
+    }
+
+    .uname-badge--loading {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    .uname-badge--err {
+      background: #fee2e2;
+      color: #dc2626;
     }
   </style>
 
-  <!-- Approver cards — one per role, server-rendered with the GLOBAL config.
-       The IT Operations card has an extra in-card location dropdown that
-       client-side switches between Default + per-location overrides. -->
-  <div class="a-approver-grid" id="approverGrid">
-    <% approvers.forEach(function(ap) {
-         // HR_INITIATOR is rendered inside the IT_OPS merged card; skip its standalone card.
-         if (ap.roleKey === 'HR_INITIATOR') return;
-         const isMerged = (ap.roleKey === 'IT_OPS');
-         const hr = isMerged ? approvers.find(a => a.roleKey === 'HR_INITIATOR') : null;
+  <% const itOps=approvers.find(a=> a.roleKey === 'IT_OPS');
+    const hrInit = approvers.find(a => a.roleKey === 'HR_INITIATOR');
+    const delegationKeys = ['IT_HOD', 'DCI_MANAGER', 'IT_OPS_MGR'];
+    const fallbackKeys = ['DCI_TEAM', 'DCI_IMPLEMENTER'];
+    const knownKeys = new
+    Set(['IT_OPS','HR_INITIATOR','IT_HOD','DCI_MANAGER','DCI_TEAM','DCI_IMPLEMENTER','IT_OPS_MGR']);
     %>
-    <div class="a-approver-card <%= isMerged ? 'is-merged' : '' %>" data-id="<%= ap.id %>" data-rolekey="<%= ap.roleKey %>" <% if (isMerged && hr) { %>data-hr-id="<%= hr.id %>"<% } %>>
 
-      <!-- Card header -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
-        <div>
-          <div style="font-weight:700;font-size:.95rem;color:var(--a-text);margin-bottom:5px;"><%= ap.label %></div>
-          <% if (ap.workflowStage) { %>
-          <span class="a-stage"><%= ap.workflowStage %></span>
-          <% } %>
-        </div>
-        <% if (!isMerged) { %>
-        <label class="a-toggle" title="Enable / disable this role">
-          <input type="checkbox" id="active-<%= ap.id %>"
-                 <%= ap.isActive ? 'checked' : '' %>
-                 style="display:none"
-                 onchange="onToggle(<%= ap.id %>)">
-          <div class="a-pill <%= ap.isActive ? 'a-pill--on' : '' %>" id="pill-<%= ap.id %>"></div>
-          <span class="a-toggle__text" id="pill-lbl-<%= ap.id %>"><%= ap.isActive ? 'Active' : 'Inactive' %></span>
-        </label>
-        <% } %>
-      </div>
-
-      <!-- Description -->
-      <% if (ap.description) { %>
-      <p style="font-size:.83rem;color:var(--a-text-muted);margin:0 0 16px;line-height:1.55;"><%= ap.description %></p>
-      <% } %>
-
-      <%
-      // Only the IT Operations card gets the in-card location picker.
-      // Selecting a location swaps Primary/Secondary fields to that
-      // location's override (or shows the global default if none exists).
-      %>
-      <% if (ap.roleKey === 'IT_OPS' && typeof locations !== 'undefined' && locations.length) { %>
-        <div class="itops-loc-row" data-itops-card-id="<%= ap.id %>">
-          <span class="itops-loc-row__label">Configure for location group</span>
-          <select id="itops-loc-<%= ap.id %>" class="itops-loc-select"
-                  onchange="onItOpsLocationChange(<%= ap.id %>)">
-            <option value="">★ Default (All Locations)</option>
-            <% locations.forEach(function(loc) { %>
-              <option value="<%= loc %>"><%= (typeof locationLabels !== 'undefined' && locationLabels[loc]) ? locationLabels[loc] : loc %></option>
-            <% }); %>
-          </select>
-          <span id="itops-scope-<%= ap.id %>" class="itops-scope-badge is-default">Default</span>
-        </div>
-      <% } %>
-
-      <% if (isMerged && hr) { %>
-        <div class="a-merged-grid">
-          <!-- ═══ HR INITIATOR COLUMN ═══════════════════════════════════ -->
-          <div class="a-merged-col" data-hr-col data-hr-id="<%= hr.id %>">
-            <div class="a-merged-col__head">
-              <span>HR Initiator</span>
-              <span class="a-merged-col__stage">Step 1 – Initiate</span>
-            </div>
-            <p style="font-size:.78rem;color:var(--a-text-muted);margin:0 0 12px;line-height:1.45;">
-              Only listed HR users can submit requests for this group. Local-part of the SSO email must match.
-            </p>
-
-            <!-- HR PRIMARY -->
-            <div class="approver-section" style="margin-bottom:12px;">
-              <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                <span style="font-weight:700;font-size:.74rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Primary HR</span>
-              </div>
-              <div class="a-field" style="margin-bottom:6px;">
-                <input type="text" id="psearch-hr-<%= ap.id %>" class="a-input"
-                       placeholder="🔍 Search employee directory…"
-                       autocomplete="off"
-                       oninput="onApproverSearch('hr-' + <%= ap.id %>, 'primary', this.value)"
-                       onkeydown="onApproverKey(event)">
-              </div>
-              <div class="a-field-row">
-                <div class="a-field" style="margin:0;">
-                  <label class="a-label">Primary Email</label>
-                  <input type="email" id="email-hr-<%= ap.id %>" class="a-input"
-                         value="<%= hr.approverEmail || '' %>" placeholder="hr.primary@company.com">
-                </div>
-                <div class="a-field" style="margin:0;">
-                  <label class="a-label">Primary Name</label>
-                  <input type="text" id="name-hr-<%= ap.id %>" class="a-input"
-                         value="<%= hr.approverName || '' %>" placeholder="HR person name">
-                </div>
-              </div>
-            </div>
-
-            <!-- HR SECONDARY -->
-            <div class="approver-section" style="padding-top:10px;border-top:1px dashed var(--a-border);">
-              <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                <span style="font-weight:700;font-size:.74rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Secondary HR</span>
-              </div>
-              <div class="a-field" style="margin-bottom:6px;">
-                <input type="text" id="ssearch-hr-<%= ap.id %>" class="a-input"
-                       placeholder="🔍 Search employee directory…"
-                       autocomplete="off"
-                       oninput="onApproverSearch('hr-' + <%= ap.id %>, 'secondary', this.value)"
-                       onkeydown="onApproverKey(event)">
-              </div>
-              <div class="a-field-row">
-                <div class="a-field" style="margin:0;">
-                  <label class="a-label">Secondary Email</label>
-                  <input type="email" id="semail-hr-<%= ap.id %>" class="a-input"
-                         value="<%= hr.secondaryEmail || '' %>" placeholder="hr.secondary@company.com">
-                </div>
-                <div class="a-field" style="margin:0;">
-                  <label class="a-label">Secondary Name</label>
-                  <input type="text" id="sname-hr-<%= ap.id %>" class="a-input"
-                         value="<%= hr.secondaryName || '' %>" placeholder="HR backup name">
-                </div>
-              </div>
-            </div>
-
-            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <button class="btn btn-primary" style="padding:7px 18px;font-size:.85rem;" onclick="saveHR(<%= ap.id %>, <%= hr.id %>)">Save HR</button>
-              <label class="a-toggle" title="Enable / disable HR for this scope">
-                <input type="checkbox" id="active-hr-<%= ap.id %>"
-                       <%= hr.isActive ? 'checked' : '' %>
-                       style="display:none"
-                       onchange="onToggle('hr-' + <%= ap.id %>)">
-                <div class="a-pill <%= hr.isActive ? 'a-pill--on' : '' %>" id="pill-hr-<%= ap.id %>"></div>
-                <span class="a-toggle__text" id="pill-lbl-hr-<%= ap.id %>"><%= hr.isActive ? 'Active' : 'Inactive' %></span>
-              </label>
-              <span class="a-save-status" id="st-hr-<%= ap.id %>"></span>
-            </div>
-          </div>
-
-          <!-- ═══ IT OPERATIONS COLUMN ═══════════════════════════════════ -->
-          <div class="a-merged-col" data-itops-col>
-            <div class="a-merged-col__head">
-              <span>IT Operations</span>
-              <span class="a-merged-col__stage">Step 2 – Configure</span>
-            </div>
-            <p style="font-size:.78rem;color:var(--a-text-muted);margin:0 0 12px;line-height:1.45;">
-              The IT Ops user who configures services for this group. Also handles Step 12 verification.
-            </p>
-      <% } %>
-
-      <!-- ── PRIMARY ── -->
-      <div class="approver-section" style="margin-bottom:14px;">
-        <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span style="font-weight:700;font-size:.78rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Primary Approver</span>
-          <% if (ap.primaryExpiredAt) { %>
-            <span style="font-size:.7rem;background:var(--a-red-bg);color:var(--a-red);padding:2px 8px;border-radius:var(--a-radius-sm);font-weight:600;">EXPIRED</span>
-          <% } %>
-        </div>
-
-        <!-- Search -->
-        <div class="a-field" style="margin-bottom:8px;">
-          <input type="text"
-                 id="psearch-<%= ap.id %>"
-                 class="a-input"
-                 placeholder="🔍 Search employee directory (auto-fills primary)…"
-                 autocomplete="off"
-                 oninput="onApproverSearch(<%= ap.id %>, 'primary', this.value)"
-                 onkeydown="onApproverKey(event)"
-                 onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(<%= ap.id %>, 'primary', this.value.trim())">
-        </div>
-
-        <div class="a-field-row">
-          <div class="a-field" style="margin:0;">
-            <label class="a-label">Primary Email</label>
-            <input type="email"
-                   id="email-<%= ap.id %>"
-                   class="a-input <%= (!ap.approverEmail) ? 'a-input--warn' : '' %>"
-                   value="<%= ap.approverEmail || '' %>"
-                   placeholder="primary@company.com"
-                   oninput="onInput(<%= ap.id %>, this)">
-          </div>
-          <div class="a-field" style="margin:0;">
-            <label class="a-label">Primary Name</label>
-            <input type="text"
-                   id="name-<%= ap.id %>"
-                   class="a-input"
-                   value="<%= ap.approverName || '' %>"
-                   placeholder="Team / Person Name">
-          </div>
-        </div>
-      </div>
-
-      <!-- ── SECONDARY ── -->
-      <div class="approver-section" style="padding-top:12px;border-top:1px dashed var(--a-border);">
-        <div class="approver-section-label" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span style="font-weight:700;font-size:.78rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Secondary (Fallback)</span>
-          <span style="font-size:.7rem;color:var(--a-text-muted);">Activates after 2 days</span>
-        </div>
-
-        <!-- Search -->
-        <div class="a-field" style="margin-bottom:8px;">
-          <input type="text"
-                 id="ssearch-<%= ap.id %>"
-                 class="a-input"
-                 placeholder="🔍 Search employee directory (auto-fills secondary)…"
-                 autocomplete="off"
-                 oninput="onApproverSearch(<%= ap.id %>, 'secondary', this.value)"
-                 onkeydown="onApproverKey(event)"
-                 onfocus="if(this.value.trim().length>=2) _approverSuggestFetch(<%= ap.id %>, 'secondary', this.value.trim())">
-        </div>
-
-        <div class="a-field-row">
-          <div class="a-field" style="margin:0;">
-            <label class="a-label">Secondary Email</label>
-            <input type="email"
-                   id="semail-<%= ap.id %>"
-                   class="a-input"
-                   value="<%= ap.secondaryEmail || '' %>"
-                   placeholder="secondary@company.com"
-                   oninput="document.getElementById('st-' + <%= ap.id %>).textContent = '';">
-          </div>
-          <div class="a-field" style="margin:0;">
-            <label class="a-label">Secondary Name</label>
-            <input type="text"
-                   id="sname-<%= ap.id %>"
-                   class="a-input"
-                   value="<%= ap.secondaryName || '' %>"
-                   placeholder="Team / Person Name">
-          </div>
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--a-border);">
-        <button class="btn btn-primary" style="padding:8px 22px;" onclick="save(<%= ap.id %>)"><%= isMerged ? 'Save IT Ops' : 'Save' %></button>
-        <% if (isMerged) { %>
-        <label class="a-toggle" title="Enable / disable IT Operations for this scope">
-          <input type="checkbox" id="active-<%= ap.id %>"
-                 <%= ap.isActive ? 'checked' : '' %>
-                 style="display:none"
-                 onchange="onToggle(<%= ap.id %>)">
-          <div class="a-pill <%= ap.isActive ? 'a-pill--on' : '' %>" id="pill-<%= ap.id %>"></div>
-          <span class="a-toggle__text" id="pill-lbl-<%= ap.id %>"><%= ap.isActive ? 'Active' : 'Inactive' %></span>
-        </label>
-        <% } %>
-        <span class="a-save-status" id="st-<%= ap.id %>"></span>
-      </div>
-
-      <% if (isMerged && hr) { %>
-        </div><%# /.a-merged-col (IT Operations) %>
-        </div><%# /.a-merged-grid %>
-      <% } %>
-
+    <!-- ══════════════════════════════════════════════════════════════════════
+     SECTION 1 — Location-Scoped Roles
+══════════════════════════════════════════════════════════════════════ -->
+    <div class="wf-section-hd">
+      <span class="wf-section-hd__title">Location-Scoped Roles</span>
+      <span class="wf-section-hd__sub">Each location group can have its own configuration. Select a location to edit or
+        leave on Default.</span>
     </div>
-    <% }); %>
-  </div>
 
-<!-- Toast -->
-<div class="a-toast" id="toast"></div>
+    <div class="a-approver-grid">
 
-<%- include('../partials/admin_shell_bottom') %>
+      <!-- ── IT Operations ──────────────────────────────────────────────── -->
+      <% if (itOps) { %>
+        <div class="a-approver-card" data-id="<%= itOps.id %>" data-rolekey="IT_OPS">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+            <div>
+              <div style="font-weight:700;font-size:.95rem;color:var(--a-text);margin-bottom:5px;">
+                <%= itOps.label %>
+              </div>
+              <% if (itOps.workflowStage) { %><span class="a-stage">
+                  <%= itOps.workflowStage %>
+                </span>
+                <% } %>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="wf-badge wf-badge--fallback">2-Day Fallback</span>
+              <label class="a-toggle" title="Enable / disable">
+                <input type="checkbox" id="active-<%= itOps.id %>" <%=itOps.isActive ? 'checked' : '' %>
+                style="display:none" onchange="onToggle(<%= itOps.id %>)">
+                  <div class="a-pill <%= itOps.isActive ? 'a-pill--on' : '' %>" id="pill-<%= itOps.id %>"></div>
+                  <span class="a-toggle__text" id="pill-lbl-<%= itOps.id %>">
+                    <%= itOps.isActive ? 'Active' : 'Inactive' %>
+                  </span>
+              </label>
+            </div>
+          </div>
+          <% if (itOps.description) { %>
+            <p style="font-size:.82rem;color:var(--a-text-muted);margin:0 0 10px;line-height:1.5;">
+              <%= itOps.description %>
+            </p>
+            <% } %>
 
-<script>
-/* ================================================================
-   FLOAT SUGGEST — single fixed overlay, escapes any overflow clipping
-================================================================ */
-const FloatSuggest = (() => {
-  let el, activeInput = null, focusIdx = -1, items = [];
+              <div class="wf-loc-row">
+                <span class="wf-loc-lbl">Location</span>
+                <select id="loc-<%= itOps.id %>" class="wf-loc-sel" onchange="onLocChange('<%= itOps.id %>', 'IT_OPS')">
+                  <option value="">Default (All Locations)</option>
+                  <% locations.forEach(loc=> { %><option value="<%= loc %>">
+                      <%= locationLabels[loc] || loc %>
+                    </option>
+                    <% }); %>
+                </select>
+                <span id="scope-<%= itOps.id %>" class="wf-scope-badge is-default">Default</span>
+              </div>
 
-  function init() {
-    el = document.createElement('div');
-    el.className = 'a-float-suggest';
-    document.body.appendChild(el);
+              <div class="approver-section" style="margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span
+                    style="font-weight:700;font-size:.75rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Primary</span>
+                  <% if (itOps.primaryExpiredAt) { %><span
+                      style="font-size:.68rem;background:var(--a-red-bg);color:var(--a-red);padding:2px 7px;border-radius:var(--a-radius-sm);font-weight:600;">EXPIRED</span>
+                    <% } %>
+                </div>
+                <div class="a-field" style="margin-bottom:6px;">
+                  <input type="text" id="psearch-<%= itOps.id %>" class="a-input"
+                    placeholder="Search employee directory…" autocomplete="off"
+                    oninput="onApproverSearch(<%= itOps.id %>, 'primary', this.value)" onkeydown="onApproverKey(event)">
+                </div>
+                <div class="a-field-row">
+                  <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
+                    <div style="display:flex;gap:5px;align-items:center;">
+                      <input type="email" id="email-<%= itOps.id %>"
+                        class="a-input <%= !itOps.approverEmail ? 'a-input--warn' : '' %>" style="flex:1;"
+                        value="<%= itOps.approverEmail || '' %>" placeholder="primary@company.com"
+                        oninput="onInput(<%= itOps.id %>, this)">
+                      <span id="email-badge-<%= itOps.id %>" class="uname-badge"></span>
+                    </div>
+                  </div>
+                  <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
+                    <input type="text" id="name-<%= itOps.id %>" class="a-input" value="<%= itOps.approverName || '' %>"
+                      placeholder="Person name">
+                  </div>
+                </div>
+                <div class="a-field" style="margin-top:4px;">
+                  <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName — required for portal
+                      access</span></label>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" id="username-<%= itOps.id %>" class="a-input a-input--mono"
+                      value="<%= itOps.approverUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+                    <span id="uname-badge-<%= itOps.id %>" class="uname-badge"></span>
+                  </div>
+                </div>
+              </div>
 
-    document.addEventListener('mousedown', e => {
-      if (el.contains(e.target) || e.target === activeInput) return;
-      close();
-    });
+              <div class="approver-section" style="padding-top:10px;border-top:1px dashed var(--a-border);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span
+                    style="font-weight:700;font-size:.75rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Secondary</span>
+                  <span style="font-size:.68rem;color:var(--a-text-muted);">Takes over after 2 days of no action</span>
+                </div>
+                <div class="a-field" style="margin-bottom:6px;">
+                  <input type="text" id="ssearch-<%= itOps.id %>" class="a-input"
+                    placeholder="Search employee directory…" autocomplete="off"
+                    oninput="onApproverSearch(<%= itOps.id %>, 'secondary', this.value)"
+                    onkeydown="onApproverKey(event)">
+                </div>
+                <div class="a-field-row">
+                  <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
+                    <div style="display:flex;gap:5px;align-items:center;">
+                      <input type="email" id="semail-<%= itOps.id %>" class="a-input" style="flex:1;"
+                        value="<%= itOps.secondaryEmail || '' %>" placeholder="secondary@company.com"
+                        oninput="onSEmailInput(<%= itOps.id %>, this)">
+                      <span id="semail-badge-<%= itOps.id %>" class="uname-badge"></span>
+                    </div>
+                  </div>
+                  <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
+                    <input type="text" id="sname-<%= itOps.id %>" class="a-input"
+                      value="<%= itOps.secondaryName || '' %>" placeholder="Person name">
+                  </div>
+                </div>
+                <div class="a-field" style="margin-top:4px;">
+                  <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName</span></label>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" id="susername-<%= itOps.id %>" class="a-input a-input--mono"
+                      value="<%= itOps.secondaryUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+                    <span id="suname-badge-<%= itOps.id %>" class="uname-badge"></span>
+                  </div>
+                </div>
+              </div>
 
-    window.addEventListener('scroll', reposition, { passive: true, capture: true });
-    window.addEventListener('resize', reposition, { passive: true });
-  }
-
-  function show(inputEl, html, onItemClick) {
-    activeInput = inputEl;
-    el.innerHTML = html;
-    focusIdx = -1;
-    items = [...el.querySelectorAll('.a-suggest-item')];
-    items.forEach((item, i) => {
-      item.addEventListener('mousedown', e => { e.preventDefault(); onItemClick(item, i); });
-    });
-    el.classList.add('open');
-    reposition();
-  }
-
-  function close() {
-    el.classList.remove('open');
-    el.innerHTML = '';
-    activeInput = null;
-    focusIdx = -1;
-    items = [];
-  }
-
-  function isOpen() { return el && el.classList.contains('open'); }
-
-  function navigate(dir) {
-    if (!items.length) return false;
-    focusIdx = Math.max(-1, Math.min(items.length - 1, focusIdx + dir));
-    items.forEach((it, i) => it.classList.toggle('a-suggest-item--focused', i === focusIdx));
-    if (focusIdx >= 0) items[focusIdx].scrollIntoView({ block: 'nearest' });
-    return true;
-  }
-
-  function selectFocused() {
-    if (focusIdx >= 0 && items[focusIdx]) { items[focusIdx].dispatchEvent(new MouseEvent('mousedown')); return true; }
-    return false;
-  }
-
-  function reposition() {
-    if (!activeInput || !isOpen()) return;
-    const r = activeInput.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - r.bottom;
-    el.style.left  = r.left + 'px';
-    el.style.width = Math.max(r.width, 280) + 'px';
-    if (spaceBelow >= 150) {
-      el.style.top = (r.bottom + 5) + 'px';
-      el.style.bottom = 'auto';
-      el.style.maxHeight = Math.min(320, spaceBelow - 12) + 'px';
-    } else {
-      el.style.bottom = (window.innerHeight - r.top + 5) + 'px';
-      el.style.top = 'auto';
-      el.style.maxHeight = Math.min(320, r.top - 12) + 'px';
-    }
-  }
-
-  return { init, show, close, isOpen, navigate, selectFocused };
-})();
-
-/* ================================================================
-   HELPERS
-================================================================ */
-function debounce(fn, ms) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-}
-
-function highlight(text, q) {
-  if (!q || !text) return text || '';
-  const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return String(text).replace(new RegExp(`(${esc})`, 'gi'), '<mark>$1</mark>');
-}
-
-function suggestLoading() {
-  return '<div class="a-suggest-loading"><div class="a-spinner"></div>Searching…</div>';
-}
-
-function suggestEmpty(q) {
-  return `<div class="a-suggest-empty">No results for "<strong>${q}</strong>"</div>`;
-}
-
-function empHTML(emp, q) {
-  return `
-    <div class="a-suggest-item">
-      <div class="a-suggest-item__avatar">${(emp.name || '?').charAt(0).toUpperCase()}</div>
-      <div class="a-suggest-item__body">
-        <div class="a-suggest-item__name">${highlight(emp.name, q)}</div>
-        <div class="a-suggest-item__meta">
-          <strong>${emp.employeeId}</strong>
-          ${emp.department ? ' · ' + highlight(emp.department, q) : ''}
-          ${emp.designation ? ' · ' + emp.designation : ''}
-          ${emp.email ? ' · ' + highlight(emp.email, q) : ''}
+              <div
+                style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--a-border);">
+                <button class="btn btn-primary" style="padding:7px 20px;"
+                  onclick="saveLocCard('<%= itOps.id %>', 'IT_OPS')">Save</button>
+                <span class="a-save-status" id="st-<%= itOps.id %>"></span>
+              </div>
         </div>
+        <% } %>
+
+          <!-- ── HR Initiator ────────────────────────────────────────────────── -->
+          <% if (hrInit) { %>
+            <div class="a-approver-card" data-id="<%= hrInit.id %>" data-rolekey="HR_INITIATOR">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+                <div>
+                  <div style="font-weight:700;font-size:.95rem;color:var(--a-text);margin-bottom:5px;">
+                    <%= hrInit.label %>
+                  </div>
+                  <% if (hrInit.workflowStage) { %><span class="a-stage">
+                      <%= hrInit.workflowStage %>
+                    </span>
+                    <% } %>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span class="wf-badge wf-badge--parallel">Parallel Seats</span>
+                  <label class="a-toggle" title="Enable / disable">
+                    <input type="checkbox" id="active-<%= hrInit.id %>" <%=hrInit.isActive ? 'checked' : '' %>
+                    style="display:none" onchange="onToggle(<%= hrInit.id %>)">
+                      <div class="a-pill <%= hrInit.isActive ? 'a-pill--on' : '' %>" id="pill-<%= hrInit.id %>"></div>
+                      <span class="a-toggle__text" id="pill-lbl-<%= hrInit.id %>">
+                        <%= hrInit.isActive ? 'Active' : 'Inactive' %>
+                      </span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="wf-callout wf-callout--green">
+                Both seats are equal — either person can independently initiate a request. No fallback timer. Both are
+                blocked from initiating for an employee who already has an active workflow.
+              </div>
+
+              <div class="wf-loc-row">
+                <span class="wf-loc-lbl">Location</span>
+                <select id="loc-<%= hrInit.id %>" class="wf-loc-sel"
+                  onchange="onLocChange('<%= hrInit.id %>', 'HR_INITIATOR')">
+                  <option value="">Default (All Locations)</option>
+                  <% locations.forEach(loc=> { %><option value="<%= loc %>">
+                      <%= locationLabels[loc] || loc %>
+                    </option>
+                    <% }); %>
+                </select>
+                <span id="scope-<%= hrInit.id %>" class="wf-scope-badge is-default">Default</span>
+              </div>
+
+              <div class="approver-section" style="margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span
+                    style="font-weight:700;font-size:.75rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Seat
+                    A</span>
+                </div>
+                <div class="a-field" style="margin-bottom:6px;">
+                  <input type="text" id="psearch-<%= hrInit.id %>" class="a-input"
+                    placeholder="Search employee directory…" autocomplete="off"
+                    oninput="onApproverSearch(<%= hrInit.id %>, 'primary', this.value)"
+                    onkeydown="onApproverKey(event)">
+                </div>
+                <div class="a-field-row">
+                  <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
+                    <div style="display:flex;gap:5px;align-items:center;">
+                      <input type="email" id="email-<%= hrInit.id %>" class="a-input" style="flex:1;"
+                        value="<%= hrInit.approverEmail || '' %>" placeholder="seat-a@company.com"
+                        oninput="onInput(<%= hrInit.id %>, this)">
+                      <span id="email-badge-<%= hrInit.id %>" class="uname-badge"></span>
+                    </div>
+                  </div>
+                  <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
+                    <input type="text" id="name-<%= hrInit.id %>" class="a-input"
+                      value="<%= hrInit.approverName || '' %>" placeholder="Person name">
+                  </div>
+                </div>
+                <div class="a-field" style="margin-top:4px;">
+                  <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName — required for portal
+                      access</span></label>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" id="username-<%= hrInit.id %>" class="a-input a-input--mono"
+                      value="<%= hrInit.approverUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+                    <span id="uname-badge-<%= hrInit.id %>" class="uname-badge"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="approver-section" style="padding-top:10px;border-top:1px dashed var(--a-border);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span
+                    style="font-weight:700;font-size:.75rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Seat
+                    B</span>
+                </div>
+                <div class="a-field" style="margin-bottom:6px;">
+                  <input type="text" id="ssearch-<%= hrInit.id %>" class="a-input"
+                    placeholder="Search employee directory…" autocomplete="off"
+                    oninput="onApproverSearch(<%= hrInit.id %>, 'secondary', this.value)"
+                    onkeydown="onApproverKey(event)">
+                </div>
+                <div class="a-field-row">
+                  <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
+                    <div style="display:flex;gap:5px;align-items:center;">
+                      <input type="email" id="semail-<%= hrInit.id %>" class="a-input" style="flex:1;"
+                        value="<%= hrInit.secondaryEmail || '' %>" placeholder="seat-b@company.com"
+                        oninput="onSEmailInput(<%= hrInit.id %>, this)">
+                      <span id="semail-badge-<%= hrInit.id %>" class="uname-badge"></span>
+                    </div>
+                  </div>
+                  <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
+                    <input type="text" id="sname-<%= hrInit.id %>" class="a-input"
+                      value="<%= hrInit.secondaryName || '' %>" placeholder="Person name">
+                  </div>
+                </div>
+                <div class="a-field" style="margin-top:4px;">
+                  <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName</span></label>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" id="susername-<%= hrInit.id %>" class="a-input a-input--mono"
+                      value="<%= hrInit.secondaryUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+                    <span id="suname-badge-<%= hrInit.id %>" class="uname-badge"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--a-border);">
+                <button class="btn btn-primary" style="padding:7px 20px;"
+                  onclick="saveLocCard('<%= hrInit.id %>', 'HR_INITIATOR')">Save</button>
+                <span class="a-save-status" id="st-<%= hrInit.id %>"></span>
+              </div>
+            </div>
+            <% } %>
+
+    </div><!-- /location grid -->
+
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+     SECTION 2 — Delegation Roles
+══════════════════════════════════════════════════════════════════════ -->
+    <div class="wf-section-hd">
+      <span class="wf-section-hd__title">Delegation Roles</span>
+      <span class="wf-section-hd__sub">Single assignee. Reassigning takes effect immediately across portal and email
+        links.</span>
+    </div>
+
+    <div class="a-approver-grid">
+      <% approvers.filter(a=> delegationKeys.includes(a.roleKey)).forEach(ap => { %>
+        <div class="a-approver-card" data-id="<%= ap.id %>" data-rolekey="<%= ap.roleKey %>">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+            <div>
+              <div style="font-weight:700;font-size:.95rem;color:var(--a-text);margin-bottom:5px;">
+                <%= ap.label %>
+              </div>
+              <% if (ap.workflowStage) { %><span class="a-stage">
+                  <%= ap.workflowStage %>
+                </span>
+                <% } %>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="wf-badge wf-badge--delegation">Delegation</span>
+              <label class="a-toggle" title="Enable / disable">
+                <input type="checkbox" id="active-<%= ap.id %>" <%=ap.isActive ? 'checked' : '' %> style="display:none"
+                onchange="onToggle(<%= ap.id %>)">
+                  <div class="a-pill <%= ap.isActive ? 'a-pill--on' : '' %>" id="pill-<%= ap.id %>"></div>
+                  <span class="a-toggle__text" id="pill-lbl-<%= ap.id %>">
+                    <%= ap.isActive ? 'Active' : 'Inactive' %>
+                  </span>
+              </label>
+            </div>
+          </div>
+          <% if (ap.description) { %>
+            <p style="font-size:.82rem;color:var(--a-text-muted);margin:0 0 10px;line-height:1.5;">
+              <%= ap.description %>
+            </p>
+            <% } %>
+
+              <% if (ap.isDelegatedTemporarily && ap.previousApproverEmail) { %>
+                <div class="wf-callout wf-callout--orange"
+                  style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+                  <div>
+                    <strong>Temporarily delegated.</strong>
+                    Original holder: <strong>
+                      <%= ap.previousApproverName || ap.previousApproverEmail %>
+                    </strong>
+                    (<%= ap.previousApproverEmail %>) — they can view the portal in read-only mode.
+                      Revert to restore their full access.
+                  </div>
+                  <button class="wf-revert-btn" onclick="revertDelegation('<%= ap.id %>')">&#8635; Revert</button>
+                </div>
+                <% } else { %>
+                  <div class="wf-callout wf-callout--yellow">
+                    Reassigning takes effect immediately. The new person sees all pending requests in their portal.
+                    Previous email links are blocked and display the new delegate's name.
+                  </div>
+                  <% } %>
+
+                    <div
+                      style="font-weight:700;font-size:.75rem;color:var(--a-text);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">
+                      Current Assignee</div>
+                    <div class="a-field" style="margin-bottom:8px;">
+                      <input type="text" id="psearch-<%= ap.id %>" class="a-input"
+                        placeholder="Search to change assignee…" autocomplete="off"
+                        oninput="onApproverSearch(<%= ap.id %>, 'primary', this.value)"
+                        onkeydown="onApproverKey(event)">
+                    </div>
+                    <div class="a-field-row" style="margin-bottom:4px;">
+                      <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
+                        <div style="display:flex;gap:5px;align-items:center;">
+                          <input type="email" id="email-<%= ap.id %>"
+                            class="a-input <%= !ap.approverEmail ? 'a-input--warn' : '' %>" style="flex:1;"
+                            value="<%= ap.approverEmail || '' %>" placeholder="assignee@company.com"
+                            oninput="onInput(<%= ap.id %>, this)">
+                          <span id="email-badge-<%= ap.id %>" class="uname-badge"></span>
+                        </div>
+                      </div>
+                      <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
+                        <input type="text" id="name-<%= ap.id %>" class="a-input" value="<%= ap.approverName || '' %>"
+                          placeholder="Person name">
+                      </div>
+                    </div>
+                    <div class="a-field" style="margin-bottom:14px;">
+                      <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName — required for
+                          portal access</span></label>
+                      <div style="display:flex;gap:6px;align-items:center;">
+                        <input type="text" id="username-<%= ap.id %>" class="a-input a-input--mono"
+                          value="<%= ap.approverUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+                        <span id="uname-badge-<%= ap.id %>" class="uname-badge"></span>
+                      </div>
+                    </div>
+
+                    <div class="wf-dtype-box">
+                      <div class="wf-dtype-lbl">Nature of Change</div>
+                      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.83rem;">
+                          <input type="radio" name="dtype-<%= ap.id %>" value="permanent"
+                            style="accent-color:var(--a-brand);" <%=!ap.isDelegatedTemporarily ? 'checked' : '' %>
+                          onchange="updateDtypeNote('<%= ap.id %>', this.value)">
+                            Permanent role change
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.83rem;">
+                          <input type="radio" name="dtype-<%= ap.id %>" value="temporary"
+                            style="accent-color:var(--a-brand);" <%=ap.isDelegatedTemporarily ? 'checked' : '' %>
+                          onchange="updateDtypeNote('<%= ap.id %>', this.value)">
+                            Temporary delegation
+                        </label>
+                      </div>
+                      <div id="dtype-note-<%= ap.id %>" class="wf-dtype-note">
+                        <%= ap.isDelegatedTemporarily
+                          ? "Covering temporarily. Previous person's email links will show they've been delegated to this person."
+                          : "This person permanently holds the role. No expectation of reverting." %>
+                      </div>
+                    </div>
+
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                      <button class="btn btn-primary" style="padding:7px 20px;"
+                        onclick="saveDelegation('<%= ap.id %>')">Update Assignee</button>
+                      <span class="a-save-status" id="st-<%= ap.id %>"></span>
+                    </div>
+        </div>
+        <% }); %>
+    </div><!-- /delegation grid -->
+
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+     SECTION 3 — 2-Day Fallback Roles
+══════════════════════════════════════════════════════════════════════ -->
+    <div class="wf-section-hd">
+      <span class="wf-section-hd__title">2-Day Fallback Roles</span>
+      <span class="wf-section-hd__sub">Primary handles the stage. Secondary activates automatically if primary does not
+        act within 2 days.</span>
+    </div>
+
+    <div class="a-approver-grid">
+      <% approvers.filter(a=> fallbackKeys.includes(a.roleKey)).forEach(ap => { %>
+        <div class="a-approver-card" data-id="<%= ap.id %>" data-rolekey="<%= ap.roleKey %>">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+            <div>
+              <div style="font-weight:700;font-size:.95rem;color:var(--a-text);margin-bottom:5px;">
+                <%= ap.label %>
+              </div>
+              <% if (ap.workflowStage) { %><span class="a-stage">
+                  <%= ap.workflowStage %>
+                </span>
+                <% } %>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="wf-badge wf-badge--fallback">2-Day Fallback</span>
+              <label class="a-toggle" title="Enable / disable">
+                <input type="checkbox" id="active-<%= ap.id %>" <%=ap.isActive ? 'checked' : '' %> style="display:none"
+                onchange="onToggle(<%= ap.id %>)">
+                  <div class="a-pill <%= ap.isActive ? 'a-pill--on' : '' %>" id="pill-<%= ap.id %>"></div>
+                  <span class="a-toggle__text" id="pill-lbl-<%= ap.id %>">
+                    <%= ap.isActive ? 'Active' : 'Inactive' %>
+                  </span>
+              </label>
+            </div>
+          </div>
+          <% if (ap.description) { %>
+            <p style="font-size:.82rem;color:var(--a-text-muted);margin:0 0 12px;line-height:1.5;">
+              <%= ap.description %>
+            </p>
+            <% } %>
+
+              <div class="approver-section" style="margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span
+                    style="font-weight:700;font-size:.75rem;color:var(--a-brand);text-transform:uppercase;letter-spacing:.04em;">Primary</span>
+                  <% if (ap.primaryExpiredAt) { %><span
+                      style="font-size:.68rem;background:var(--a-red-bg);color:var(--a-red);padding:2px 7px;border-radius:var(--a-radius-sm);font-weight:600;">EXPIRED</span>
+                    <% } %>
+                </div>
+                <div class="a-field" style="margin-bottom:6px;">
+                  <input type="text" id="psearch-<%= ap.id %>" class="a-input" placeholder="Search employee directory…"
+                    autocomplete="off" oninput="onApproverSearch(<%= ap.id %>, 'primary', this.value)"
+                    onkeydown="onApproverKey(event)">
+                </div>
+                <div class="a-field-row">
+                  <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
+                    <div style="display:flex;gap:5px;align-items:center;">
+                      <input type="email" id="email-<%= ap.id %>"
+                        class="a-input <%= !ap.approverEmail ? 'a-input--warn' : '' %>" style="flex:1;"
+                        value="<%= ap.approverEmail || '' %>" placeholder="primary@company.com"
+                        oninput="onInput(<%= ap.id %>, this)">
+                      <span id="email-badge-<%= ap.id %>" class="uname-badge"></span>
+                    </div>
+                  </div>
+                  <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
+                    <input type="text" id="name-<%= ap.id %>" class="a-input" value="<%= ap.approverName || '' %>"
+                      placeholder="Person name">
+                  </div>
+                </div>
+                <div class="a-field" style="margin-top:4px;">
+                  <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName — required for portal
+                      access</span></label>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" id="username-<%= ap.id %>" class="a-input a-input--mono"
+                      value="<%= ap.approverUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+                    <span id="uname-badge-<%= ap.id %>" class="uname-badge"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="approver-section" style="padding-top:10px;border-top:1px dashed var(--a-border);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span
+                    style="font-weight:700;font-size:.75rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.04em;">Secondary</span>
+                  <span style="font-size:.68rem;color:var(--a-text-muted);">Takes over after 2 days of no action</span>
+                </div>
+                <div class="a-field" style="margin-bottom:6px;">
+                  <input type="text" id="ssearch-<%= ap.id %>" class="a-input" placeholder="Search employee directory…"
+                    autocomplete="off" oninput="onApproverSearch(<%= ap.id %>, 'secondary', this.value)"
+                    onkeydown="onApproverKey(event)">
+                </div>
+                <div class="a-field-row">
+                  <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
+                    <div style="display:flex;gap:5px;align-items:center;">
+                      <input type="email" id="semail-<%= ap.id %>" class="a-input" style="flex:1;"
+                        value="<%= ap.secondaryEmail || '' %>" placeholder="secondary@company.com"
+                        oninput="onSEmailInput(<%= ap.id %>, this)">
+                      <span id="semail-badge-<%= ap.id %>" class="uname-badge"></span>
+                    </div>
+                  </div>
+                  <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
+                    <input type="text" id="sname-<%= ap.id %>" class="a-input" value="<%= ap.secondaryName || '' %>"
+                      placeholder="Person name">
+                  </div>
+                </div>
+                <div class="a-field" style="margin-top:4px;">
+                  <label class="a-label">AD Login Name<span class="a-label-hint">sAMAccountName</span></label>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" id="susername-<%= ap.id %>" class="a-input a-input--mono"
+                      value="<%= ap.secondaryUsername || '' %>" placeholder="e.g. first.last" autocomplete="off">
+                    <span id="suname-badge-<%= ap.id %>" class="uname-badge"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--a-border);">
+                <button class="btn btn-primary" style="padding:7px 20px;"
+                  onclick="saveFallback('<%= ap.id %>')">Save</button>
+                <span class="a-save-status" id="st-<%= ap.id %>"></span>
+              </div>
+        </div>
+        <% }); %>
+    </div><!-- /fallback grid -->
+
+
+    <!-- ══ Any other roles not in the known set ══ -->
+    <% const otherApprovers=approvers.filter(a=> !knownKeys.has(a.roleKey));
+      if (otherApprovers.length) { %>
+      <div class="wf-section-hd" style="margin-top:32px;">
+        <span class="wf-section-hd__title">Other Roles</span>
       </div>
-      <span class="a-suggest-item__badge" style="background:var(--a-brand-light);color:var(--a-brand);">Select</span>
-    </div>`;
-}
+      <div class="a-approver-grid">
+        <% otherApprovers.forEach(ap=> { %>
+          <div class="a-approver-card" data-id="<%= ap.id %>" data-rolekey="<%= ap.roleKey %>">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
+              <div>
+                <div style="font-weight:700;font-size:.95rem;color:var(--a-text);margin-bottom:5px;">
+                  <%= ap.label %>
+                </div>
+                <% if (ap.workflowStage) { %><span class="a-stage">
+                    <%= ap.workflowStage %>
+                  </span>
+                  <% } %>
+              </div>
+              <label class="a-toggle" title="Enable / disable">
+                <input type="checkbox" id="active-<%= ap.id %>" <%=ap.isActive ? 'checked' : '' %> style="display:none"
+                onchange="onToggle(<%= ap.id %>)">
+                  <div class="a-pill <%= ap.isActive ? 'a-pill--on' : '' %>" id="pill-<%= ap.id %>"></div>
+                  <span class="a-toggle__text" id="pill-lbl-<%= ap.id %>">
+                    <%= ap.isActive ? 'Active' : 'Inactive' %>
+                  </span>
+              </label>
+            </div>
+            <% if (ap.description) { %>
+              <p style="font-size:.82rem;color:var(--a-text-muted);margin:0 0 12px;line-height:1.5;">
+                <%= ap.description %>
+              </p>
+              <% } %>
+                <div class="a-field-row">
+                  <div class="a-field" style="margin:0;"><label class="a-label">Email</label>
+                    <div style="display:flex;gap:5px;align-items:center;">
+                      <input type="email" id="email-<%= ap.id %>" class="a-input" style="flex:1;"
+                        value="<%= ap.approverEmail || '' %>" placeholder="approver@company.com"
+                        oninput="onInput(<%= ap.id %>, this)">
+                      <span id="email-badge-<%= ap.id %>" class="uname-badge"></span>
+                    </div>
+                  </div>
+                  <div class="a-field" style="margin:0;"><label class="a-label">Name</label>
+                    <input type="text" id="name-<%= ap.id %>" class="a-input" value="<%= ap.approverName || '' %>"
+                      placeholder="Person name">
+                  </div>
+                </div>
+                <div
+                  style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--a-border);">
+                  <button class="btn btn-primary" style="padding:7px 20px;"
+                    onclick="saveFallback('<%= ap.id %>')">Save</button>
+                  <span class="a-save-status" id="st-<%= ap.id %>"></span>
+                </div>
+          </div>
+          <% }); %>
+      </div>
+      <% } %>
 
-/* ================================================================
-   APPROVER CARD SEARCH (Primary OR Secondary)
-================================================================ */
-const _approverDebouncers = {}; // key: `${id}-${which}`
+        <div class="a-toast" id="toast"></div>
 
-async function _approverSuggestFetch(id, which, q) {
-  const inpId = (which === 'primary' ? 'psearch-' : 'ssearch-') + id;
-  const inp = document.getElementById(inpId);
-  if (q.length < 2) { FloatSuggest.close(); return; }
+        <%- include('../partials/admin_shell_bottom') %>
 
-  FloatSuggest.show(inp, suggestLoading(), () => {});
-  try {
-    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=20`);
-    const json = await res.json();
+          <script>
+            /* ================================================================
+               FLOAT SUGGEST — single fixed overlay, escapes any overflow clipping
+            ================================================================ */
+            const FloatSuggest = (() => {
+              let el, activeInput = null, focusIdx = -1, items = [];
 
-    // An approver with no email is useless for routing — drop those rows so
-    // the admin can't pick someone the workflow can't actually notify.
-    const results = (json.success && Array.isArray(json.data))
-      ? json.data.filter(emp => emp.email && emp.email.trim())
-      : [];
+              function init() {
+                el = document.createElement('div');
+                el.className = 'a-float-suggest';
+                document.body.appendChild(el);
+                document.addEventListener('mousedown', e => {
+                  if (el.contains(e.target) || e.target === activeInput) return;
+                  close();
+                });
+                window.addEventListener('scroll', reposition, { passive: true, capture: true });
+                window.addEventListener('resize', reposition, { passive: true });
+              }
 
-    if (!results.length) {
-      FloatSuggest.show(inp, suggestEmpty(q), () => {});
-      return;
-    }
+              function show(inputEl, html, onItemClick) {
+                activeInput = inputEl;
+                el.innerHTML = html;
+                focusIdx = -1;
+                items = [...el.querySelectorAll('.a-suggest-item')];
+                items.forEach((item, i) => {
+                  item.addEventListener('mousedown', e => { e.preventDefault(); onItemClick(item, i); });
+                });
+                el.classList.add('open');
+                reposition();
+              }
 
-    const html = results.slice(0, 8).map(emp => empHTML(emp, q)).join('');
+              function close() {
+                el.classList.remove('open');
+                el.innerHTML = '';
+                activeInput = null;
+                focusIdx = -1;
+                items = [];
+              }
 
-    FloatSuggest.show(inp, html, (item, i) => {
-      const emp = results[i];
-      const emailId = (which === 'primary' ? 'email-' : 'semail-') + id;
-      const nameId  = (which === 'primary' ? 'name-'  : 'sname-')  + id;
-      const emailInp = document.getElementById(emailId);
-      const nameInp  = document.getElementById(nameId);
-      if (emp.email) {
-        emailInp.value = emp.email;
-        emailInp.classList.remove('a-input--warn');
-      }
-      if (emp.name) nameInp.value = emp.name;
-      inp.value = '';
-      FloatSuggest.close();
-      setStatus(id, 'ing', 'Unsaved changes');
-    });
-  } catch {
-    FloatSuggest.show(inp, '<div class="a-suggest-empty" style="color:var(--a-red);">Error fetching results</div>', () => {});
-  }
-}
+              function isOpen() { return el && el.classList.contains('open'); }
 
-function _getDebouncer(id, which) {
-  const key = `${id}-${which}`;
-  if (!_approverDebouncers[key]) {
-    _approverDebouncers[key] = debounce((q) => _approverSuggestFetch(id, which, q), 280);
-  }
-  return _approverDebouncers[key];
-}
+              function navigate(dir) {
+                if (!items.length) return false;
+                focusIdx = Math.max(-1, Math.min(items.length - 1, focusIdx + dir));
+                items.forEach((it, i) => it.classList.toggle('a-suggest-item--focused', i === focusIdx));
+                if (focusIdx >= 0) items[focusIdx].scrollIntoView({ block: 'nearest' });
+                return true;
+              }
 
-function onApproverSearch(id, which, val) {
-  _getDebouncer(id, which)(val.trim());
-}
+              function selectFocused() {
+                if (focusIdx >= 0 && items[focusIdx]) { items[focusIdx].dispatchEvent(new MouseEvent('mousedown')); return true; }
+                return false;
+              }
 
-function onApproverKey(e) {
-  if (e.key === 'ArrowDown') { e.preventDefault(); FloatSuggest.navigate(1); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); FloatSuggest.navigate(-1); }
-  else if (e.key === 'Enter') { e.preventDefault(); FloatSuggest.selectFocused(); }
-  else if (e.key === 'Escape') FloatSuggest.close();
-}
+              function reposition() {
+                if (!activeInput || !isOpen()) return;
+                const r = activeInput.getBoundingClientRect();
+                const spaceBelow = window.innerHeight - r.bottom;
+                el.style.left = r.left + 'px';
+                el.style.width = Math.max(r.width, 280) + 'px';
+                if (spaceBelow >= 150) {
+                  el.style.top = (r.bottom + 5) + 'px';
+                  el.style.bottom = 'auto';
+                  el.style.maxHeight = Math.min(320, spaceBelow - 12) + 'px';
+                } else {
+                  el.style.bottom = (window.innerHeight - r.top + 5) + 'px';
+                  el.style.top = 'auto';
+                  el.style.maxHeight = Math.min(320, r.top - 12) + 'px';
+                }
+              }
 
-/* ================================================================
-   TOGGLE / INPUT / SAVE
-================================================================ */
-function onToggle(id) {
-  const cb   = document.getElementById('active-' + id);
-  const pill = document.getElementById('pill-' + id);
-  const lbl  = document.getElementById('pill-lbl-' + id);
-  pill.classList.toggle('a-pill--on', cb.checked);
-  lbl.textContent = cb.checked ? 'Active' : 'Inactive';
-}
+              return { init, show, close, isOpen, navigate, selectFocused };
+            })();
 
-function onInput(id, el) {
-  el.classList.toggle('a-input--warn', !el.value.trim());
-  document.getElementById('st-' + id).textContent = '';
-}
+            /* ================================================================
+               HELPERS
+            ================================================================ */
+            function debounce(fn, ms) {
+              let t;
+              return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+            }
 
-// ── In-card scope (IT Operations only) ─────────────────────────
-// itOpsScope[id] holds the location string currently being edited for that
-// IT_OPS card. Empty string === "Default" (global config). DCI/HOD/etc. cards
-// don't track scope at all — they're always global.
-const itOpsScope = {};
-// Global-config snapshot per IT_OPS card so we can restore the defaults when
-// the user flips back to "Default" without re-fetching.
-const itOpsGlobalSnapshot = {};
+            function highlight(text, q) {
+              if (!q || !text) return text || '';
+              const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              return String(text).replace(new RegExp(`(${esc})`, 'gi'), '<mark>$1</mark>');
+            }
 
-function escapeHTML(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
+            function suggestLoading() {
+              return '<div class="a-suggest-loading"><div class="a-spinner"></div>Searching…</div>';
+            }
+            function suggestEmpty(q) {
+              return `<div class="a-suggest-empty">No results for "<strong>${q}</strong>"</div>`;
+            }
+            function adUserHTML(user, q) {
+              return `<div class="a-suggest-item">
+    <div class="a-suggest-item__avatar">${(user.displayName || '?').charAt(0).toUpperCase()}</div>
+    <div class="a-suggest-item__body">
+      <div class="a-suggest-item__name">${highlight(user.displayName, q)}</div>
+      <div class="a-suggest-item__meta">
+        <strong style="font-family:monospace;font-size:.8rem;">${highlight(user.sAMAccountName, q)}</strong>
+        ${user.email ? ' · ' + highlight(user.email, q) : ''}
+        ${user.title ? ' · ' + user.title : ''}
+      </div>
+    </div>
+    <span class="a-suggest-item__badge" style="background:var(--a-brand-light);color:var(--a-brand);">Select</span>
+  </div>`;
+            }
 
-// Single entry-point for the Save button on every card. IT_OPS cards branch
-// on the per-card scope; all other roles always save globally.
-async function save(id) {
-  const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
-  const roleKey = card && card.dataset.rolekey;
-  const scope = itOpsScope[id] || '';
-  if (roleKey === 'IT_OPS' && scope) return saveItOpsOverride(id, scope);
-  return saveGlobal(id);
-}
+            /* ================================================================
+               APPROVER SEARCH (Primary OR Secondary slot)
+            ================================================================ */
+            const _approverDebouncers = {};
 
-// Save HR Initiator from the merged IT_OPS card.
-// `itopsCardId` is the IT_OPS WorkflowApproverConfig.id (used to find the
-// card + read the shared location dropdown). `hrConfigId` is the HR_INITIATOR
-// global config row id, used for the default ("All Locations") save path.
-async function saveHR(itopsCardId, hrConfigId) {
-  const email          = document.getElementById('email-hr-'  + itopsCardId).value.trim();
-  const name           = document.getElementById('name-hr-'   + itopsCardId).value.trim();
-  const secondaryEmail = document.getElementById('semail-hr-' + itopsCardId).value.trim();
-  const secondaryName  = document.getElementById('sname-hr-'  + itopsCardId).value.trim();
-  const stKey = 'hr-' + itopsCardId;
-  const btn = document.querySelector(`.a-approver-card[data-id="${itopsCardId}"] [onclick*="saveHR("]`);
-  const activeEl = document.getElementById('active-hr-' + itopsCardId);
-  const isActive = activeEl ? activeEl.checked : true;
+            async function _approverSuggestFetch(id, which, q) {
+              const inpId = (which === 'primary' ? 'psearch-' : 'ssearch-') + id;
+              const inp = document.getElementById(inpId);
+              if (q.length < 2) { FloatSuggest.close(); return; }
 
-  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (email && !emailRe.test(email)) { setStatus(stKey, 'err', 'Invalid primary email'); return; }
-  if (secondaryEmail && !emailRe.test(secondaryEmail)) { setStatus(stKey, 'err', 'Invalid secondary email'); return; }
+              FloatSuggest.show(inp, suggestLoading(), () => { });
+              try {
+                const res = await window.iflFetch(`/admin/ad-search?q=${encodeURIComponent(q)}`);
+                const json = await res.json();
+                if (!json.success || !json.results || !json.results.length) {
+                  FloatSuggest.show(inp, suggestEmpty(q), () => { });
+                  return;
+                }
+                const html = json.results.map(u => adUserHTML(u, q)).join('');
+                FloatSuggest.show(inp, html, (item, i) => {
+                  const user = json.results[i];
+                  const emailId = (which === 'primary' ? 'email-' : 'semail-') + id;
+                  const nameId = (which === 'primary' ? 'name-' : 'sname-') + id;
+                  const usernameId = (which === 'primary' ? 'username-' : 'susername-') + id;
+                  const badgeId = (which === 'primary' ? 'uname-badge-' : 'suname-badge-') + id;
+                  const emailBadgeId = (which === 'primary' ? 'email-badge-' : 'semail-badge-') + id;
+                  const emailInp = document.getElementById(emailId);
+                  const nameInp = document.getElementById(nameId);
+                  const userInp = document.getElementById(usernameId);
+                  const badgeEl = document.getElementById(badgeId);
+                  const emailBadge = document.getElementById(emailBadgeId);
+                  if (user.email && emailInp) {
+                    emailInp.value = user.email;
+                    emailInp.classList.remove('a-input--warn');
+                    if (emailBadge) { emailBadge.className = 'uname-badge uname-badge--ok'; emailBadge.textContent = '✓ from AD'; }
+                  }
+                  if (user.displayName && nameInp) nameInp.value = user.displayName;
+                  if (user.sAMAccountName && userInp) {
+                    userInp.value = user.sAMAccountName.toLowerCase();
+                    if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--ok'; badgeEl.textContent = '✓ from AD'; }
+                  }
+                  inp.value = '';
+                  FloatSuggest.close();
+                  setStatus(id, 'ing', 'Unsaved changes');
+                });
+              } catch {
+                FloatSuggest.show(inp, '<div class="a-suggest-empty" style="color:var(--a-red);">Error fetching results</div>', () => { });
+              }
+            }
 
-  // Location scope is shared with the IT_OPS half of the merged card.
-  const location = itOpsScope[itopsCardId] || '';
+            async function lookupAdLoginName(email, userInp, badgeEl) {
+              if (!email || !userInp) return;
+              if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--loading'; badgeEl.textContent = 'Looking up…'; }
+              try {
+                const r = await window.iflFetch('/admin/ad-user?email=' + encodeURIComponent(email));
+                const d = await r.json();
+                if (d.found && d.sAMAccountName) {
+                  userInp.value = d.sAMAccountName.toLowerCase();
+                  if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--ok'; badgeEl.textContent = '✓ from AD'; }
+                } else {
+                  if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--warn'; badgeEl.textContent = '⚠ not in AD — enter manually'; }
+                }
+              } catch {
+                if (badgeEl) { badgeEl.className = 'uname-badge uname-badge--err'; badgeEl.textContent = 'lookup failed'; }
+              }
+            }
 
-  if (btn) btn.disabled = true;
-  setStatus(stKey, 'ing', 'Saving…');
+            function _getDebouncer(id, which) {
+              const key = `${id}-${which}`;
+              if (!_approverDebouncers[key]) {
+                _approverDebouncers[key] = debounce((q) => _approverSuggestFetch(id, which, q), 280);
+              }
+              return _approverDebouncers[key];
+            }
 
-  try {
-    let res;
-    if (location) {
-      // Per-group override
-      res = await fetch('/admin/workflow-approvers/by-location', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roleKey: 'HR_INITIATOR',
-          location,
-          approverEmail:  email,
-          approverName:   name,
-          secondaryEmail: secondaryEmail,
-          secondaryName:  secondaryName,
-          isActive: isActive
-        })
-      });
-    } else {
-      // Global default for HR
-      res = await fetch('/admin/workflow-approvers/' + hrConfigId, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          approverEmail:  email || null,
-          approverName:   name || null,
-          secondaryEmail: secondaryEmail || null,
-          secondaryName:  secondaryName || null,
-          isActive: isActive
-        })
-      });
-    }
-    const data = await res.json();
-    if (data.success) {
-      setStatus(stKey, 'ok', 'Saved ✓');
-      showToast('ok', data.message || 'HR list updated');
-      // Re-load so the HR Clear-Override button + scope badge refresh.
-      if (location) await loadItOpsForLocation(itopsCardId, location);
-    } else {
-      const detail = data.details ? (data.error + ' — ' + data.details) : (data.error || 'Failed');
-      setStatus(stKey, 'err', data.error || 'Failed');
-      showToast('err', detail);
-      console.error('[HR save failed]', data);
-    }
-  } catch {
-    setStatus(stKey, 'err', 'Network error');
-    showToast('err', 'Network error. Please retry.');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
+            function onApproverSearch(id, which, val) { _getDebouncer(id, which)(val.trim()); }
 
-async function saveGlobal(id) {
-  const email          = document.getElementById('email-'  + id).value.trim();
-  const name           = document.getElementById('name-'   + id).value.trim();
-  const secondaryEmail = document.getElementById('semail-' + id).value.trim();
-  const secondaryName  = document.getElementById('sname-'  + id).value.trim();
-  const active         = document.getElementById('active-' + id).checked;
-  const btn            = document.querySelector(`.a-approver-card[data-id="${id}"] [onclick^="save("]`);
+            function onApproverKey(e) {
+              if (e.key === 'ArrowDown') { e.preventDefault(); FloatSuggest.navigate(1); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); FloatSuggest.navigate(-1); }
+              else if (e.key === 'Enter') { e.preventDefault(); FloatSuggest.selectFocused(); }
+              else if (e.key === 'Escape') FloatSuggest.close();
+            }
 
-  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
-  if (secondaryEmail && !emailRe.test(secondaryEmail)) { setStatus(id, 'err', 'Invalid secondary email'); return; }
+            /* ================================================================
+               TOGGLE / INPUT
+            ================================================================ */
+            function onToggle(id) {
+              const cb = document.getElementById('active-' + id);
+              const pill = document.getElementById('pill-' + id);
+              const lbl = document.getElementById('pill-lbl-' + id);
+              pill.classList.toggle('a-pill--on', cb.checked);
+              lbl.textContent = cb.checked ? 'Active' : 'Inactive';
+            }
 
-  btn.disabled = true;
-  setStatus(id, 'ing', 'Saving…');
+            function onInput(id, el) {
+              el.classList.toggle('a-input--warn', !el.value.trim());
+              document.getElementById('st-' + id).textContent = '';
+              const b = document.getElementById('email-badge-' + id);
+              if (b) { b.className = 'uname-badge'; b.textContent = ''; }
+            }
 
-  try {
-    const res = await fetch('/admin/workflow-approvers/' + id, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        approverEmail:  email || null,
-        approverName:   name || null,
-        secondaryEmail: secondaryEmail || null,
-        secondaryName:  secondaryName || null,
-        isActive: active
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      setStatus(id, 'ok', 'Saved ✓');
-      showToast('ok', data.message || 'Approver updated successfully');
-      document.getElementById('email-' + id).classList.toggle('a-input--warn', !email);
-      // Refresh the IT-Ops global snapshot so the "Default" view is current.
-      const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
-      if (card && card.dataset.rolekey === 'IT_OPS') {
-        itOpsGlobalSnapshot[id] = { approverEmail: email, approverName: name, secondaryEmail, secondaryName, isActive: active };
-      }
-    } else {
-      setStatus(id, 'err', data.error || 'Failed');
-      showToast('err', data.error || 'Save failed');
-    }
-  } catch {
-    setStatus(id, 'err', 'Network error');
-    showToast('err', 'Network error. Please retry.');
-  } finally {
-    btn.disabled = false;
-  }
-}
+            function onSEmailInput(id, el) {
+              document.getElementById('st-' + id).textContent = '';
+              const b = document.getElementById('semail-badge-' + id);
+              if (b) { b.className = 'uname-badge'; b.textContent = ''; }
+            }
 
-// Save an IT_OPS override for a specific location.
-async function saveItOpsOverride(id, location) {
-  const email          = document.getElementById('email-'  + id).value.trim();
-  const name           = document.getElementById('name-'   + id).value.trim();
-  const secondaryEmail = document.getElementById('semail-' + id).value.trim();
-  const secondaryName  = document.getElementById('sname-'  + id).value.trim();
-  const active         = document.getElementById('active-' + id).checked;
-  const btn            = document.querySelector(`.a-approver-card[data-id="${id}"] [onclick^="save("]`);
+            /* ================================================================
+               LOCATION-SCOPED CARDS (IT_OPS, HR_INITIATOR)
+               Each card tracks its own scope independently.
+            ================================================================ */
+            const locScope = {};   // id → current location string ('' = Default)
+            const locSnapshot = {};   // id → global values snapshot
 
-  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
-  if (secondaryEmail && !emailRe.test(secondaryEmail)) { setStatus(id, 'err', 'Invalid secondary email'); return; }
+            function snapCard(id) {
+              const g = (eid) => { const el = document.getElementById(eid + id); return el ? el.value : ''; };
+              const act = document.getElementById('active-' + id);
+              return {
+                approverEmail: g('email-'),
+                approverName: g('name-'),
+                approverUsername: g('username-'),
+                secondaryEmail: g('semail-'),
+                secondaryName: g('sname-'),
+                secondaryUsername: g('susername-'),
+                isActive: act ? act.checked : true
+              };
+            }
 
-  btn.disabled = true;
-  setStatus(id, 'ing', 'Saving…');
+            function applyCardData(id, ap, { isOverride, isDefault }) {
+              if (!ap) return;
+              const set = (eid, val) => { const el = document.getElementById(eid + id); if (el) el.value = val || ''; };
+              set('email-', ap.approverEmail);
+              set('name-', ap.approverName);
+              set('username-', ap.approverUsername);
+              set('semail-', ap.secondaryEmail);
+              set('sname-', ap.secondaryName);
+              set('susername-', ap.secondaryUsername);
+              const clrBadge = (bid) => { const b = document.getElementById(bid + id); if (b) { b.className = 'uname-badge'; b.textContent = ''; } };
+              const setBadgeOk = (bid) => { const b = document.getElementById(bid + id); if (b) { b.className = 'uname-badge uname-badge--ok'; b.textContent = '✓ from AD'; } };
+              clrBadge('uname-badge-');
+              clrBadge('suname-badge-');
+              clrBadge('email-badge-');
+              clrBadge('semail-badge-');
+              // Restore AD badges for fields that were previously verified and saved.
+              if (ap.approverUsername) { setBadgeOk('uname-badge-'); if (ap.approverEmail) setBadgeOk('email-badge-'); }
+              if (ap.secondaryUsername) { setBadgeOk('suname-badge-'); if (ap.secondaryEmail) setBadgeOk('semail-badge-'); }
 
-  try {
-    const res = await fetch('/admin/workflow-approvers/by-location', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roleKey: 'IT_OPS',
-        location,
-        approverEmail:  email,
-        approverName:   name,
-        secondaryEmail: secondaryEmail,
-        secondaryName:  secondaryName,
-        isActive: active
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      setStatus(id, 'ok', 'Saved ✓');
-      showToast('ok', data.message || 'Override saved');
-      // Re-load to refresh the scope badge ("Override" instead of "Inherits default").
-      await loadItOpsForLocation(id, location);
-    } else {
-      const detail = data.details ? (data.error + ' — ' + data.details) : (data.error || 'Failed');
-      setStatus(id, 'err', data.error || 'Failed');
-      showToast('err', detail);
-      console.error('[Override save failed]', data);
-    }
-  } catch {
-    setStatus(id, 'err', 'Network error');
-    showToast('err', 'Network error. Please retry.');
-  } finally {
-    btn.disabled = false;
-  }
-}
+              const act = document.getElementById('active-' + id);
+              if (act && typeof ap.isActive === 'boolean') {
+                act.checked = ap.isActive;
+                const pill = document.getElementById('pill-' + id);
+                const lbl = document.getElementById('pill-lbl-' + id);
+                if (pill) pill.classList.toggle('a-pill--on', ap.isActive);
+                if (lbl) lbl.textContent = ap.isActive ? 'Active' : 'Inactive';
+              }
 
-// Clear an IT_OPS override (revert this location to the global default).
-async function clearItOpsOverride(id) {
-  const location = itOpsScope[id];
-  if (!location) return;
-  const ok = await IflDialog.confirm(
-    `Clear the IT Operations override for "${location}"? Future requests from this location will use the Default config.`,
-    { title: 'Clear override', okText: 'Clear Override', danger: true }
-  );
-  if (!ok) return;
-  try {
-    const res = await fetch('/admin/workflow-approvers/by-location', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roleKey: 'IT_OPS', location,
-        approverEmail: '', approverName: '', secondaryEmail: '', secondaryName: '',
-        isActive: true
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      showToast('ok', data.message || 'Override cleared');
-      await loadItOpsForLocation(id, location);
-    } else {
-      showToast('err', data.error || 'Failed to clear');
-    }
-  } catch {
-    showToast('err', 'Network error.');
-  }
-}
+              const badge = document.getElementById('scope-' + id);
+              if (badge) {
+                if (isDefault) { badge.className = 'wf-scope-badge is-default'; badge.textContent = 'Default'; }
+                else if (isOverride) { badge.className = 'wf-scope-badge is-override'; badge.textContent = 'Override'; }
+                else { badge.className = 'wf-scope-badge is-default'; badge.textContent = 'Inherits default'; }
+              }
 
-// Triggered when the in-card location dropdown changes.
-async function onItOpsLocationChange(id) {
-  const sel = document.getElementById('itops-loc-' + id);
-  if (!sel) return;
-  const location = sel.value || '';
+              const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+              if (card) {
+                const saveBtn = card.querySelector('.btn.btn-primary');
+                if (saveBtn) saveBtn.textContent = isDefault ? 'Save' : (isOverride ? 'Update Override' : 'Save Override');
 
-  // Cache the global snapshot the first time we leave Default so we can
-  // restore it cheaply if the user picks Default again.
-  if (!itOpsGlobalSnapshot[id]) {
-    itOpsGlobalSnapshot[id] = {
-      approverEmail:  document.getElementById('email-'  + id).value,
-      approverName:   document.getElementById('name-'   + id).value,
-      secondaryEmail: document.getElementById('semail-' + id).value,
-      secondaryName:  document.getElementById('sname-'  + id).value,
-      isActive:       document.getElementById('active-' + id).checked,
-      // Mirror the HR column too — it shares the same location selector.
-      hr: {
-        approverEmail:  document.getElementById('email-hr-'  + id).value,
-        approverName:   document.getElementById('name-hr-'   + id).value,
-        secondaryEmail: document.getElementById('semail-hr-' + id).value,
-        secondaryName:  document.getElementById('sname-hr-'  + id).value,
-        isActive:       document.getElementById('active-hr-' + id).checked
-      }
-    };
-  }
+                let clearBtn = card.querySelector('.a-clear-override-btn');
+                if (!isDefault && isOverride) {
+                  if (!clearBtn) {
+                    clearBtn = document.createElement('button');
+                    clearBtn.type = 'button';
+                    clearBtn.className = 'a-clear-override-btn';
+                    clearBtn.textContent = 'Clear Override';
+                    clearBtn.onclick = () => clearLocOverride(id, card.dataset.rolekey);
+                    const st = document.getElementById('st-' + id);
+                    if (st && st.parentNode) st.parentNode.insertBefore(clearBtn, st);
+                  }
+                } else if (clearBtn) {
+                  clearBtn.remove();
+                }
+              }
 
-  itOpsScope[id] = location;
+              const emailEl = document.getElementById('email-' + id);
+              if (emailEl) emailEl.classList.toggle('a-input--warn', !ap.approverEmail);
+            }
 
-  if (!location) {
-    // Default — restore the global snapshot, no fetch needed.
-    applyItOpsCardData(id, itOpsGlobalSnapshot[id], { isOverride: false, isDefault: true });
-    if (itOpsGlobalSnapshot[id].hr) applyHRCardData(id, itOpsGlobalSnapshot[id].hr, { isOverride: false, isDefault: true });
-    return;
-  }
-  await loadItOpsForLocation(id, location);
-}
+            async function onLocChange(id, roleKey) {
+              const sel = document.getElementById('loc-' + id);
+              const location = sel ? sel.value.trim() : '';
+              if (!locSnapshot[id]) locSnapshot[id] = snapCard(id);
+              locScope[id] = location;
+              if (!location) {
+                applyCardData(id, locSnapshot[id], { isOverride: false, isDefault: true });
+                return;
+              }
+              await loadForLocation(id, roleKey, location);
+            }
 
-// Clear an HR_INITIATOR override (revert this group to the global default).
-async function clearHROverride(id) {
-  const location = itOpsScope[id];
-  if (!location) return;
-  const ok = await IflDialog.confirm(
-    `Clear the HR Initiator override for "${location}"? Future requests from this group will use the Default HR list.`,
-    { title: 'Clear override', okText: 'Clear Override', danger: true }
-  );
-  if (!ok) return;
-  try {
-    const res = await fetch('/admin/workflow-approvers/by-location', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roleKey: 'HR_INITIATOR', location,
-        approverEmail: '', approverName: '', secondaryEmail: '', secondaryName: '',
-        isActive: true
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      showToast('ok', data.message || 'Override cleared');
-      await loadItOpsForLocation(id, location);
-    } else {
-      showToast('err', data.error || 'Failed to clear');
-    }
-  } catch {
-    showToast('err', 'Network error.');
-  }
-}
+            async function loadForLocation(id, roleKey, location) {
+              setStatus(id, 'ing', 'Loading…');
+              try {
+                const r = await window.iflFetch('/admin/workflow-approvers/by-location?location=' + encodeURIComponent(location));
+                const j = await r.json();
+                if (!j.success || !Array.isArray(j.data)) { showToast('err', j.error || 'Load failed'); return; }
+                const row = j.data.find(x => x.roleKey === roleKey);
+                if (!row) { showToast('err', roleKey + ' not found for this location'); return; }
+                applyCardData(id, row, { isOverride: !!row.isOverride, isDefault: false });
+                setStatus(id, '', '');
+              } catch (e) {
+                console.error(e);
+                showToast('err', 'Network error');
+                setStatus(id, 'err', 'Load failed');
+              }
+            }
 
-// Mirror of applyItOpsCardData but for the HR column of the merged card.
-// `opts` carries { isOverride, isDefault } so the HR column can show its own
-// Clear-Override button + save-button label, exactly like the IT Ops column.
-function applyHRCardData(id, ap, opts) {
-  if (!ap) return;
-  opts = opts || {};
-  document.getElementById('email-hr-'  + id).value = ap.approverEmail  || '';
-  document.getElementById('name-hr-'   + id).value = ap.approverName   || '';
-  document.getElementById('semail-hr-' + id).value = ap.secondaryEmail || '';
-  document.getElementById('sname-hr-'  + id).value = ap.secondaryName  || '';
+            async function saveLocCard(id, roleKey) {
+              const location = locScope[id] || '';
+              const email = document.getElementById('email-' + id)?.value?.trim() || '';
+              const name = document.getElementById('name-' + id)?.value?.trim() || '';
+              const username = document.getElementById('username-' + id)?.value?.trim().toLowerCase() || '';
+              const secondaryEmail = document.getElementById('semail-' + id)?.value?.trim() || '';
+              const secondaryName = document.getElementById('sname-' + id)?.value?.trim() || '';
+              const secondaryUsername = document.getElementById('susername-' + id)?.value?.trim().toLowerCase() || '';
+              const active = document.getElementById('active-' + id)?.checked ?? true;
 
-  // HR active toggle reflects the live row's state
-  const active = document.getElementById('active-hr-' + id);
-  if (active && typeof ap.isActive === 'boolean') {
-    active.checked = ap.isActive;
-    document.getElementById('pill-hr-' + id).classList.toggle('a-pill--on', ap.isActive);
-    document.getElementById('pill-lbl-hr-' + id).textContent = ap.isActive ? 'Active' : 'Inactive';
-  }
+              const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+              if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid email'); return; }
+              if (secondaryEmail && !emailRe.test(secondaryEmail)) { setStatus(id, 'err', 'Invalid secondary email'); return; }
 
-  // Save-button label + Clear-Override button, scoped to the HR column.
-  const hrCol = document.querySelector(`.a-approver-card[data-id="${id}"] [data-hr-col]`);
-  if (hrCol) {
-    const saveBtn = hrCol.querySelector('.btn.btn-primary');
-    if (saveBtn) {
-      const span = saveBtn.querySelector('.ifl-btn-original') || saveBtn;
-      span.textContent = opts.isDefault ? 'Save HR' : (opts.isOverride ? 'Update HR Override' : 'Save HR Override');
-    }
-    let clearBtn = hrCol.querySelector('.a-clear-override-btn');
-    if (!opts.isDefault && opts.isOverride) {
-      if (!clearBtn) {
-        const stEl = document.getElementById('st-hr-' + id);
-        clearBtn = document.createElement('button');
-        clearBtn.type = 'button';
-        clearBtn.className = 'a-clear-override-btn';
-        clearBtn.textContent = 'Clear Override';
-        clearBtn.onclick = () => clearHROverride(id);
-        if (stEl && stEl.parentNode) stEl.parentNode.insertBefore(clearBtn, stEl);
-      }
-    } else if (clearBtn) {
-      clearBtn.remove();
-    }
-  }
-}
+              const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+              const btn = card && card.querySelector('.btn.btn-primary');
+              if (btn) btn.disabled = true;
+              setStatus(id, 'ing', 'Saving…');
 
-async function loadItOpsForLocation(id, location) {
-  setStatus(id, 'ing', 'Loading…');
-  try {
-    const r = await fetch('/admin/workflow-approvers/by-location?location=' + encodeURIComponent(location));
-    const j = await r.json();
-    if (!j.success || !Array.isArray(j.data)) {
-      showToast('err', j.error || 'Failed to load location config');
-      return;
-    }
-    const itOps = j.data.find(x => x.roleKey === 'IT_OPS');
-    if (!itOps) {
-      showToast('err', 'IT Operations row not found in response');
-      return;
-    }
-    applyItOpsCardData(id, itOps, { isOverride: !!itOps.isOverride, isDefault: false });
-    // HR uses the same location selector — populate the HR column from the
-    // same response. When no HR override exists for this group, the API
-    // still returns the global HR ghost row (isOverride=false).
-    const hr = j.data.find(x => x.roleKey === 'HR_INITIATOR');
-    if (hr) applyHRCardData(id, hr, { isOverride: !!hr.isOverride, isDefault: false });
-    setStatus(id, '', '');
-  } catch (e) {
-    console.error(e);
-    showToast('err', 'Network error.');
-    setStatus(id, 'err', 'Load failed');
-  }
-}
+              try {
+                let res;
+                if (location) {
+                  res = await window.iflFetch('/admin/workflow-approvers/by-location', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roleKey, location, approverEmail: email, approverName: name, approverUsername: username, secondaryEmail, secondaryName, secondaryUsername, isActive: active })
+                  });
+                } else {
+                  res = await window.iflFetch('/admin/workflow-approvers/' + id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ approverEmail: email || null, approverName: name || null, approverUsername: username || null, secondaryEmail: secondaryEmail || null, secondaryName: secondaryName || null, secondaryUsername: secondaryUsername || null, isActive: active })
+                  });
+                }
+                const data = await res.json();
+                if (data.success) {
+                  setStatus(id, 'ok', 'Saved ✓');
+                  showToast('ok', data.message || 'Saved');
+                  if (location) await loadForLocation(id, roleKey, location);
+                  else locSnapshot[id] = snapCard(id);
+                } else {
+                  setStatus(id, 'err', data.error || 'Failed');
+                  showToast('err', data.error || 'Save failed');
+                }
+              } catch {
+                setStatus(id, 'err', 'Network error');
+                showToast('err', 'Network error. Please retry.');
+              } finally {
+                if (btn) btn.disabled = false;
+              }
+            }
 
-// Push a data object into the IT_OPS card's input fields and update its
-// scope badge / save-button label / clear-button visibility.
-function applyItOpsCardData(id, ap, { isOverride, isDefault }) {
-  if (!ap) return;
-  document.getElementById('email-'  + id).value = ap.approverEmail  || '';
-  document.getElementById('name-'   + id).value = ap.approverName   || '';
-  document.getElementById('semail-' + id).value = ap.secondaryEmail || '';
-  document.getElementById('sname-'  + id).value = ap.secondaryName  || '';
-  // Active toggle reflects the live row's state
-  const active = document.getElementById('active-' + id);
-  if (active && typeof ap.isActive === 'boolean') {
-    active.checked = ap.isActive;
-    document.getElementById('pill-' + id).classList.toggle('a-pill--on', ap.isActive);
-    document.getElementById('pill-lbl-' + id).textContent = ap.isActive ? 'Active' : 'Inactive';
-  }
-  // Scope badge
-  const badge = document.getElementById('itops-scope-' + id);
-  if (badge) {
-    if (isDefault) {
-      badge.className = 'itops-scope-badge is-default';
-      badge.textContent = 'Default';
-    } else if (isOverride) {
-      badge.className = 'itops-scope-badge is-override';
-      badge.textContent = 'Override';
-    } else {
-      badge.className = 'itops-scope-badge is-default';
-      badge.textContent = 'Inherits default';
-    }
-  }
-  // Save button label + Clear-Override button. In a merged card the IT Ops
-  // controls live in [data-itops-col] — scope to it so we don't grab the HR
-  // column's button. For a plain (non-merged) card, the card itself is scope.
-  const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
-  const scope = card ? (card.querySelector('[data-itops-col]') || card) : null;
-  if (scope) {
-    const saveBtn = scope.querySelector('.btn.btn-primary');
-    if (saveBtn) {
-      const span = saveBtn.querySelector('.ifl-btn-original') || saveBtn;
-      const txt = isDefault
-        ? (card.classList.contains('is-merged') ? 'Save IT Ops' : 'Save')
-        : (isOverride ? 'Update Override' : 'Save Override');
-      span.textContent = txt;
-    }
-    let clearBtn = scope.querySelector('.a-clear-override-btn');
-    if (!isDefault && isOverride) {
-      if (!clearBtn) {
-        const stEl = document.getElementById('st-' + id);
-        clearBtn = document.createElement('button');
-        clearBtn.type = 'button';
-        clearBtn.className = 'a-clear-override-btn';
-        clearBtn.textContent = 'Clear Override';
-        clearBtn.onclick = () => clearItOpsOverride(id);
-        if (stEl && stEl.parentNode) stEl.parentNode.insertBefore(clearBtn, stEl);
-      }
-    } else if (clearBtn) {
-      clearBtn.remove();
-    }
-  }
-  // Reset the warn ring on email
-  document.getElementById('email-' + id).classList.toggle('a-input--warn', !ap.approverEmail);
-}
+            async function clearLocOverride(id, roleKey) {
+              const location = locScope[id];
+              if (!location) return;
+              const ok = await IflDialog.confirm(
+                `Clear the "${roleKey}" override for "${location}"? Future requests from this location will use the Default config.`,
+                { title: 'Clear override', okText: 'Clear Override', danger: true }
+              );
+              if (!ok) return;
+              try {
+                const res = await window.iflFetch('/admin/workflow-approvers/by-location', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ roleKey, location, approverEmail: '', approverName: '', approverUsername: '', secondaryEmail: '', secondaryName: '', secondaryUsername: '', isActive: true })
+                });
+                const data = await res.json();
+                if (data.success) {
+                  showToast('ok', data.message || 'Override cleared');
+                  await loadForLocation(id, roleKey, location);
+                } else {
+                  showToast('err', data.error || 'Failed to clear');
+                }
+              } catch {
+                showToast('err', 'Network error.');
+              }
+            }
 
-function setStatus(id, cls, txt) {
-  const el = document.getElementById('st-' + id);
-  el.className = 'a-save-status a-save-status--' + cls;
-  el.textContent = txt;
-  if (cls === 'ok') setTimeout(() => { el.textContent = ''; el.className = 'a-save-status'; }, 3500);
-}
+            /* ================================================================
+               DELEGATION CARDS (IT_HOD, DCI_MANAGER)
+            ================================================================ */
+            function updateDtypeNote(id, val) {
+              const note = document.getElementById('dtype-note-' + id);
+              if (!note) return;
+              note.textContent = val === 'temporary'
+                ? "Covering temporarily. Previous person's email links will show they've been delegated to this person."
+                : "This person permanently holds the role. No expectation of reverting.";
+            }
 
-let _toastTimer;
-function showToast(cls, msg) {
-  const t = document.getElementById('toast');
-  t.className = 'a-toast a-toast--' + cls + ' a-toast--show';
-  t.textContent = msg;
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => t.classList.remove('a-toast--show'), 3500);
-}
+            async function saveDelegation(id) {
+              const email = document.getElementById('email-' + id)?.value?.trim() || '';
+              const name = document.getElementById('name-' + id)?.value?.trim() || '';
+              const username = document.getElementById('username-' + id)?.value?.trim().toLowerCase() || '';
+              const active = document.getElementById('active-' + id)?.checked ?? true;
+              const dtype = document.querySelector(`input[name="dtype-${id}"]:checked`)?.value || 'permanent';
 
-document.addEventListener('DOMContentLoaded', () => {
-  FloatSuggest.init();
-  initLocationChips();
-});
-</script>
+              const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+              if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid email'); return; }
+
+              const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+              const btn = card && card.querySelector('.btn.btn-primary');
+              if (btn) btn.disabled = true;
+              setStatus(id, 'ing', 'Saving…');
+
+              try {
+                const res = await window.iflFetch('/admin/workflow-approvers/' + id, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    approverEmail: email || null,
+                    approverName: name || null,
+                    approverUsername: username || null,
+                    secondaryEmail: null,
+                    secondaryName: null,
+                    secondaryUsername: null,
+                    isActive: active,
+                    delegationType: dtype
+                  })
+                });
+                const data = await res.json();
+                if (data.success) {
+                  setStatus(id, 'ok', 'Updated ✓');
+                  showToast('ok', data.message || 'Assignee updated');
+                  document.getElementById('email-' + id)?.classList.toggle('a-input--warn', !email);
+                  // Reload the card area so the temp-delegation banner and revert button appear/disappear.
+                  setTimeout(() => location.reload(), 1200);
+                } else {
+                  setStatus(id, 'err', data.error || 'Failed');
+                  showToast('err', data.error || 'Save failed');
+                }
+              } catch {
+                setStatus(id, 'err', 'Network error');
+                showToast('err', 'Network error. Please retry.');
+              } finally {
+                if (btn) btn.disabled = false;
+              }
+            }
+
+            async function revertDelegation(id) {
+              if (!confirm('Revert the temporary delegation and restore the original holder?')) return;
+              setStatus(id, 'ing', 'Reverting…');
+              try {
+                const res = await window.iflFetch('/admin/workflow-approvers/' + id + '/revert', { method: 'PUT' });
+                const data = await res.json();
+                if (data.success) {
+                  showToast('ok', data.message || 'Delegation reverted');
+                  setTimeout(() => location.reload(), 1200);
+                } else {
+                  setStatus(id, 'err', data.error || 'Failed');
+                  showToast('err', data.error || 'Revert failed');
+                }
+              } catch {
+                setStatus(id, 'err', 'Network error');
+                showToast('err', 'Network error. Please retry.');
+              }
+            }
+
+            /* ================================================================
+               2-DAY FALLBACK CARDS (DCI_TEAM, DCI_IMPLEMENTER)
+            ================================================================ */
+            async function saveFallback(id) {
+              const email = document.getElementById('email-' + id)?.value?.trim() || '';
+              const name = document.getElementById('name-' + id)?.value?.trim() || '';
+              const username = document.getElementById('username-' + id)?.value?.trim().toLowerCase() || '';
+              const secondaryEmail = document.getElementById('semail-' + id)?.value?.trim() || '';
+              const secondaryName = document.getElementById('sname-' + id)?.value?.trim() || '';
+              const secondaryUsername = document.getElementById('susername-' + id)?.value?.trim().toLowerCase() || '';
+              const active = document.getElementById('active-' + id)?.checked ?? true;
+
+              const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+              if (email && !emailRe.test(email)) { setStatus(id, 'err', 'Invalid primary email'); return; }
+              if (secondaryEmail && !emailRe.test(secondaryEmail)) { setStatus(id, 'err', 'Invalid secondary email'); return; }
+
+              const card = document.querySelector(`.a-approver-card[data-id="${id}"]`);
+              const btn = card && card.querySelector('.btn.btn-primary');
+              if (btn) btn.disabled = true;
+              setStatus(id, 'ing', 'Saving…');
+
+              try {
+                const res = await window.iflFetch('/admin/workflow-approvers/' + id, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ approverEmail: email || null, approverName: name || null, approverUsername: username || null, secondaryEmail: secondaryEmail || null, secondaryName: secondaryName || null, secondaryUsername: secondaryUsername || null, isActive: active })
+                });
+                const data = await res.json();
+                if (data.success) {
+                  setStatus(id, 'ok', 'Saved ✓');
+                  showToast('ok', data.message || 'Approver updated');
+                  document.getElementById('email-' + id)?.classList.toggle('a-input--warn', !email);
+                } else {
+                  setStatus(id, 'err', data.error || 'Failed');
+                  showToast('err', data.error || 'Save failed');
+                }
+              } catch {
+                setStatus(id, 'err', 'Network error');
+                showToast('err', 'Network error. Please retry.');
+              } finally {
+                if (btn) btn.disabled = false;
+              }
+            }
+
+            /* ================================================================
+               STATUS / TOAST
+            ================================================================ */
+            function setStatus(id, cls, txt) {
+              const el = document.getElementById('st-' + id);
+              if (!el) return;
+              el.className = 'a-save-status' + (cls ? ' a-save-status--' + cls : '');
+              el.textContent = txt;
+              if (cls === 'ok') setTimeout(() => { el.textContent = ''; el.className = 'a-save-status'; }, 3500);
+            }
+
+            let _toastTimer;
+            function showToast(cls, msg) {
+              const t = document.getElementById('toast');
+              t.className = 'a-toast a-toast--' + cls + ' a-toast--show';
+              t.textContent = msg;
+              clearTimeout(_toastTimer);
+              _toastTimer = setTimeout(() => t.classList.remove('a-toast--show'), 3500);
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+              FloatSuggest.init();
+              if (typeof initLocationChips === 'function') initLocationChips();
+            });
+          </script>

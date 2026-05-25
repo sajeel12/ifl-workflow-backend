@@ -1,0 +1,112 @@
+<%@ Page Language="C#" %>
+<%@ Assembly Name="System.DirectoryServices, Version=4.0.0.0, Culture=neutral, PublicKeyToken=B03F5F7F11D50A3A" %>
+<%@ Import Namespace="System.Security.Cryptography" %>
+<%@ Import Namespace="System.Web.Script.Serialization" %>
+<%@ Import Namespace="System.DirectoryServices" %>
+<script runat="server">
+    // Shared with token.aspx / adlookup.aspx — must match SSO_SHARED_SECRET in Node .env
+    string secretKey = System.Configuration.ConfigurationManager.AppSettings["SsoSharedSecret"];
+    string gcHost    = System.Configuration.ConfigurationManager.AppSettings["GcHost"] ?? "";
+
+    protected void Page_Load(object sender, EventArgs e)
+    {
+        Response.ContentType = "application/json";
+
+        // Loopback-only — called exclusively by the Node.js process on this machine
+        string remoteAddr = Request.ServerVariables["REMOTE_ADDR"];
+        if (remoteAddr != "127.0.0.1" && remoteAddr != "::1") {
+            Response.StatusCode = 403;
+            Response.Write("{\"error\":\"Forbidden\"}");
+            return;
+        }
+
+        string q = (Request.QueryString["q"] ?? "").Trim();
+        if (q.Length < 2) {
+            Response.StatusCode = 400;
+            Response.Write("{\"error\":\"q must be at least 2 characters\"}");
+            return;
+        }
+
+        string esc = EscLdap(q);
+        // Match displayName, sAMAccountName, or mail — enabled accounts only
+        string filter = "(&(objectClass=user)"
+                      +   "(!(userAccountControl:1.2.840.113556.1.4.803:=2))"
+                      +   "(|(displayName=*" + esc + "*)"
+                      +     "(sAMAccountName=*" + esc + "*)"
+                      +     "(mail=*" + esc + "*)))";
+
+        var results = new System.Collections.Generic.List<object>();
+
+        // Try Global Catalog first — covers every domain in the ifl.net forest
+        bool ok = false;
+        if (!string.IsNullOrEmpty(gcHost))
+            ok = TrySearch("LDAP://" + gcHost + ":3268", filter, results, 15);
+
+        // Fallback: primary-domain LDAP (uses app-pool Windows identity, no explicit credentials)
+        if (!ok || results.Count == 0)
+            TrySearch(null, filter, results, 15);
+
+        long   timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        string sig       = Sign("search|" + q + "|" + timestamp + "|" + results.Count);
+
+        Response.Write(new JavaScriptSerializer().Serialize(new {
+            results   = results,
+            timestamp = timestamp,
+            signature = sig
+        }));
+    }
+
+    bool TrySearch(string ldapPath, string filter,
+                   System.Collections.Generic.List<object> out_results, int limit)
+    {
+        try {
+            using (var root    = ldapPath != null ? new DirectoryEntry(ldapPath) : new DirectoryEntry())
+            using (var searcher = new DirectorySearcher(root)) {
+                searcher.Filter    = filter;
+                searcher.SizeLimit = limit;
+                searcher.PageSize  = limit;
+                searcher.PropertiesToLoad.Add("sAMAccountName");
+                searcher.PropertiesToLoad.Add("displayName");
+                searcher.PropertiesToLoad.Add("mail");
+                searcher.PropertiesToLoad.Add("title");
+
+                foreach (SearchResult r in searcher.FindAll()) {
+                    string sam  = Prop(r, "sAMAccountName");
+                    string name = Prop(r, "displayName");
+                    if (string.IsNullOrEmpty(sam) || string.IsNullOrEmpty(name)) continue;
+                    out_results.Add(new {
+                        sAMAccountName = sam,
+                        displayName    = name,
+                        email          = Prop(r, "mail"),
+                        title          = Prop(r, "title")
+                    });
+                }
+                return true;
+            }
+        } catch (Exception ex) {
+            try { System.Diagnostics.EventLog.WriteEntry("adsearch.aspx",
+                    (ldapPath ?? "primary") + ": " + ex.Message,
+                    System.Diagnostics.EventLogEntryType.Warning); } catch { }
+            return false;
+        }
+    }
+
+    string Prop(SearchResult r, string key)
+    {
+        return r.Properties[key].Count > 0 ? (r.Properties[key][0] ?? "").ToString() : "";
+    }
+
+    string EscLdap(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.Replace("\\", "\\5c").Replace("*",  "\\2a")
+                .Replace("(",  "\\28").Replace(")",  "\\29").Replace("\0", "\\00");
+    }
+
+    string Sign(string data)
+    {
+        using (var h = new HMACSHA256(System.Text.Encoding.UTF8.GetBytes(secretKey ?? "")))
+            return BitConverter.ToString(
+                h.ComputeHash(System.Text.Encoding.UTF8.GetBytes(data))).Replace("-","").ToLower();
+    }
+</script>

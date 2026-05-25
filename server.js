@@ -1,6 +1,12 @@
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import app from './app.js';
 import sequelize from './src/config/database.js';
 import logger from './src/utils/logger.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+import cronService from './src/services/cronService.js';
 import Employee from './src/models/Employee.js';
 import OnboardingRequest from './src/models/OnboardingRequest.js';
 import OffboardingRequest from './src/models/OffboardingRequest.js';
@@ -14,13 +20,43 @@ const DEFAULT_APPROVER_CONFIGS = [
     { roleKey: 'HR_INITIATOR', label: 'HR Initiator', description: 'Authorized HR users who can initiate onboarding requests. Configured per location group.', workflowStage: 'Step 1 – Initiate Request', approverEmail: null, approverName: 'HR' },
     { roleKey: 'IT_OPS', label: 'IT Operations Team', description: 'Handles IT configuration in Step 2', workflowStage: 'Step 2 – IT Configuration', approverEmail: process.env.EMAIL_IT_OPS || null, approverName: 'IT Operations' },
     { roleKey: 'DCI_TEAM', label: 'DCI Team', description: 'DCI configuration and setup in Step 4', workflowStage: 'Step 4 – DCI Configuration', approverEmail: process.env.EMAIL_DCI_TEAM || null, approverName: 'DCI Team' },
-    { roleKey: 'OPS_TEAM', label: 'OPS Support Team', description: 'Final OPS verification in Step 7', workflowStage: 'Step 7 – OPS Verification', approverEmail: process.env.EMAIL_OPS_TEAM || null, approverName: 'OPS Team' },
+    // OPS_TEAM removed — PendingOPSAction is handled by IT_OPS (same team, per client policy).
+    // Any existing DB row is cleaned up in the startup sequence below.
     { roleKey: 'DCI_MANAGER', label: 'DCI Manager', description: 'DCI Manager decision in Step 5', workflowStage: 'Step 5 – DCI Manager Decision', approverEmail: process.env.EMAIL_DCI_MANAGER || null, approverName: 'DCI Manager' },
     { roleKey: 'IT_HOD', label: 'IT Head of Department', description: 'IT HOD review in Step 5b (email required)', workflowStage: 'Step 5b – IT HOD Review', approverEmail: process.env.EMAIL_IT_HOD || null, approverName: 'IT HOD' },
     { roleKey: 'DCI_IMPLEMENTER', label: 'DCI Implementer', description: 'Implements DCI changes in Step 6', workflowStage: 'Step 6 – DCI Implementation', approverEmail: process.env.EMAIL_DCI_IMPLEMENTER || null, approverName: 'DCI Implementer' },
 ];
 
 const PORT = process.env.PORT || 3000;
+
+/**
+ * Cross-checks web.config SsoSharedSecret with SSO_SHARED_SECRET in .env.
+ * If they differ, sidecar tokens will be rejected — log a loud warning so
+ * the mismatch is impossible to miss during startup.
+ */
+function checkSsoSecretSync() {
+    try {
+        const xml = readFileSync(join(__dirname, 'web.config'), 'utf8');
+        const m = xml.match(/key="SsoSharedSecret"\s+value="([^"]+)"/);
+        if (!m) {
+            logger.warn('[SSO] web.config has no SsoSharedSecret key — sync check skipped.');
+            return;
+        }
+        const webConfigSecret = m[1];
+        const envSecret = process.env.SSO_SHARED_SECRET || '';
+        if (webConfigSecret !== envSecret) {
+            logger.error(
+                `[SSO] SECRET MISMATCH — web.config SsoSharedSecret does not match ` +
+                `.env SSO_SHARED_SECRET. Sidecar tokens will be REJECTED by adminApiGuard. ` +
+                `Update one side to match the other before serving real traffic.`
+            );
+        } else {
+            logger.info('[SSO] SsoSharedSecret: web.config and .env are in sync.');
+        }
+    } catch (err) {
+        logger.warn(`[SSO] Could not read web.config for sync check: ${err.message}`);
+    }
+}
 
 
 /**
@@ -117,11 +153,37 @@ async function dropAllForeignKeys() {
     }
 }
 
+// Graceful shutdown — give SQLite time to flush WAL before the process dies.
+async function shutdown(signal) {
+    logger.info(`[Server] ${signal} received — shutting down gracefully.`);
+    try { await sequelize.close(); } catch (_) { /* ignore */ }
+    process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+
+// Retry sequelize.authenticate() up to maxAttempts times with a linear backoff.
+async function connectWithRetry(maxAttempts = 3, delayMs = 2000) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            await sequelize.authenticate();
+            logger.info('Database connected.');
+            return;
+        } catch (err) {
+            logger.warn(`[DB] Connect attempt ${attempt}/${maxAttempts} failed: ${err.message}`);
+            if (attempt === maxAttempts) throw err;
+            await new Promise(r => setTimeout(r, delayMs));
+        }
+    }
+}
+
 async function startServer() {
     try {
 
-        await sequelize.authenticate();
-        logger.info('Database connected.');
+        checkSsoSecretSync();
+
+        await connectWithRetry();
+
 
 
         const isDev = process.env.NODE_ENV !== 'production';
@@ -155,6 +217,7 @@ async function startServer() {
         // entire tables and lose data) and runs every startup so production
         // never has to remember a one-off migration step.
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeUsername', 'STRING');
         // Add future columns here as the model evolves.
 
         // One-time schema repair for WorkflowApproverLocationOverrides.
@@ -165,59 +228,74 @@ async function startServer() {
         // If the bad index is detected we rebuild the table, preserving rows.
         await fixOverrideTableSchema(sequelize, isSqlite);
 
-        // Idempotent seed: ensure every default role exists. Use findOrCreate
-        // (not bulkCreate-only-when-empty) so that roles added in later
-        // releases (e.g. HR_INITIATOR) auto-appear on existing databases
-        // without needing a manual migration.
-        for (const cfg of DEFAULT_APPROVER_CONFIGS) {
-            const [, created] = await WorkflowApproverConfig.findOrCreate({
-                where: { roleKey: cfg.roleKey },
-                defaults: cfg
-            });
-            if (created) logger.info(`[Schema] Seeded WorkflowApproverConfig row for ${cfg.roleKey}.`);
-        }
-
-        // Seed default system configs if table is empty.
-        // NOTE: the SystemConfig model's `value` setter stringifies for us — DO NOT pre-stringify.
-        const configCount = await SystemConfig.count();
-        if (configCount === 0) {
-            const defaults = [
-                {
-                    key: 'printer_locations',
-                    value: [
-                        { name: 'Laser Printer - Ground Floor', location: 'Building A, Room 101' },
-                        { name: 'Laser Printer - First Floor', location: 'Building B, Room 205' },
-                        { name: 'Dot Matrix - Accounts', location: 'Building A, Room 102' }
-                    ],
-                    description: 'Available printer locations'
-                },
-                {
-                    key: 'file_share_paths',
-                    value: [
-                        { name: 'Department Share', path: '\\\\fileserver\\departments' },
-                        { name: 'Home Folder', path: '\\\\fileserver\\home' },
-                        { name: 'Archive', path: '\\\\fileserver\\archive' }
-                    ],
-                    description: 'File server share paths'
-                },
-                {
-                    key: 'sharepoint_paths',
-                    value: [
-                        { name: 'HR Documents', url: 'https://ifl.sharepoint.com/sites/hr' },
-                        { name: 'Finance Portal', url: 'https://ifl.sharepoint.com/sites/finance' },
-                        { name: 'IT Knowledge Base', url: 'https://ifl.sharepoint.com/sites/it-kb' }
-                    ],
-                    description: 'SharePoint site URLs'
-                }
-            ];
-            // Use individual create() so the setter runs (bulkCreate bypasses setters by default)
-            for (const cfg of defaults) {
-                await SystemConfig.create(cfg);
+        // Idempotent seed: ensure every default role exists. Non-fatal — a seed
+        // failure must never prevent the server from coming online.
+        try {
+            for (const cfg of DEFAULT_APPROVER_CONFIGS) {
+                const [, created] = await WorkflowApproverConfig.findOrCreate({
+                    where: { roleKey: cfg.roleKey },
+                    defaults: cfg
+                });
+                if (created) logger.info(`[Schema] Seeded WorkflowApproverConfig row for ${cfg.roleKey}.`);
             }
-            logger.info('Seeded default SystemConfig rows.');
+        } catch (err) {
+            logger.warn(`[Seed] WorkflowApproverConfig seed skipped: ${err.message}`);
         }
 
-        // Seed sample onboarding requests + timeline events for UI demonstration
+        // Remove the phantom OPS_TEAM role that was seeded in older builds.
+        // PendingOPSAction is handled by IT_OPS — OPS_TEAM was never used by
+        // any workflow stage and only caused confusion in the admin UI.
+        try {
+            const deleted = await WorkflowApproverConfig.destroy({ where: { roleKey: 'OPS_TEAM' } });
+            if (deleted > 0) logger.info(`[Schema] Removed ${deleted} stale OPS_TEAM row(s) from WorkflowApproverConfig.`);
+        } catch (err) {
+            logger.warn(`[Schema] OPS_TEAM cleanup skipped: ${err.message}`);
+        }
+
+        // Seed default system configs if table is empty. Non-fatal.
+        try {
+            const configCount = await SystemConfig.count();
+            if (configCount === 0) {
+                const defaults = [
+                    {
+                        key: 'printer_locations',
+                        value: [
+                            { name: 'Laser Printer - Ground Floor', location: 'Building A, Room 101' },
+                            { name: 'Laser Printer - First Floor', location: 'Building B, Room 205' },
+                            { name: 'Dot Matrix - Accounts', location: 'Building A, Room 102' }
+                        ],
+                        description: 'Available printer locations'
+                    },
+                    {
+                        key: 'file_share_paths',
+                        value: [
+                            { name: 'Department Share', path: '\\\\fileserver\\departments' },
+                            { name: 'Home Folder', path: '\\\\fileserver\\home' },
+                            { name: 'Archive', path: '\\\\fileserver\\archive' }
+                        ],
+                        description: 'File server share paths'
+                    },
+                    {
+                        key: 'sharepoint_paths',
+                        value: [
+                            { name: 'HR Documents', url: 'https://ifl.sharepoint.com/sites/hr' },
+                            { name: 'Finance Portal', url: 'https://ifl.sharepoint.com/sites/finance' },
+                            { name: 'IT Knowledge Base', url: 'https://ifl.sharepoint.com/sites/it-kb' }
+                        ],
+                        description: 'SharePoint site URLs'
+                    }
+                ];
+                for (const cfg of defaults) {
+                    await SystemConfig.create(cfg);
+                }
+                logger.info('Seeded default SystemConfig rows.');
+            }
+        } catch (err) {
+            logger.warn(`[Seed] SystemConfig seed skipped: ${err.message}`);
+        }
+
+        // Seed sample onboarding requests + timeline events for UI demonstration. Non-fatal.
+        try {
         const onboardingCount = await OnboardingRequest.count();
         if (onboardingCount === 0) {
             const now = new Date();
@@ -313,9 +391,18 @@ async function startServer() {
             }
             logger.info(`Seeded ${samples.length} sample onboarding requests with timeline events.`);
         }
+        } catch (err) {
+            logger.warn(`[Seed] Sample onboarding seed skipped: ${err.message}`);
+        }
+
+        // Start the 48h escalation cron. Runs every 2 hours and automatically
+        // re-routes stalled requests to secondary when primary hasn't acted.
+        cronService.scheduleEscalationCheck();
 
         app.listen(PORT, '127.0.0.1', () => {
             logger.info(`Server running on port ${PORT}`);
+            // Tell PM2 the app is ready (requires wait_ready: true in ecosystem.config.cjs).
+            if (process.send) process.send('ready');
         });
     } catch (err) {
         logger.error(`Failed to start server: ${err.message}`, { error: err, stack: err.stack });

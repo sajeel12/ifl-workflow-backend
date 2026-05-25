@@ -441,18 +441,44 @@
                 try {
                     const t = sessionStorage.getItem(TOKEN_KEY);
                     const ts = parseInt(sessionStorage.getItem(TOKEN_TS_KEY) || '0', 10);
-                    if (t && (Date.now() - ts) < TOKEN_TTL_MS) return t;
+                    if (t && (Date.now() - ts) < TOKEN_TTL_MS) {
+                        // Don't serve a cached token that has no email — force a fresh fetch
+                        // so the retry logic in fetchFreshToken gets another attempt.
+                        try { const p = JSON.parse(t); if (!p.email) return null; } catch (_) {}
+                        return t;
+                    }
                 } catch (_) { }
                 return null;
+            };
+
+            const doFetchToken = async () => {
+                const r = await fetch('/token.aspx', { credentials: 'include', cache: 'no-store' });
+                if (!r.ok) throw new Error('token.aspx ' + r.status);
+                const j = await r.json();
+                if (!j || !j.signature) throw new Error('token.aspx returned no signature');
+                return j;
             };
 
             const fetchFreshToken = async () => {
                 // credentials: 'include' is required so the browser sends Windows
                 // creds to /token.aspx via the same origin (IIS).
-                const r = await fetch('/token.aspx', { credentials: 'include', cache: 'no-store' });
-                if (!r.ok) throw new Error('token.aspx ' + r.status);
-                const j = await r.json();
-                if (!j || !j.signature) throw new Error('token.aspx returned no signature');
+                let j = await doFetchToken();
+
+                // token.aspx can return a valid signature but an empty email when its
+                // AD lookup loses a race (slow DC, cold LDAP connection). Retry once
+                // after 1.5 s — the second call almost always has the email populated.
+                // Never cache a token that has no email; always re-fetch next time.
+                if (!j.email) {
+                    console.warn('[SSO] token.aspx returned no email — retrying in 1.5 s');
+                    await new Promise(ok => setTimeout(ok, 1500));
+                    try { j = await doFetchToken(); } catch (_) { /* keep first result */ }
+                    if (!j.email) {
+                        console.warn('[SSO] token.aspx still returned no email after retry — proceeding without (server will hydrate from AD)');
+                        // Return the token but do NOT cache it so the next page load retries.
+                        return JSON.stringify(j);
+                    }
+                }
+
                 const stash = JSON.stringify(j);
                 try {
                     sessionStorage.setItem(TOKEN_KEY, stash);
@@ -463,9 +489,13 @@
 
             const getToken = async () => getCachedToken() || await fetchFreshToken();
 
-            // Expose helpers so other scripts on the page can make
-            // authenticated /api/* calls or attach the token to plain HTML
-            // form submissions without re-doing the token dance.
+            // ── window.iflFetch — ALWAYS use this instead of plain fetch() ──────
+            // for any call to a route guarded by ssoMiddleware or adminApiGuard.
+            // Plain fetch() does NOT attach a sidecar token, so the server guard
+            // has no identity and returns 403/401. A 401 causes IIS Windows-Auth
+            // to intercept and show a login popup — broken UX on every API call.
+            // Exception: fetch('/token.aspx') here must stay plain (it bootstraps
+            // the token). Open/unguarded routes are also fine with plain fetch.
             window.iflFetch = async (url, opts = {}) => {
                 const token = await getToken();
                 const headers = Object.assign({}, opts.headers || {}, { 'x-sidecar-token': token });

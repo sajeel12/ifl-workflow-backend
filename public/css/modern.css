@@ -97,7 +97,7 @@ body {
 
 /* Step Progress Tracker */
 .steps-container {
-    padding: 24px 32px;
+    padding: 18px 24px;
     background: #f9fafb;
     border-bottom: 1px solid var(--border-color);
 }
@@ -106,16 +106,15 @@ body {
     display: flex;
     justify-content: space-between;
     position: relative;
-    max-width: 600px;
+    max-width: 100%;
     margin: 0 auto;
-    /* Center items */
 }
 
-/* Connecting Line */
+/* Base connector line (gray) */
 .steps::before {
     content: '';
     position: absolute;
-    top: 14px;
+    top: 11px;
     left: 0;
     right: 0;
     height: 2px;
@@ -123,45 +122,67 @@ body {
     z-index: 1;
 }
 
+/* Progress fill — driven by --step-progress CSS var set inline */
+.steps::after {
+    content: '';
+    position: absolute;
+    top: 11px;
+    left: 0;
+    width: var(--step-progress, 0%);
+    height: 2px;
+    background: var(--primary);
+    z-index: 1;
+    transition: width 0.4s ease;
+}
+
 .step-item {
     position: relative;
     z-index: 2;
     background: #f9fafb;
-    /* Matches container bg to mask line */
-    padding: 0 10px;
+    padding: 0 4px;
     text-align: center;
     color: var(--text-muted);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .step-circle {
-    width: 30px;
-    height: 30px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     background: white;
     border: 2px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 8px;
-    font-weight: 600;
-    font-size: 14px;
+    margin: 0 auto 6px;
+    font-weight: 700;
+    font-size: 10px;
     transition: all 0.3s ease;
+    flex-shrink: 0;
 }
 
 .step-label {
-    font-size: 0.75rem;
+    font-size: 0.6rem;
     font-weight: 500;
+    line-height: 1.25;
+    max-width: 64px;
+    word-break: break-word;
+    text-align: center;
 }
 
 .step-item.active .step-circle {
     border-color: var(--primary);
     color: var(--primary);
     background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
 }
 
 .step-item.active .step-label {
     color: var(--primary);
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .step-item.completed .step-circle {
@@ -170,7 +191,9 @@ body {
     color: white;
 }
 
-/* Fill connector line for completed steps - complex to do with pure CSS simply, sticking to circle highlight */
+.step-item.completed .step-label {
+    color: var(--primary);
+}
 
 
 /* Form Sections */

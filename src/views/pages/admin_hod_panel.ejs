@@ -331,7 +331,7 @@ async function _mainSuggestFetch(q) {
   }, 150);
 
   try {
-    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
+    const res  = await window.iflFetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=8`);
     const json = await res.json();
     clearTimeout(_mainLoadingTimer);
 
@@ -395,7 +395,7 @@ async function _hodSuggestFetch(q) {
   }, 150);
 
   try {
-    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=10`);
+    const res  = await window.iflFetch(`/admin/employees?q=${encodeURIComponent(q)}&page=1&limit=10`);
     const json = await res.json();
     clearTimeout(_hodLoadingTimer);
     const results = (json.data || []).filter(e => e.employeeId !== _hodExcludeId);
@@ -460,7 +460,7 @@ async function loadDepartments() {
   const tbody = document.getElementById('departmentTableBody');
   tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--a-text-muted);">Loading…</td></tr>';
   try {
-    const json = await fetch('/admin/departments').then(r => r.json());
+    const json = await window.iflFetch('/admin/departments').then(r => r.json());
     if (json.success) {
       currentDepartments = json.data;
       document.getElementById('stats').innerText = `${json.data.length} departments`;
@@ -526,7 +526,7 @@ async function loadEmployees(page = 1) {
   const tbody = document.getElementById('employeeTableBody');
   tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--a-text-muted);">Searching…</td></tr>';
   try {
-    const res  = await fetch(`/admin/employees?q=${encodeURIComponent(query)}&page=${page}&limit=${pagination.limit}`);
+    const res  = await window.iflFetch(`/admin/employees?q=${encodeURIComponent(query)}&page=${page}&limit=${pagination.limit}`);
     const json = await res.json();
     if (json.success) {
       currentEmployees = json.data;
@@ -644,7 +644,7 @@ async function submitAssignment(e) {
     ? { departmentName: (!targetVal || targetVal === 'null') ? null : targetVal, hodId }
     : { employeeId: targetVal, hodId };
   try {
-    const res  = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const res  = await window.iflFetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const json = await res.json();
     if (json.success) { closeModal(); assignmentContext.type === 'department' ? loadDepartments() : loadEmployees(pagination.page); }
     else IflDialog.error(json.error || 'Failed to assign HOD.');
@@ -660,7 +660,7 @@ async function removeHod(empId, empName) {
   });
   if (!ok) return;
   try {
-    const res  = await fetch('/admin/remove-hod', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ employeeId: empId }) });
+    const res  = await window.iflFetch('/admin/remove-hod', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ employeeId: empId }) });
     const json = await res.json();
     if (json.success) {
       loadEmployees();
@@ -683,7 +683,7 @@ async function viewEmployeeDetails(empId) {
   document.getElementById('editActions').style.display = 'none';
   document.getElementById('viewActions').style.display = 'block';
   try {
-    const res  = await fetch(`/admin/employee/${empId}`);
+    const res  = await window.iflFetch(`/admin/employee/${empId}`);
     const json = await res.json();
     json.success ? (currentViewedEmployee = json.data, renderDetailsContent(false))
       : (document.getElementById('detailsContent').innerHTML = `<div style="color:var(--a-red);">${json.error}</div>`);
@@ -744,7 +744,7 @@ async function saveEmployeeDetails(e) {
   formData.forEach((v, k) => { if (k !== 'employeeId') payload[k] = v || null; });
   btn.disabled = true; btn.innerText = 'Saving…';
   try {
-    const res  = await fetch(`/admin/employee/${empId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    const res  = await window.iflFetch(`/admin/employee/${empId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
     const json = await res.json();
     if (json.success) {
       closeDetailsModal();

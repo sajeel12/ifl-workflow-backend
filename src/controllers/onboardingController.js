@@ -19,24 +19,53 @@ const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key
 // HR users), then the global fallback. Returns the matching group key or
 // null if the email isn't on any HR list. Local-part comparison only — same
 // person can appear with ifl.net or igc.com.pk domains in AD vs HRMS.
-async function resolveHRGroupForEmail(email) {
-    if (!email) return null;
+// Resolve which HR_INITIATOR location group this user belongs to.
+// Uses username (AD sAMAccountName) first — same pattern as portalController.
+// Falls back to email local-part for rows that predate the username column,
+// and to full email match when no username is available.
+async function resolveHRGroupForEmail(email, username = '') {
+    if (!email && !username) return null;
+    const uname = (username || '').toLowerCase();
     const overrides = await WorkflowApproverLocationOverride.findAll({
         where: { roleKey: 'HR_INITIATOR', isActive: true }
     });
-    for (const o of overrides) {
-        if (emailsMatch(email, o.approverEmail) || emailsMatch(email, o.secondaryEmail)) {
-            return o.location;
-        }
+    const rowMatches = (o) => {
+        const inPrimary = uname
+            ? (o.approverUsername  ? o.approverUsername.toLowerCase()  === uname
+                                   : o.approverEmail  ? o.approverEmail.split('@')[0].toLowerCase()  === uname : false)
+            : (email && emailsMatch(email, o.approverEmail));
+        const inSecondary = uname
+            ? (o.secondaryUsername ? o.secondaryUsername.toLowerCase() === uname
+                                   : o.secondaryEmail ? o.secondaryEmail.split('@')[0].toLowerCase() === uname : false)
+            : (email && emailsMatch(email, o.secondaryEmail));
+        return inPrimary || inSecondary;
+    };
+    const matches = overrides.filter(rowMatches);
+    if (matches.length > 1) {
+        // Data-integrity violation — admin guard should have prevented this.
+        // Reject rather than route randomly.
+        throw new Error(
+            `HR routing error: "${username || email}" is assigned to ${matches.length} location groups ` +
+            `(${matches.map(m => m.location).join(', ')}). ` +
+            `Remove the duplicate assignment in the Workflow Approvers admin panel.`
+        );
     }
-    // Global fallback — HR row in WorkflowApproverConfig (no group). If the
-    // initiator matches the global HR, we allow the submission but can't
-    // route to a specific location group. Caller decides what to do.
+    if (matches.length === 1) return matches[0].location;
+
+    // Global fallback — WorkflowApproverConfig row (no location group).
     const globalCfg = await WorkflowApproverConfig.findOne({
         where: { roleKey: 'HR_INITIATOR', isActive: true }
     });
-    if (globalCfg && (emailsMatch(email, globalCfg.approverEmail) || emailsMatch(email, globalCfg.secondaryEmail))) {
-        return '__GLOBAL__';
+    if (globalCfg) {
+        const inPrimary = uname
+            ? (globalCfg.approverUsername  ? globalCfg.approverUsername.toLowerCase()  === uname
+                                           : globalCfg.approverEmail  ? globalCfg.approverEmail.split('@')[0].toLowerCase()  === uname : false)
+            : (email && emailsMatch(email, globalCfg.approverEmail));
+        const inSecondary = uname
+            ? (globalCfg.secondaryUsername ? globalCfg.secondaryUsername.toLowerCase() === uname
+                                           : globalCfg.secondaryEmail ? globalCfg.secondaryEmail.split('@')[0].toLowerCase() === uname : false)
+            : (email && emailsMatch(email, globalCfg.secondaryEmail));
+        if (inPrimary || inSecondary) return '__GLOBAL__';
     }
     return null;
 }
@@ -55,23 +84,70 @@ const STATUS_TO_ROLE = {
     Rejected: { key: null, label: 'Closed (Rejected)' }
 };
 
-const resolveCurrentRecipient = async (status) => {
+// IT_OPS and HR_INITIATOR are split by location group; all other roles use a
+// single global config row. Mirrors the same constant in recipientService.js.
+const LOCATION_AWARE_ROLE_KEYS = new Set(['IT_OPS', 'HR_INITIATOR']);
+
+// Resolve who is currently configured for a given workflow status, optionally
+// scoped by location for location-aware roles (IT_OPS). Checks the per-location
+// override first, then falls back to the global config row.
+const resolveCurrentRecipient = async (status, location = null) => {
     const map = STATUS_TO_ROLE[status];
     if (!map) return { role: status, name: '', email: '' };
     if (!map.key) return { role: map.label, name: '', email: '' };
     try {
-        const cfg = await WorkflowApproverConfig.findOne({ where: { roleKey: map.key, isActive: true } });
-        if (!cfg) return { role: map.label, name: '', email: '' };
+        let cfg = null;
+        if (location && LOCATION_AWARE_ROLE_KEYS.has(map.key)) {
+            cfg = await WorkflowApproverLocationOverride.findOne({
+                where: { roleKey: map.key, location, isActive: true }
+            });
+        }
+        if (!cfg) {
+            cfg = await WorkflowApproverConfig.findOne({ where: { roleKey: map.key, isActive: true } });
+        }
+        if (!cfg) return { role: map.label, name: '', email: '', username: '' };
         const usingSecondary = cfg.primaryExpiredAt && cfg.secondaryEmail;
         return {
-            role: map.label + (usingSecondary ? ' (Secondary)' : ''),
-            name: usingSecondary ? cfg.secondaryName : cfg.approverName,
-            email: usingSecondary ? cfg.secondaryEmail : cfg.approverEmail
+            role:     map.label + (usingSecondary ? ' (Secondary)' : ''),
+            name:     usingSecondary ? cfg.secondaryName     : cfg.approverName,
+            email:    usingSecondary ? cfg.secondaryEmail    : cfg.approverEmail,
+            username: usingSecondary ? (cfg.secondaryUsername || '') : (cfg.approverUsername || '')
         };
     } catch {
         return { role: map.label, name: '', email: '' };
     }
 };
+
+// Given a location-aware roleKey and the signed-in user's identity, return the
+// location group key the user belongs to. Mirrors the rowMatchesPrimary /
+// rowMatchesSecondary logic in portalController: username (AD sAMAccountName) is
+// checked first; email local-part is the backward-compat fallback for rows that
+// predate the approverUsername column.
+async function resolveUserLocationForRole(roleKey, userEmail, username = '') {
+    if (!userEmail && !username) return null;
+    const uname = username.toLowerCase();
+    const overrides = await WorkflowApproverLocationOverride.findAll({
+        where: { roleKey, isActive: true }
+    });
+    const matches = [];
+    for (const o of overrides) {
+        const inPrimary = uname
+            ? (o.approverUsername  ? o.approverUsername.toLowerCase()  === uname
+                                   : o.approverEmail  ? o.approverEmail.split('@')[0].toLowerCase()  === uname : false)
+            : emailsMatch(userEmail, o.approverEmail);
+        const inSecondary = uname
+            ? (o.secondaryUsername ? o.secondaryUsername.toLowerCase() === uname
+                                   : o.secondaryEmail ? o.secondaryEmail.split('@')[0].toLowerCase() === uname : false)
+            : emailsMatch(userEmail, o.secondaryEmail);
+        if (inPrimary || inSecondary) matches.push(o.location);
+    }
+    if (matches.length > 1) {
+        // Admin guard should have prevented this — log and refuse to guess.
+        logger.warn(`[Location] ${username || userEmail} matched ${matches.length} overrides for ${roleKey}: ${matches.join(', ')}`);
+        return null;
+    }
+    return matches[0] ?? null;
+}
 
 export const handleRequest = async (req, res) => {
     const { token } = req.query;
@@ -95,6 +171,9 @@ export const handleRequest = async (req, res) => {
 
 const handleSubmission = async (req, res, token) => {
     const data = req.body;
+    const portalToken = data.pt || null;
+    // Local wrapper: automatically carries res + portalToken to every success render.
+    const success = (title, msg, next = {}) => renderSuccess(res, title, msg, { ...next, portalToken });
     // Normalize checkbox values
     const checkboxFields = [
         'intranetAccess', 'internetAccess', 'specificWebsites', 'emailIncoming',
@@ -128,7 +207,7 @@ const handleSubmission = async (req, res, token) => {
             // and WorkflowApproverConfig (global). The matching group becomes
             // the request's location, so IT Ops routing in Step 2 lands in
             // the same group.
-            const hrGroupKey = await resolveHRGroupForEmail(req.user.email);
+            const hrGroupKey = await resolveHRGroupForEmail(req.user.email, req.user.username);
             if (!hrGroupKey) {
                 return res.status(403).render('pages/message', {
                     title: 'Not authorized',
@@ -136,7 +215,7 @@ const handleSubmission = async (req, res, token) => {
                     titleClass: 'error',
                     icon: '⛔',
                     iconClass: 'error-icon',
-                    message: `You are signed in as ${req.user.email}, but you are not on the HR Initiator list. Please contact the workflow administrator to be added.`
+                    message: `You are signed in as ${req.user.email || req.user.username}, but you are not on the HR Initiator list. Please contact the workflow administrator to be added.`
                 });
             }
             if (hrGroupKey !== '__GLOBAL__') {
@@ -185,27 +264,24 @@ const handleSubmission = async (req, res, token) => {
 
             const { role, request } = context;
 
-            // ─── Forwarded-email validation (HARD enforcement at POST) ────
-            // The token is valid, but make absolutely sure the SSO user
-            // submitting this action is the intended approver. This catches
-            // any forwarded-email scenario regardless of how the GET reached
-            // them. The same email that was used to send the action link
-            // (request.currentStageAssigneeEmail) must match req.user.email.
+            // ─── Authorization: check the LIVE configured approver for this
+            // stage role (not just the stored currentStageAssigneeEmail).
+            // This lets admin role changes take effect immediately on
+            // in-flight requests without needing an explicit rebind action.
+            // If no approver is configured for the role, any authenticated
+            // user may proceed (avoids lock-out during initial setup).
             // Compare LOCAL-PART only (text before "@") — same person can be
-            // ali.khan@ifl.net in HRMS and ali.khan@igc.com.pk in AD; the
-            // domain varies but the local-part is consistent.
-            const expectedEmail = request.currentStageAssigneeEmail || '';
-            const actualEmail   = (req.user && req.user.email) || '';
-            if (expectedEmail) {
+            // ali.khan@ifl.net in HRMS and ali.khan@igc.com.pk in AD.
+            const actualEmail = (req.user && req.user.email) || '';
+            const stageRoleInfo = STATUS_TO_ROLE[request.status];
+            if (stageRoleInfo && stageRoleInfo.key) {
                 if (!actualEmail) {
-                    // No SSO context — refuse outright. Token-only access is
-                    // not enough to act on a request.
                     try {
                         await TimelineEvent.create({
                             requestId: request.id,
                             action: 'Unauthorized Submit',
                             actorRole: 'System',
-                            details: `Submission attempt without SSO context. Expected ${request.currentStageAssigneeEmail}.`,
+                            details: `Submission attempt without SSO context. Stage: ${request.status}, stored assignee: ${request.currentStageAssigneeEmail}.`,
                             timestamp: new Date()
                         });
                     } catch (_) {}
@@ -215,27 +291,31 @@ const handleSubmission = async (req, res, token) => {
                         titleClass: 'error',
                         icon: '⛔',
                         iconClass: 'error-icon',
-                        message: `This action can only be submitted by ${request.currentStageAssigneeEmail}. Please open the action link from the IFL portal so we can verify your identity.`
+                        message: `This action can only be submitted by the configured approver for this stage. Please open the action link from the IFL portal so we can verify your identity.`
                     });
                 }
-                if (!emailsMatch(actualEmail, expectedEmail)) {
-                    // Identity mismatch — log and reject.
+                const currentRecipient = await resolveCurrentRecipient(request.status, request.location);
+                const configuredEmail = (currentRecipient && currentRecipient.email) || '';
+                if (configuredEmail && !emailsMatch(actualEmail, configuredEmail)) {
                     try {
                         await TimelineEvent.create({
                             requestId: request.id,
                             action: 'Unauthorized Submit',
                             actorRole: 'System',
-                            details: `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
+                            details: `Configured approver: ${configuredEmail}, submitted by: ${actualEmail}`,
                             timestamp: new Date()
                         });
                     } catch (_) {}
+                    const delegateName = (currentRecipient.name && currentRecipient.name.trim())
+                        ? `${currentRecipient.name} (${configuredEmail})`
+                        : configuredEmail;
                     return res.status(403).render('pages/message', {
                         title: 'Not authorized',
-                        heading: 'This action is authorized only for the intended recipient',
+                        heading: 'This stage has been delegated',
                         titleClass: 'error',
                         icon: '⛔',
                         iconClass: 'error-icon',
-                        message: `This action link was sent to ${request.currentStageAssigneeEmail}. You are signed in as ${req.user.email}, so you cannot submit this request. If you need to handle it on someone's behalf, please contact your administrator.`
+                        message: `This stage is currently assigned to ${delegateName}. You are signed in as ${actualEmail} and are no longer the configured approver. Please use the portal to check your own pending actions, or contact your administrator.`
                     });
                 }
             }
@@ -243,8 +323,7 @@ const handleSubmission = async (req, res, token) => {
             if (role === 'IT') {
                 // Step 2: IT Ops records the configuration.
                 await onboardingService.updateITDetails(token, data);
-                return renderSuccess(
-                    res,
+                return success(
                     'Record Submitted',
                     'Required Services configured and recorded. The request has been forwarded to HOD for review.',
                     { status: 'PendingHOD', requestId: request.id, actorRole: 'IT' }
@@ -255,15 +334,13 @@ const handleSubmission = async (req, res, token) => {
                 const { action, hodRemarks } = data;
                 await onboardingService.handleHODApproval(token, action, hodRemarks);
                 if (action === 'Reject') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Request Rejected',
                         'Request rejected by HOD. The process has been stopped and notified to the relevant team.',
                         { status: 'Rejected', requestId: request.id, actorRole: 'HOD' }
                     );
                 }
-                return renderSuccess(
-                    res,
+                return success(
                     'Request Approved',
                     'Approved by HOD. The request has been forwarded to the DCI Team for Window login and access setup.',
                     { status: 'PendingDCI', requestId: request.id, actorRole: 'HOD' }
@@ -272,8 +349,7 @@ const handleSubmission = async (req, res, token) => {
             else if (role === 'DCI') {
                 // Step 5: DCI Team records identity configuration.
                 await onboardingService.updateDCIDetails(token, data);
-                return renderSuccess(
-                    res,
+                return success(
                     'Record Submitted',
                     'Windows login and required access details have been recorded. The request has been forwarded to the DCI Manager for final approval.',
                     { status: 'PendingDCIManager', requestId: request.id, actorRole: 'DCI' }
@@ -284,16 +360,14 @@ const handleSubmission = async (req, res, token) => {
                 const { action, dciRemarks } = data;
                 const updated = await onboardingService.handleDCIManagerApproval(token, action, dciRemarks);
                 if (action === 'Reject') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Request Rejected',
                         'Request rejected by DCI Manager. The workflow has been stopped and notified to the DCI team.',
                         { status: 'Rejected', requestId: request.id, actorRole: 'DCIManager' }
                     );
                 }
                 if (action === 'RequestChanges') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Changes Requested',
                         'Change request sent back to the DCI Team with your remarks.',
                         { status: 'PendingDCI', requestId: request.id, actorRole: 'DCIManager' }
@@ -301,15 +375,13 @@ const handleSubmission = async (req, res, token) => {
                 }
                 // Approve — branches based on whether email approval is needed.
                 if (updated && updated.status === 'PendingITHOD') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Approve Request (Email Yes)',
                         'Approved by DCI Manager. The request has been forwarded to IT HOD for email service authorization.',
                         { status: 'PendingITHOD', requestId: request.id, actorRole: 'DCIManager' }
                     );
                 }
-                return renderSuccess(
-                    res,
+                return success(
                     'Approved (No Email)',
                     'Approved by DCI Manager. PDF summary has been generated for record and notification sent for implementation.',
                     { status: 'PendingDCIImplementation', requestId: request.id, actorRole: 'DCIManager' }
@@ -320,15 +392,13 @@ const handleSubmission = async (req, res, token) => {
                 const { action, itHodRemarks } = data;
                 await onboardingService.handleITHODApproval(token, action, itHodRemarks);
                 if (action === 'Reject') {
-                    return renderSuccess(
-                        res,
+                    return success(
                         'Request Rejected',
                         'Request rejected by IT HOD. The workflow has been stopped and notified to the relevant team.',
                         { status: 'Rejected', requestId: request.id, actorRole: 'ITHOD' }
                     );
                 }
-                return renderSuccess(
-                    res,
+                return success(
                     'Request Approved',
                     'Approved by IT HOD. The request is finalized — PDF summary has been generated for record and notification sent for implementation.',
                     { status: 'PendingDCIImplementation', requestId: request.id, actorRole: 'ITHOD' }
@@ -344,8 +414,7 @@ const handleSubmission = async (req, res, token) => {
                     }
                 });
                 await onboardingService.handleOPSAction(token, checklistData, opsName);
-                return renderSuccess(
-                    res,
+                return success(
                     'Mark as Verified',
                     'Verification completed successfully. The onboarding process has been completed.',
                     { status: 'Completed', requestId: request.id, actorRole: 'OPS' }
@@ -412,27 +481,41 @@ const renderForm = async (req, res, token) => {
         // The HARD enforcement happens at POST time: handleSubmission
         // refuses any submit whose req.user.email doesn't match the stored
         // currentStageAssigneeEmail.
-        if (req.user && req.user.email && request.currentStageAssigneeEmail) {
-            // Local-part only — see emailMatch.js for the rationale.
-            if (!emailsMatch(req.user.email, request.currentStageAssigneeEmail)) {
+        if (req.user && (req.user.email || req.user.username)) {
+            // Use the LIVE configured approver (location-aware) for the gate so
+            // that delegation changes are reflected immediately — even at the
+            // GET (form-view) stage. Fall back to stored values if no live config.
+            const liveRecipient = await resolveCurrentRecipient(request.status, request.location);
+            // Username gate — unambiguous, works across email domain changes.
+            const gateUsername = (liveRecipient && liveRecipient.username) || request.currentStageAssigneeUsername || '';
+            // Email gate — backward-compat fallback when no username is stored.
+            const gateEmail    = (liveRecipient && liveRecipient.email)    || request.currentStageAssigneeEmail    || '';
+            const actorUsername = (req.user.username || '').toLowerCase();
+            const isMismatch = gateUsername
+                ? (actorUsername !== gateUsername.toLowerCase())
+                : (gateEmail && !emailsMatch(req.user.email, gateEmail));
+            if (isMismatch) {
                 try {
                     await TimelineEvent.create({
                         requestId: request.id,
                         action: 'Unauthorized Click',
                         actorRole: 'System',
-                        details: `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
+                        details: `Configured: ${gateUsername || gateEmail}, clicked by: ${req.user.username || req.user.email}`,
                         timestamp: new Date()
                     });
                 } catch (e) {
                     logger.warn('[Onboarding] Could not record unauthorized-click audit event: ' + e.message);
                 }
+                const delegateName = (liveRecipient && liveRecipient.name && liveRecipient.name.trim())
+                    ? `${liveRecipient.name} (${gateEmail || gateUsername})`
+                    : (gateEmail || gateUsername);
                 return res.status(403).render('pages/message', {
                     title: 'Not authorized',
-                    heading: 'This page is authorized only for the intended recipient',
+                    heading: 'This stage has been delegated',
                     titleClass: 'error',
                     icon: '⛔',
                     iconClass: 'error-icon',
-                    message: `This action link was sent to ${request.currentStageAssigneeEmail}. You are signed in as ${req.user.email}, so you cannot act on this request. If you need to handle it on someone's behalf, please contact your administrator.`
+                    message: `This stage is currently assigned to ${delegateName}. You are signed in as ${req.user.email || req.user.username} and are no longer the configured approver. Please use the portal to check your own pending actions.`
                 });
             }
         }
@@ -470,10 +553,15 @@ const renderForm = async (req, res, token) => {
         // known HR, pre-set their location group so the form renders the
         // right readonly label. A non-HR user simply sees the form and is
         // blocked cleanly on submit.
-        if (req.user && req.user.email) {
-            const hrGroupKey = await resolveHRGroupForEmail(req.user.email);
-            if (hrGroupKey && hrGroupKey !== '__GLOBAL__') {
-                request.location = hrGroupKey;
+        if (req.user && (req.user.email || req.user.username)) {
+            try {
+                const hrGroupKey = await resolveHRGroupForEmail(req.user.email, req.user.username);
+                if (hrGroupKey && hrGroupKey !== '__GLOBAL__') {
+                    request.location = hrGroupKey;
+                }
+            } catch (routingErr) {
+                // Non-fatal at GET — just log. The form renders; POST will reject.
+                logger.warn(`[Onboarding] HR routing warning at GET: ${routingErr.message}`);
             }
         }
 
@@ -567,23 +655,29 @@ const renderForm = async (req, res, token) => {
         formEnctype = 'enctype="multipart/form-data"';
     }
 
-    // Stepper Logic
-    const getStepClass = (stepRole) => {
-        const order = ['HR', 'IT', 'HOD', 'DCI', 'DCIManager', 'ITHOD', 'Approved', 'DCIImplementer', 'OPS', 'Completed'];
-        const currentIdx = order.indexOf(role);
-        const stepIdx = order.indexOf(stepRole);
-        if (currentIdx === stepIdx) return 'active';
-        if (currentIdx > stepIdx) return 'completed';
-        return '';
-    };
-
-    // Simplified Mapping for Visual Stepper
-    const steps = [
-        { label: 'Initial Request', status: getStepClass('HR') },
-        { label: 'IT Operations', status: getStepClass('IT') },
-        { label: 'Approvals', status: (['HOD', 'DCI', 'DCIManager', 'ITHOD'].includes(role) || request.approvalStatus === 'Approved') ? 'active' : (['DCIImplementer', 'OPS', 'Completed'].includes(request.status) ? 'completed' : '') },
-        { label: 'Fulfillment', status: (['DCIImplementer', 'OPS', 'Completed'].includes(role) || request.status === 'Completed') ? 'active' : '' }
+    // Full workflow stepper — driven by request.status, not the viewer role.
+    const WORKFLOW_STAGES = [
+        { label: 'HR Initiation',  statusKey: null },
+        { label: 'IT Operations',  statusKey: 'PendingIT' },
+        { label: 'HOD Approval',   statusKey: 'PendingHOD' },
+        { label: 'DCI Input',      statusKey: 'PendingDCI' },
+        { label: 'DCI Manager',    statusKey: 'PendingDCIManager' },
+        { label: 'IT HOD',         statusKey: 'PendingITHOD' },
+        { label: 'DCI Implement',  statusKey: 'PendingDCIImplementation' },
+        { label: 'OPS Action',     statusKey: 'PendingOPSAction' },
+        { label: 'Completed',      statusKey: 'Completed' },
     ];
+    const requestStatus = request && request.status;
+    let activeStepIdx = 0;
+    if (requestStatus) {
+        const found = WORKFLOW_STAGES.findIndex(s => s.statusKey === requestStatus);
+        if (found !== -1) activeStepIdx = found;
+    }
+    const steps = WORKFLOW_STAGES.map((s, i) => ({
+        label: s.label,
+        status: i === activeStepIdx ? 'active' : (i < activeStepIdx ? 'completed' : ''),
+    }));
+    const stepProgress = Math.round((activeStepIdx / (WORKFLOW_STAGES.length - 1)) * 100);
 
     // OPS Checklist Generation
     let opsChecklistHTML = '';
@@ -658,6 +752,7 @@ const renderForm = async (req, res, token) => {
         formAction,
         formEnctype,
         steps,
+        stepProgress,
         opsChecklistHTML,
         printerLocations,
         fileSharePaths,
@@ -680,8 +775,9 @@ const renderForm = async (req, res, token) => {
         // Resolved here (rather than in the .ejs) so partials/portal_shell.ejs
         // and partials/portal_scripts.ejs can read it directly as a top-level
         // local — EJS does not propagate <% const %> into included templates.
-        showPortal: !!(token && FORM_ROLE_TO_QUEUE_KEY[role]),
-        portalCurrentRequestId: (request && request.id) || null
+        showPortal: false,
+        portalCurrentRequestId: (request && request.id) || null,
+        portalToken: req.query.pt || null,
     });
 };
 
@@ -712,7 +808,12 @@ const FORM_ROLE_TO_LABEL = {
 // per client requirement — the same user who configured the services initially
 // is also responsible for verifying after desk setup. OPS_TEAM is no longer a
 // separate queue; OPS-routed designations fall back into IT_OPS.
+const ALL_INFLIGHT = ['PendingIT', 'PendingHOD', 'PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction'];
+
 const ROLE_TO_PENDING_STATUS = {
+    // HR_INITIATOR has no "waiting on them" status — pending view shows all
+    // in-flight requests from their location so they can track what they started.
+    HR_INITIATOR: ALL_INFLIGHT,
     IT_OPS: ['PendingIT', 'PendingOPSAction'],
     HOD: ['PendingHOD'],
     DCI_TEAM: ['PendingDCI'],
@@ -722,7 +823,9 @@ const ROLE_TO_PENDING_STATUS = {
 };
 
 const ROLE_TO_HISTORY_STATUS = {
-    IT_OPS: ['PendingIT', 'PendingHOD', 'PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
+    // HR_INITIATOR history = closed requests from their location.
+    HR_INITIATOR: ['Completed', 'Rejected'],
+    IT_OPS: [...ALL_INFLIGHT, 'Completed', 'Rejected'],
     HOD: ['PendingHOD', 'PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
     DCI_TEAM: ['PendingDCI', 'PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
     DCI_MANAGER: ['PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation', 'PendingOPSAction', 'Completed', 'Rejected'],
@@ -734,7 +837,9 @@ const ROLE_TO_HISTORY_STATUS = {
 // Lets users land on the queue page automatically without picking a role.
 // All OPS-flavoured designations resolve to IT_OPS (single combined queue).
 const DESIGNATION_TO_ROLE = {
-    HR: 'IT_OPS', // HR initiates, doesn't have a queue. Default landing role for them is informational.
+    'HR': 'HR_INITIATOR',
+    'HR INITIATOR': 'HR_INITIATOR',
+    'HR_INITIATOR': 'HR_INITIATOR',
     'IT OPS': 'IT_OPS',
     'IT_OPS': 'IT_OPS',
     'IT': 'IT_OPS',
@@ -775,21 +880,29 @@ export const renderRoleQueue = async (req, res) => {
         const safeRole = validRoles.includes(role) ? role : 'IT_OPS';
         const statuses = map[safeRole] || [];
 
+        // Location-aware roles (IT_OPS, HR_INITIATOR) filter to the signed-in
+        // user's location group so each person only sees their own site's work.
+        let locationFilter = {};
+        if (LOCATION_AWARE_ROLE_KEYS.has(safeRole) && req.user && (req.user.email || req.user.username)) {
+            const userLocation = await resolveUserLocationForRole(safeRole, req.user.email, req.user.username);
+            if (userLocation) locationFilter = { location: userLocation };
+        }
+
         const rows = statuses.length ? await OnboardingRequest.findAll({
-            where: { status: { [Op.in]: statuses } },
+            where: { status: { [Op.in]: statuses }, ...locationFilter },
             order: [['updatedAt', 'DESC']],
             attributes: [
                 'id', 'employeeId', 'fullName', 'department', 'subDepartment',
-                'designation', 'requesterName', 'requesterEmail', 'status',
+                'designation', 'requesterName', 'requesterEmail', 'status', 'location',
                 'createdAt', 'updatedAt', 'currentStageToken'
             ]
         }) : [];
 
         const items = rows.map(r => {
             const j = r.toJSON();
-            const actionable = ROLE_TO_PENDING_STATUS[safeRole]?.includes(j.status) || false;
-            // Build the action URL — actionable rows go to the form via current stage token,
-            // historical rows go to the read-only history page.
+            // HR_INITIATOR never directly acts on requests — their rows are read-only tracking.
+            const actionable = safeRole !== 'HR_INITIATOR' &&
+                (ROLE_TO_PENDING_STATUS[safeRole]?.includes(j.status) || false);
             const url = actionable && j.currentStageToken
                 ? `/api/onboarding/handle?token=${j.currentStageToken}`
                 : `/api/onboarding/history/${j.id}`;
@@ -833,6 +946,7 @@ export const renderRoleQueue = async (req, res) => {
 // Used by the History tab so each row reflects what THIS role did to a request,
 // not the request's overall status.
 const QUEUE_ROLE_TO_ACTOR_ROLES = {
+    HR_INITIATOR:    ['HR'],                // "Request Initiated" events logged by HR
     IT_OPS:          ['IT', 'OPS'],         // Step 2 (configure) + Step 12 (verify)
     HOD:             ['HOD'],
     DCI_TEAM:        ['DCI'],
@@ -882,6 +996,13 @@ export const getRoleQueue = async (req, res) => {
         const role = String(req.query.role || '').toUpperCase();
         const type = String(req.query.type || 'pending').toLowerCase();
 
+        // Resolve location filter once — applies to both history and pending modes.
+        let locationWhere = {};
+        if (LOCATION_AWARE_ROLE_KEYS.has(role) && req.user && (req.user.email || req.user.username)) {
+            const userLocation = await resolveUserLocationForRole(role, req.user.email, req.user.username);
+            if (userLocation) locationWhere = { location: userLocation };
+        }
+
         if (type === 'history') {
             const actorRoles = QUEUE_ROLE_TO_ACTOR_ROLES[role];
             if (!actorRoles) {
@@ -897,14 +1018,15 @@ export const getRoleQueue = async (req, res) => {
             const requestIds = Array.from(new Set(events.map(e => e.requestId)));
             const requests = requestIds.length
                 ? await OnboardingRequest.findAll({
-                    where: { id: { [Op.in]: requestIds } },
+                    where: { id: { [Op.in]: requestIds }, ...locationWhere },
                     attributes: ['id', 'employeeId', 'fullName', 'department', 'subDepartment',
-                                 'designation', 'requesterName', 'requesterEmail', 'status']
+                                 'designation', 'requesterName', 'requesterEmail', 'status', 'location']
                 })
                 : [];
             const reqMap = new Map(requests.map(r => [r.id, r.toJSON()]));
 
-            const data = events.map(e => {
+            // Only include events whose request passed the location filter.
+            const data = events.filter(e => reqMap.has(e.toJSON().requestId)).map(e => {
                 const ev = e.toJSON();
                 const req = reqMap.get(ev.requestId) || {};
                 return {
@@ -934,23 +1056,24 @@ export const getRoleQueue = async (req, res) => {
             return res.json({ success: true, role, type, count: data.length, data });
         }
 
-        // ─── pending mode (unchanged shape, flattened for the portal sidebar) ───
+        // ─── pending mode ───────────────────────────────────────────────────────
         const pendingStatuses = ROLE_TO_PENDING_STATUS[role];
         if (!pendingStatuses) {
             return res.status(400).json({ success: false, error: `Unknown role "${role}". Valid: ${Object.keys(ROLE_TO_PENDING_STATUS).join(', ')}` });
         }
 
         const rows = await OnboardingRequest.findAll({
-            where: { status: { [Op.in]: pendingStatuses } },
+            where: { status: { [Op.in]: pendingStatuses }, ...locationWhere },
             order: [['updatedAt', 'DESC']],
             attributes: ['id', 'employeeId', 'fullName', 'department', 'subDepartment', 'designation',
-                         'requesterName', 'requesterEmail', 'status', 'createdAt', 'updatedAt', 'currentStageToken']
+                         'requesterName', 'requesterEmail', 'status', 'location', 'createdAt', 'updatedAt', 'currentStageToken']
         });
 
         const data = rows.map(r => {
             const j = r.toJSON();
             const stage = STATUS_TO_ROLE[j.status];
-            const actionable = pendingStatuses.includes(j.status);
+            // HR_INITIATOR rows are read-only tracking — never directly actionable.
+            const actionable = role !== 'HR_INITIATOR' && pendingStatuses.includes(j.status);
             const url = actionable && j.currentStageToken
                 ? `/api/onboarding/handle?token=${j.currentStageToken}`
                 : `/api/onboarding/history/${j.id}`;
@@ -1055,21 +1178,24 @@ export const getRequestDetails = async (req, res) => {
 export const lookupExistingRequest = async (req, res) => {
     try {
         const { employeeId } = req.query;
-        if (!employeeId) return res.json({ existingRequestId: null });
+        if (!employeeId) return res.json({ existingRequestId: null, state: null });
 
-        const existing = await OnboardingRequest.findOne({
-            where: {
-                employeeId,
-                status: { [Op.notIn]: ['Rejected', 'Completed'] }
-            },
+        // Check active (in-flight) request first — highest priority block.
+        const active = await OnboardingRequest.findOne({
+            where: { employeeId, status: { [Op.notIn]: ['Rejected', 'Completed'] } },
             attributes: ['id']
         });
+        if (active) return res.json({ existingRequestId: active.id, state: 'active' });
 
-        // HR is the only caller of this endpoint and must not see workflow
-        // state (status, name, current stage) — return only a boolean signal.
-        return res.json({
-            existingRequestId: existing ? existing.id : null
+        // Check for a previously completed request — HR should switch to Change mode.
+        const completed = await OnboardingRequest.findOne({
+            where: { employeeId, status: 'Completed' },
+            order: [['updatedAt', 'DESC']],
+            attributes: ['id']
         });
+        if (completed) return res.json({ existingRequestId: completed.id, state: 'completed' });
+
+        return res.json({ existingRequestId: null, state: null });
     } catch (err) {
         logger.error(`[Onboarding Lookup] ${err.message}`);
         return res.status(500).json({ error: err.message });
@@ -1101,7 +1227,7 @@ export const renderHistory = async (req, res) => {
             return ev;
         });
 
-        const currentRecipient = await resolveCurrentRecipient(request.status);
+        const currentRecipient = await resolveCurrentRecipient(request.status, request.location);
 
         return res.render('pages/onboarding_history', {
             title: `Onboarding History - ${request.fullName || request.employeeId}`,
@@ -1145,7 +1271,7 @@ const FORM_ROLE_TO_PORTAL = {
 function portalLocalsForRole(role) {
     const cfg = role && FORM_ROLE_TO_PORTAL[role];
     if (!cfg) return {};
-    return { showPortal: true, roleKey: cfg.key, roleLabel: cfg.label };
+    return { showPortal: false, roleKey: cfg.key, roleLabel: cfg.label };
 }
 
 const renderSuccess = (res, title, message, next = {}) => {
@@ -1163,7 +1289,8 @@ const renderSuccess = (res, title, message, next = {}) => {
         view.nextOwner       = statusOwnerFor(next.status);
         view.nextStatusColor = statusColorFor(next.status);
     }
-    if (next.requestId) view.requestRef = next.requestId;
+    if (next.requestId)  view.requestRef  = next.requestId;
+    if (next.portalToken) view.portalToken = next.portalToken;
     return res.render('pages/message', view);
 };
 
@@ -1177,4 +1304,25 @@ const renderError = (res, message, opts = {}) => {
         message: message,
         ...portalLocalsForRole(opts.actorRole)
     });
+};
+
+/**
+ * GET /api/onboarding/my-hr-location  (ssoMiddleware required)
+ * Returns the HR_INITIATOR location group for the signed-in user so the
+ * initiate form can hydrate the Location Group field client-side — the GET
+ * render can't pre-fill it on fresh navigation because IIS hasn't completed
+ * Windows Auth by the time the Node handler runs.
+ */
+export const getMyHRLocation = async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+    try {
+        const hrGroupKey = await resolveHRGroupForEmail(req.user.email, req.user.username);
+        if (!hrGroupKey || hrGroupKey === '__GLOBAL__') {
+            return res.json({ location: null, label: null });
+        }
+        return res.json({ location: hrGroupKey, label: groupLabel(hrGroupKey) });
+    } catch (err) {
+        logger.error(`[Onboarding] getMyHRLocation: ${err.message}`);
+        return res.status(500).json({ error: err.message });
+    }
 };
