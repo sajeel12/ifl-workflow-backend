@@ -395,6 +395,7 @@ export async function showDashboard(req, res) {
                     order: [['createdAt', 'ASC']],
                 }),
                 OnboardingRequest.findAll({
+                    where: { status: { [Op.in]: ['PendingIT', 'PendingOPSAction', 'Completed'] } },
                     order: [['createdAt', 'DESC']],
                 }),
             ]);
