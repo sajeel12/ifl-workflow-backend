@@ -3,6 +3,7 @@ import cors from 'cors';
 import apiRoutes from './src/routes/api.js';
 import adminRoutes from './src/routes/admin.js';
 import portalRoutes from './src/routes/portal.js';
+import diagnosticsRoutes from './src/routes/diagnostics.js';
 import { ssoMiddleware } from './src/middleware/ssoMiddleware.js';
 import { adminMiddleware } from './src/middleware/adminMiddleware.js';
 import path from 'path';
@@ -30,6 +31,7 @@ app.use(express.static('public'));
 app.use('/api', apiRoutes);
 app.use('/admin', adminRoutes);
 app.use('/portal', portalRoutes);
+app.use('/diagnostics', diagnosticsRoutes);
 
 
 app.get('/', (req, res) => {

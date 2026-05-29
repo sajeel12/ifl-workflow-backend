@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fix Windows Authentication - Step by Step</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .step {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 5px solid #3498db;
+        }
+        .step h2 {
+            margin-top: 0;
+            color: #3498db;
+        }
+        .success {
+            background: #d5f4e6;
+            color: #27ae60;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .error {
+            background: #fadbd8;
+            color: #e74c3c;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .warning {
+            background: #fef5e7;
+            color: #f39c12;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        code {
+            background: #ecf0f1;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+            color: #e74c3c;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .check-result {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        ul {
+            line-height: 1.8;
+        }
+        .command-box {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: 'Consolas', monospace;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix Windows Authentication Issue</h1>
+
+    <div class="step">
+        <h2>Step 0: Current URL Check</h2>
+        <p><strong>Current URL:</strong> <code id="currentUrl"></code></p>
+        <p><strong>Hostname:</strong> <code id="hostname"></code></p>
+        <p><strong>Protocol:</strong> <code id="protocol"></code></p>
+        <p><strong>Port:</strong> <code id="port"></code></p>
+
+        <div id="urlCheck"></div>
+
+        <p><strong>✅ Correct URLs to use:</strong></p>
+        <ul>
+            <li><code>http://hosppdevsrv:3333</code></li>
+            <li><code>http://hosppdevsrv.ifl.net:3333</code></li>
+        </ul>
+
+        <p><strong>❌ WRONG URLs (will NOT work):</strong></p>
+        <ul>
+            <li><code>http://192.168.1.92:3333</code> (IP address - Windows Auth won't work)</li>
+            <li><code>http://localhost:3333</code> (localhost - Windows Auth won't work)</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h2>Step 1: Test Browser Auto-Auth</h2>
+        <p>This test will check if your browser automatically sends Windows credentials to the server.</p>
+
+        <button onclick="testWindowsAuth()">🔍 Test Windows Auth Now</button>
+
+        <div id="authTestResult"></div>
+    </div>
+
+    <div class="step">
+        <h2>Step 2: Manual Intranet Zone Setup</h2>
+        <p>If the test above fails, your browser is NOT in Intranet zone. Follow these steps:</p>
+
+        <h3>For Chrome/Edge:</h3>
+        <ol>
+            <li>Open <strong>Control Panel</strong> → <strong>Internet Options</strong></li>
+            <li>Go to <strong>Security</strong> tab</li>
+            <li>Click <strong>Local intranet</strong> → <strong>Sites</strong> → <strong>Advanced</strong></li>
+            <li>Add these URLs (one at a time):
+                <div class="command-box">http://hosppdevsrv:3333<br>http://hosppdevsrv.ifl.net:3333</div>
+            </li>
+            <li>Click <strong>Close</strong> → <strong>OK</strong> → <strong>OK</strong></li>
+            <li><strong>IMPORTANT: Close ALL browser windows completely</strong></li>
+            <li>Open a <strong>new browser window</strong></li>
+            <li>Come back to this page and run Step 1 test again</li>
+        </ol>
+
+        <div class="warning">
+            ⚠️ <strong>CRITICAL:</strong> You MUST use the hostname (<code>hosppdevsrv:3333</code>) in the address bar, NOT the IP address!
+        </div>
+    </div>
+
+    <div class="step">
+        <h2>Step 3: Verify Domain Login</h2>
+        <p>Windows Authentication only works if you're logged in with a domain account.</p>
+
+        <button onclick="checkDomainStatus()">🔍 Check My Domain Status</button>
+
+        <div id="domainCheckResult"></div>
+
+        <h3>How to check manually:</h3>
+        <ol>
+            <li>Open <strong>Command Prompt</strong></li>
+            <li>Type: <code>whoami</code> and press Enter</li>
+            <li>You should see: <code>IBRAHIM1_NT\ISRARULHAQ</code> or similar</li>
+            <li>If you see just <code>ISRARULHAQ</code> (no domain), you're NOT logged in with domain account</li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h2>Step 4: Registry Quick Fix (Advanced)</h2>
+        <p>If manual Internet Options doesn't work, try adding registry entries directly:</p>
+
+        <button onclick="showRegistryCommands()">📋 Show PowerShell Commands</button>
+
+        <div id="registryCommands" style="display: none;">
+            <p><strong>Run these commands in PowerShell (Run as Administrator):</strong></p>
+            <div class="command-box">
+# Add hosppdevsrv to Intranet zone<br>
+New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\hosppdevsrv" -Force<br>
+New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\hosppdevsrv" -Name "http" -Value 1 -PropertyType DWord -Force<br>
+<br>
+# Verify it was added<br>
+Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\hosppdevsrv"
+            </div>
+
+            <p><strong>After running these commands:</strong></p>
+            <ol>
+                <li>Close ALL browser windows</li>
+                <li>Restart browser</li>
+                <li>Test again</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="step">
+        <h2>Step 5: Final Test</h2>
+        <p>After completing Steps 2-4, run this final comprehensive test:</p>
+
+        <button onclick="runFullDiagnostic()">🚀 Run Full Diagnostic</button>
+
+        <div id="finalTestResult"></div>
+    </div>
+
+    <script>
+        // Display current URL info
+        document.getElementById('currentUrl').textContent = window.location.href;
+        document.getElementById('hostname').textContent = window.location.hostname;
+        document.getElementById('protocol').textContent = window.location.protocol;
+        document.getElementById('port').textContent = window.location.port || '(default)';
+
+        // Check if URL is correct
+        const hostname = window.location.hostname;
+        const urlCheckDiv = document.getElementById('urlCheck');
+
+        if (hostname === 'hosppdevsrv' || hostname === 'hosppdevsrv.ifl.net') {
+            urlCheckDiv.innerHTML = '<div class="success">✅ GOOD! You\'re using the correct hostname.</div>';
+        } else if (hostname === '192.168.1.92' || hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+            urlCheckDiv.innerHTML = '<div class="error">❌ WRONG! You\'re using an IP address. Windows Authentication will NOT work with IP addresses.<br><br><strong>Solution:</strong> Open a new tab and go to <code>http://hosppdevsrv:3333/fix-windows-auth.html</code></div>';
+        } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            urlCheckDiv.innerHTML = '<div class="error">❌ WRONG! localhost won\'t work for Windows Authentication.<br><br><strong>Solution:</strong> Open a new tab and go to <code>http://hosppdevsrv:3333/fix-windows-auth.html</code></div>';
+        } else {
+            urlCheckDiv.innerHTML = '<div class="warning">⚠️ Unknown hostname: ' + hostname + '<br><br><strong>Recommended:</strong> Use <code>http://hosppdevsrv:3333/fix-windows-auth.html</code></div>';
+        }
+
+        async function testWindowsAuth() {
+            const resultDiv = document.getElementById('authTestResult');
+            resultDiv.innerHTML = '<p>⏳ Testing Windows Authentication...</p>';
+
+            try {
+                const response = await fetch('/token.aspx', {
+                    credentials: 'include'
+                });
+
+                const text = await response.text();
+
+                if (response.status === 200 && text.trim().startsWith('{')) {
+                    const data = JSON.parse(text);
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ SUCCESS! Windows Authentication is working!<br><br>
+                            <strong>Your Identity:</strong><br>
+                            Username: ${data.username}<br>
+                            Email: ${data.email || 'Not found'}<br>
+                            Display Name: ${data.displayName || 'Not found'}<br><br>
+                            <strong>This means:</strong><br>
+                            • Browser is sending credentials automatically<br>
+                            • IIS is authenticating you<br>
+                            • Site is in your Intranet zone<br><br>
+                            <strong>Next:</strong> Run the Full Diagnostic in Step 5 to verify all layers.
+                        </div>
+                    `;
+                } else if (response.status === 401) {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            ❌ FAILED: Got 401 Unauthorized<br><br>
+                            <strong>This means:</strong><br>
+                            • Browser is NOT sending Windows credentials automatically<br>
+                            • Site is NOT in your browser's Intranet zone<br><br>
+                            <strong>Solution:</strong> Complete Step 2 above to add site to Intranet zone.
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            ❌ FAILED: Unexpected response<br><br>
+                            Status: ${response.status}<br>
+                            Response: ${text.substring(0, 200)}<br><br>
+                            <strong>This might be:</strong><br>
+                            • IIS configuration issue<br>
+                            • token.aspx not working<br><br>
+                            <strong>Check:</strong> IIS → Authentication → Windows Authentication is Enabled
+                        </div>
+                    `;
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ❌ ERROR: ${error.message}<br><br>
+                        <strong>Common causes:</strong><br>
+                        • Server not running<br>
+                        • Network connectivity issue<br>
+                        • CORS blocking request
+                    </div>
+                `;
+            }
+        }
+
+        async function checkDomainStatus() {
+            const resultDiv = document.getElementById('domainCheckResult');
+            resultDiv.innerHTML = '<p>⏳ Checking domain status via server...</p>';
+
+            try {
+                const response = await fetch('/token.aspx', {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.username && data.username.includes('\\')) {
+                        resultDiv.innerHTML = `
+                            <div class="success">
+                                ✅ You are logged in with domain account!<br><br>
+                                <strong>Domain\\Username:</strong> ${data.username}
+                            </div>
+                        `;
+                    } else {
+                        resultDiv.innerHTML = `
+                            <div class="warning">
+                                ⚠️ Username format doesn't include domain prefix.<br><br>
+                                <strong>Username:</strong> ${data.username}<br><br>
+                                Run <code>whoami</code> in Command Prompt to verify.
+                            </div>
+                        `;
+                    }
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            ❌ Cannot check domain status - authentication failed.<br><br>
+                            <strong>Manual check:</strong> Open Command Prompt and type <code>whoami</code>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ❌ Error: ${error.message}<br><br>
+                        <strong>Manual check:</strong> Open Command Prompt and type <code>whoami</code>
+                    </div>
+                `;
+            }
+        }
+
+        function showRegistryCommands() {
+            const div = document.getElementById('registryCommands');
+            div.style.display = div.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function runFullDiagnostic() {
+            const resultDiv = document.getElementById('finalTestResult');
+            resultDiv.innerHTML = '<p>⏳ Running full diagnostic...</p>';
+
+            window.location.href = '/diagnostics/auth-ui';
+        }
+    </script>
+
+    <div class="step" style="margin-top: 40px; border-left-color: #27ae60;">
+        <h2>📚 Quick Reference</h2>
+        <ul>
+            <li><strong>Test authentication:</strong> <a href="/test-auth.html">/test-auth.html</a></li>
+            <li><strong>Full diagnostics:</strong> <a href="/diagnostics/auth-ui">/diagnostics/auth-ui</a></li>
+            <li><strong>token.aspx direct:</strong> <a href="/token.aspx">/token.aspx</a></li>
+            <li><strong>Troubleshooting guide:</strong> <a href="/TROUBLESHOOTING_POPUP.md">/TROUBLESHOOTING_POPUP.md</a></li>
+        </ul>
+    </div>
+</body>
+</html>
