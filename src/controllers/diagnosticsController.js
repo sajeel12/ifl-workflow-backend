@@ -74,15 +74,16 @@ export const testAuthLayers = async (req, res) => {
     results.layers.iis = {
         layer: 'IIS',
         description: 'IIS Windows Authentication and X-Auth-User header',
-        status: hasWindowsAuth ? 'PASS' : 'FAIL',
+        status: hasWindowsAuth ? 'PASS' : 'EXPECTED',
         checks: {
             hasXAuthUserHeader: hasWindowsAuth,
             xAuthUserValue: xAuthUser || 'NOT SET',
-            strippedUsername: xAuthUser ? stripDomain(xAuthUser) : null
+            strippedUsername: xAuthUser ? stripDomain(xAuthUser) : null,
+            note: hasWindowsAuth ? null : 'X-Auth-User is only set for direct browser navigation. AJAX/fetch requests use the sidecar token pattern instead.'
         },
         message: hasWindowsAuth
             ? `Windows Auth successful. User: ${stripDomain(xAuthUser)}`
-            : '❌ FAILED: X-Auth-User header missing. Windows Authentication may not be enabled in IIS.'
+            : '⚠️ EXPECTED: X-Auth-User not set (using sidecar token pattern). This is normal for initial page load and AJAX requests. Authentication happens in token.aspx layer instead.'
     };
 
     if (hasWindowsAuth) {
@@ -90,9 +91,9 @@ export const testAuthLayers = async (req, res) => {
         console.log('  Raw header:', xAuthUser);
         console.log('  Stripped username:', stripDomain(xAuthUser));
     } else {
-        console.error('✗ Windows Auth FAILED');
-        console.error('  X-Auth-User header is missing');
-        console.error('  Check IIS → Authentication → Windows Authentication is Enabled');
+        console.log('⚠ X-Auth-User not set (EXPECTED for sidecar token pattern)');
+        console.log('  This is normal for initial page loads and AJAX requests');
+        console.log('  Authentication will happen in token.aspx layer instead');
     }
 
     // LAYER 3: token.aspx - HMAC Token Generation
@@ -374,6 +375,28 @@ export const renderDiagnosticUI = (req, res) => {
             font-size: 20px;
             padding: 40px;
         }
+        .info-box {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #2c3e50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #2874a6;
+            font-size: 16px;
+        }
+        .info-box ul {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        .info-box li {
+            margin-bottom: 8px;
+        }
         .status-banner {
             background: white;
             padding: 20px;
@@ -421,6 +444,7 @@ export const renderDiagnosticUI = (req, res) => {
         .layer-status.pass { background: #27ae60; color: white; }
         .layer-status.fail { background: #e74c3c; color: white; }
         .layer-status.warn { background: #f39c12; color: white; }
+        .layer-status.expected { background: #3498db; color: white; }
         .layer-status.skip { background: #95a5a6; color: white; }
         .layer-description {
             color: #7f8c8d;
@@ -436,6 +460,7 @@ export const renderDiagnosticUI = (req, res) => {
         .layer-message.pass { background: #d5f4e6; color: #27ae60; }
         .layer-message.fail { background: #fadbd8; color: #e74c3c; }
         .layer-message.warn { background: #fef5e7; color: #f39c12; }
+        .layer-message.expected { background: #d6eaf8; color: #2874a6; }
         .checks-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -583,6 +608,25 @@ export const renderDiagnosticUI = (req, res) => {
             const statusClass = data.overallStatus.toLowerCase();
 
             let html = \`
+                <div class="info-box">
+                    <h3>📘 Understanding the Two Authentication Patterns</h3>
+                    <p><strong>Pattern A: X-Auth-User (Direct Navigation)</strong></p>
+                    <ul>
+                        <li>Used when browser navigates directly to a page (clicking links)</li>
+                        <li>IIS authenticates user with Windows Auth and sets X-Auth-User header</li>
+                        <li>Node.js reads username from X-Auth-User header</li>
+                        <li>Example: Clicking a link to /portal/it-ops</li>
+                    </ul>
+                    <p><strong>Pattern B: Sidecar Token (AJAX/Fetch) ← USED BY THIS APP</strong></p>
+                    <ul>
+                        <li>Initial page load: X-Auth-User is NOT set (serves HTML only)</li>
+                        <li>JavaScript fetches /token.aspx: Windows Auth happens HERE</li>
+                        <li>token.aspx returns HMAC-signed token with user identity</li>
+                        <li>All API calls include this token in request body</li>
+                        <li>Node.js validates HMAC signature (no X-Auth-User needed)</li>
+                    </ul>
+                    <p><strong>⚠️ IMPORTANT:</strong> IIS layer showing "EXPECTED" status is <strong>normal and correct</strong> for sidecar token pattern. Authentication happens in the token.aspx layer instead.</p>
+                </div>
                 <div class="status-banner \${statusClass}">
                     \${data.summary}
                 </div>
