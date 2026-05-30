@@ -126,43 +126,67 @@
 </div>
 
 <script>
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 let ejPage = 0, ejTotal = 0, searchTimer = null, activeEmpId = null;
-const timelines = {};  // cache: requestId → { stageKey → event }
+const timelines = {};   // cache: requestId → { stageKey → event }
+const reqMeta   = {};   // cache: index → { id, type }
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadEmployees();
   loadDepts();
+  showSearchPrompt();
 });
 
 // ── Employee list ─────────────────────────────────────────────────────────
+function showSearchPrompt() {
+  document.getElementById('empCount').textContent = '';
+  document.getElementById('empList').innerHTML =
+    `<div style="padding:32px 16px;text-align:center;color:var(--a-text-muted);font-size:.85rem;">
+       Type a name, ID, or department<br>to search employees
+     </div>`;
+  document.getElementById('btnPrev').disabled = true;
+  document.getElementById('btnNext').disabled = true;
+  document.getElementById('pageInfo').textContent = '';
+}
+
 async function loadEmployees() {
-  const search = document.getElementById('searchInput').value;
+  const search = document.getElementById('searchInput').value.trim();
   const dept   = document.getElementById('deptFilter').value;
   const status = document.getElementById('statusFilter').value;
+
+  // Require at least 2 chars OR a dept/location filter
+  if (search.length < 2 && !dept) {
+    showSearchPrompt();
+    return;
+  }
+
   const params = new URLSearchParams({
     limit: PAGE_SIZE, offset: ejPage * PAGE_SIZE,
     ...(search && { search }),
     ...(dept   && { department: dept }),
     ...(status && { status })
   });
+
+  document.getElementById('empList').innerHTML =
+    `<div style="padding:32px;text-align:center;color:var(--a-text-muted);">Searching…</div>`;
+
   try {
-    const data  = await (await window.iflFetch(`/admin/ej/employees?${params}`)).json();
+    const data = await (await window.iflFetch(`/admin/ej/employees?${params}`)).json();
     ejTotal = data.total;
     renderEmpList(data.employees);
-    document.getElementById('empCount').textContent = `${ejTotal} employee${ejTotal !== 1 ? 's' : ''}`;
+    document.getElementById('empCount').textContent =
+      data.total ? `${data.total} result${data.total !== 1 ? 's' : ''}` : '';
     updatePager();
   } catch (e) {
     console.error('[EJ] loadEmployees failed:', e);
     document.getElementById('empList').innerHTML =
-      `<div style="padding:40px;text-align:center;color:#ef4444;">Failed to load employees.</div>`;
+      `<div style="padding:32px;text-align:center;color:#ef4444;">Search failed. Try again.</div>`;
   }
 }
 
 function renderEmpList(emps) {
   if (!emps.length) {
     document.getElementById('empList').innerHTML =
-      `<div style="padding:40px;text-align:center;color:var(--a-text-muted);">No employees found</div>`;
+      `<div style="padding:32px;text-align:center;color:var(--a-text-muted);">No employees found</div>`;
     return;
   }
   document.getElementById('empList').innerHTML = emps.map(e => `
@@ -176,12 +200,13 @@ function renderEmpList(emps) {
 
 async function loadDepts() {
   try {
-    const data  = await (await window.iflFetch('/admin/ej/employees?limit=2000&status=Active')).json();
-    const depts = [...new Set((data.employees || []).map(e => e.mainDept).filter(Boolean))].sort();
-    const sel   = document.getElementById('deptFilter');
-    depts.forEach(d => {
+    const data = await (await window.iflFetch('/admin/departments')).json();
+    const sel  = document.getElementById('deptFilter');
+    (data.departments || data || []).forEach(d => {
+      const name = d.mainDept || d.name || d;
+      if (!name) return;
       const o = document.createElement('option');
-      o.value = d; o.textContent = d;
+      o.value = name; o.textContent = name;
       sel.appendChild(o);
     });
   } catch (e) {
@@ -191,7 +216,7 @@ async function loadDepts() {
 
 function onSearchChange() {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { ejPage = 0; loadEmployees(); }, 300);
+  searchTimer = setTimeout(() => { ejPage = 0; loadEmployees(); }, 350);
 }
 function onFilterChange() { ejPage = 0; loadEmployees(); }
 function prevPage()       { if (ejPage > 0)                          { ejPage--; loadEmployees(); } }
@@ -199,7 +224,7 @@ function nextPage()       { if ((ejPage + 1) * PAGE_SIZE < ejTotal) { ejPage++; 
 function updatePager() {
   const start = ejPage * PAGE_SIZE + 1;
   const end   = Math.min((ejPage + 1) * PAGE_SIZE, ejTotal);
-  document.getElementById('pageInfo').textContent = `${start}–${end}`;
+  document.getElementById('pageInfo').textContent = ejTotal ? `${start}–${end}` : '';
   document.getElementById('btnPrev').disabled = ejPage === 0;
   document.getElementById('btnNext').disabled = end >= ejTotal;
 }
@@ -249,21 +274,39 @@ function renderCenter({ employee, summary, recentRequests }) {
     </div>
   `;
   // Auto-expand the most recent request
-  if (recentRequests.length) toggleReq(0, recentRequests[0].id);
+  if (recentRequests.length) {
+    // store meta for all requests
+    recentRequests.forEach((r, i) => { reqMeta[i] = { id: r.id, type: r.type }; });
+    toggleReq(0);
+  }
 }
 
+const TYPE_LABEL = {
+  onboarding:  'Onboarding',
+  offboarding: 'Offboarding',
+};
+const TYPE_COLOR = {
+  onboarding:  '#0078D4',
+  offboarding: '#7c3aed',
+};
+
 function reqCard(req, i) {
-  const bc = { Completed: 'green', Draft: 'blue', Rejected: 'red' }[req.status] || 'yellow';
-  const dt = new Date(req.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  reqMeta[i] = { id: req.id, type: req.type };
+  const bc     = { Completed: 'green', Draft: 'blue', Rejected: 'red' }[req.status] || 'yellow';
+  const dt     = new Date(req.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const tLabel = TYPE_LABEL[req.type] || req.type;
+  const tColor = TYPE_COLOR[req.type] || '#6b7280';
+  const meta   = [req.location, req.department].filter(Boolean).join(' · ') || '';
   return `
     <div class="ej-req" id="req-${i}">
-      <div class="ej-req__hd" onclick="toggleReq(${i}, '${req.id}')">
+      <div class="ej-req__hd" onclick="toggleReq(${i})">
         <div>
           <div class="ej-req__title">
-            Onboarding Request
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${tColor};margin-right:6px;vertical-align:middle;"></span>
+            ${tLabel} Request
             <span class="badge badge--${bc}" style="margin-left:6px;">${escHtml(req.statusLabel)}</span>
           </div>
-          <div class="ej-req__meta">REQ #${req.id} · ${dt} · ${escHtml(req.location || 'N/A')}</div>
+          <div class="ej-req__meta">REQ #${req.id} · ${dt}${meta ? ' · ' + escHtml(meta) : ''}</div>
         </div>
         <svg id="arr-${i}" style="width:18px;height:18px;flex-shrink:0;transition:transform .2s;color:var(--a-text-muted);"
              fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,7 +317,9 @@ function reqCard(req, i) {
     </div>`;
 }
 
-async function toggleReq(i, reqId) {
+async function toggleReq(i) {
+  const { id: reqId, type } = reqMeta[i] || {};
+  if (!reqId) return;
   const body  = document.getElementById(`body-${i}`);
   const arrow = document.getElementById(`arr-${i}`);
   if (body.classList.contains('ej-req__body--open')) {
@@ -288,10 +333,10 @@ async function toggleReq(i, reqId) {
   body.dataset.loaded = '1';
   body.innerHTML = `<div style="text-align:center;padding:20px;color:var(--a-text-muted);">Loading stages…</div>`;
   try {
-    const data  = await (await window.iflFetch(`/admin/ej/requests/${reqId}/timeline`)).json();
+    const data = await (await window.iflFetch(`/admin/ej/requests/${reqId}/timeline?type=${type}`)).json();
     timelines[reqId] = {};
     (data.timeline || []).forEach(e => { timelines[reqId][e.stage] = e; });
-    body.innerHTML = renderStepper(data.timeline || [], reqId);
+    body.innerHTML = renderStepper(data.timeline || [], reqId, type);
   } catch (e) {
     console.error('[EJ] toggleReq failed:', e);
     body.innerHTML = `<div style="color:#ef4444;padding:12px;">Failed to load timeline.</div>`;
@@ -299,7 +344,7 @@ async function toggleReq(i, reqId) {
 }
 
 // ── Stepper ───────────────────────────────────────────────────────────────
-const STAGES = [
+const STAGES_ONBOARDING = [
   { key: 'Draft',                    lbl: 'Draft' },
   { key: 'PendingIT',                lbl: 'Pending IT Operations' },
   { key: 'PendingHOD',               lbl: 'Pending HOD Approval' },
@@ -311,7 +356,20 @@ const STAGES = [
   { key: 'Completed',                lbl: 'Closed' },
 ];
 
-function renderStepper(timeline, reqId) {
+const STAGES_OFFBOARDING = [
+  { key: 'Draft',                  lbl: 'Initiated' },
+  { key: 'PendingManagerApproval', lbl: 'Pending Manager Approval' },
+  { key: 'PendingSystemTeam',      lbl: 'Pending System Team' },
+  { key: 'Completed',              lbl: 'Completed' },
+];
+
+function stagesFor(type) {
+  if (type === 'offboarding') return STAGES_OFFBOARDING;
+  return STAGES_ONBOARDING;
+}
+
+function renderStepper(timeline, reqId, type) {
+  const STAGES = stagesFor(type);
   const doneMap    = {};
   (timeline || []).forEach(e => { doneMap[e.stage] = e; });
   const last       = timeline.length ? timeline[timeline.length - 1] : null;
@@ -375,7 +433,9 @@ function selectStage(reqId, stageKey) {
   if (el) el.classList.add('ej-stage--sel');
 
   const ev        = (timelines[reqId] || {})[stageKey] || null;
-  const stageInfo = STAGES.find(s => s.key === stageKey);
+  // Find label from whichever stage set contains this key
+  const allStages = [...STAGES_ONBOARDING, ...STAGES_OFFBOARDING];
+  const stageInfo = allStages.find(s => s.key === stageKey);
   const lbl       = stageInfo ? stageInfo.lbl : stageKey;
   const panel     = document.getElementById('detailsPanel');
 

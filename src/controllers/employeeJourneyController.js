@@ -1,29 +1,11 @@
 import Employee from '../models/Employee.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
-import RequestRelationship from '../models/RequestRelationship.js';
+import OffboardingRequest from '../models/OffboardingRequest.js';
 import RequestStageEvent from '../models/RequestStageEvent.js';
 import { Op } from 'sequelize';
 import { STATUS_LABEL } from '../utils/workflowLabels.js';
 
-/**
- * Employee Journey Controller
- *
- * Provides APIs for employee-centric journey tracking and visualization.
- * Part of Phase 3: Employee Journey Visualization enhancement.
- */
-
-/**
- * GET /api/employees
- * List all employees with optional search/filter
- *
- * Query params:
- * - search: Search by employee number, name, email, department
- * - status: Filter by employee status (Active, Terminated, etc.)
- * - department: Filter by department
- * - location: Filter by location
- * - limit: Results per page (default: 50)
- * - offset: Pagination offset (default: 0)
- */
+// ── Employee list ──────────────────────────────────────────────────────────────
 export async function listEmployees(req, res) {
     try {
         const {
@@ -31,438 +13,248 @@ export async function listEmployees(req, res) {
             status = 'Active',
             department = '',
             location = '',
-            limit = 50,
+            limit = 25,
             offset = 0
         } = req.query;
 
-        const where = {};
-
-        // Default to Active employees unless explicitly searching for others
-        if (status) {
-            where.status = status;
+        // Require at least a search term OR an explicit filter to avoid dumping the full table
+        if (!search && !department && !location) {
+            return res.json({ total: 0, limit: parseInt(limit), offset: 0, employees: [], hint: 'search_required' });
         }
 
-        // Search across multiple fields
+        const where = {};
+        if (status) where.status = status;
+        if (department) where.mainDept = department;
+        if (location)   where.location = location;
+
         if (search) {
             where[Op.or] = [
                 { employeeId: { [Op.like]: `%${search}%` } },
-                { name: { [Op.like]: `%${search}%` } },
-                { email: { [Op.like]: `%${search}%` } },
-                { mainDept: { [Op.like]: `%${search}%` } }
+                { name:       { [Op.like]: `%${search}%` } },
+                { email:      { [Op.like]: `%${search}%` } },
+                { mainDept:   { [Op.like]: `%${search}%` } }
             ];
-        }
-
-        // Department filter
-        if (department) {
-            where.mainDept = department;
-        }
-
-        // Location filter
-        if (location) {
-            where.location = location;
         }
 
         const { count, rows: employees } = await Employee.findAndCountAll({
             where,
-            limit: parseInt(limit),
+            limit: Math.min(parseInt(limit), 50),
             offset: parseInt(offset),
             order: [['name', 'ASC']],
             attributes: ['employeeId', 'name', 'email', 'mainDept', 'location', 'status', 'joiningDate']
         });
 
-        res.json({
-            total: count,
-            limit: parseInt(limit),
-            offset: parseInt(offset),
-            employees
-        });
-
+        res.json({ total: count, limit: parseInt(limit), offset: parseInt(offset), employees });
     } catch (error) {
-        console.error('[EmployeeJourney] List employees failed:', error);
+        console.error('[EJ] listEmployees failed:', error);
         res.status(500).json({ error: 'Failed to fetch employees' });
     }
 }
 
-/**
- * GET /api/employees/:employeeNumber
- * Get employee details with journey summary
- *
- * Returns:
- * - Employee basic info
- * - Total requests count by type
- * - Recent requests (last 10)
- * - Current pending requests
- */
+// ── Employee detail + all request types ───────────────────────────────────────
 export async function getEmployeeDetail(req, res) {
     try {
         const { employeeNumber } = req.params;
 
-        // Fetch employee
-        const employee = await Employee.findOne({
-            where: { employeeId: employeeNumber }
-        });
+        const employee = await Employee.findOne({ where: { employeeId: employeeNumber } });
+        if (!employee) return res.status(404).json({ error: 'Employee not found' });
 
-        if (!employee) {
-            return res.status(404).json({ error: 'Employee not found' });
-        }
+        // Fetch all request types in parallel
+        const [onboardingRows, offboardingRows] = await Promise.all([
+            OnboardingRequest.findAll({
+                where:      { employeeId: employeeNumber },
+                order:      [['createdAt', 'DESC']],
+                attributes: ['id', 'status', 'createdAt', 'updatedAt', 'approvalStatus', 'location', 'department']
+            }),
+            OffboardingRequest.findAll({
+                where:      { employeeId: employeeNumber },
+                order:      [['createdAt', 'DESC']],
+                attributes: ['id', 'status', 'createdAt', 'updatedAt']
+            })
+        ]);
 
-        // Fetch all onboarding requests for this employee
-        const onboardingRequests = await OnboardingRequest.findAll({
-            where: { employeeId: employeeNumber },
-            order: [['createdAt', 'DESC']],
-            attributes: ['id', 'status', 'createdAt', 'updatedAt', 'approvalStatus', 'location', 'department']
-        });
-
-        // Calculate journey summary
-        const summary = {
-            totalRequests: onboardingRequests.length,
-            completedRequests: onboardingRequests.filter(r => r.status === 'Completed').length,
-            pendingRequests: onboardingRequests.filter(r => r.status !== 'Completed' && r.status !== 'Draft').length,
-            draftRequests: onboardingRequests.filter(r => r.status === 'Draft').length
-        };
-
-        // Get recent requests (last 10)
-        const recentRequests = onboardingRequests.slice(0, 10).map(req => ({
-            id: req.id,
-            type: 'onboarding',
-            status: req.status,
-            statusLabel: STATUS_LABEL[req.status] || req.status,
-            createdAt: req.createdAt,
-            updatedAt: req.updatedAt,
-            approvalStatus: req.approvalStatus,
-            location: req.location,
-            department: req.department
+        const onboarding  = onboardingRows.map(r => ({
+            id: r.id, type: 'onboarding',
+            status: r.status,
+            statusLabel: STATUS_LABEL[r.status] || r.status,
+            createdAt: r.createdAt, updatedAt: r.updatedAt,
+            approvalStatus: r.approvalStatus,
+            location: r.location, department: r.department
         }));
+
+        const offboarding = offboardingRows.map(r => ({
+            id: r.id, type: 'offboarding',
+            status: r.status,
+            statusLabel: offboardingLabel(r.status),
+            createdAt: r.createdAt, updatedAt: r.updatedAt,
+            location: null, department: null
+        }));
+
+        // Merge and sort newest first
+        const allRequests = [...onboarding, ...offboarding]
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        const isTerminal = s => s === 'Completed' || s === 'Rejected';
+        const isPending  = s => !isTerminal(s) && s !== 'Draft';
+
+        const summary = {
+            totalRequests:     allRequests.length,
+            completedRequests: allRequests.filter(r => r.status === 'Completed').length,
+            pendingRequests:   allRequests.filter(r => isPending(r.status)).length,
+            draftRequests:     allRequests.filter(r => r.status === 'Draft').length
+        };
 
         res.json({
             employee: {
                 employeeId: employee.employeeId,
-                name: employee.name,
-                email: employee.email,
+                name:       employee.name,
+                email:      employee.email,
                 department: employee.mainDept,
-                location: employee.location,
-                status: employee.status,
-                joiningDate: employee.joiningDate,
-                hodId: employee.hodId
+                location:   employee.location,
+                status:     employee.status,
+                joiningDate: employee.joiningDate
             },
             summary,
-            recentRequests
+            recentRequests: allRequests.slice(0, 20)
         });
-
     } catch (error) {
-        console.error('[EmployeeJourney] Get employee detail failed:', error);
+        console.error('[EJ] getEmployeeDetail failed:', error);
         res.status(500).json({ error: 'Failed to fetch employee details' });
     }
 }
 
-/**
- * GET /api/employees/:employeeNumber/journey-graph
- * Get employee journey data formatted for D3.js visualization
- *
- * Returns graph structure:
- * {
- *   nodes: [
- *     { id: 'emp_12345', type: 'employee', data: {...} },
- *     { id: 'req_128793', type: 'request', requestType: 'onboarding', data: {...} },
- *     { id: 'stage_128793_1', type: 'stage', data: {...} }
- *   ],
- *   links: [
- *     { source: 'emp_12345', target: 'req_128793', type: 'owns' },
- *     { source: 'req_128793', target: 'stage_128793_1', type: 'hasStage' }
- *   ]
- * }
- */
-export async function getEmployeeJourneyGraph(req, res) {
-    try {
-        const { employeeNumber } = req.params;
-        const { expanded = 'false' } = req.query; // Whether to expand all stages
-
-        // Fetch employee
-        const employee = await Employee.findOne({
-            where: { employeeId: employeeNumber }
-        });
-
-        if (!employee) {
-            return res.status(404).json({ error: 'Employee not found' });
-        }
-
-        // Fetch all requests for this employee
-        const requests = await OnboardingRequest.findAll({
-            where: { employeeId: employeeNumber },
-            order: [['createdAt', 'DESC']]
-        });
-
-        // Build graph structure
-        const nodes = [];
-        const links = [];
-
-        // Add employee as root node
-        nodes.push({
-            id: `emp_${employeeNumber}`,
-            type: 'employee',
-            data: {
-                employeeId: employee.employeeId,
-                name: employee.name,
-                email: employee.email,
-                department: employee.mainDept,
-                location: employee.location,
-                status: employee.status
-            }
-        });
-
-        // Add request nodes and stage nodes
-        for (const request of requests) {
-            const requestNodeId = `req_${request.id}`;
-
-            // Determine status color
-            let statusColor = 'gray';
-            if (request.status === 'Completed') statusColor = 'green';
-            else if (request.status === 'Draft') statusColor = 'blue';
-            else if (request.approvalStatus === 'Rejected') statusColor = 'red';
-            else statusColor = 'yellow'; // Pending stages
-
-            // Add request node
-            nodes.push({
-                id: requestNodeId,
-                type: 'request',
-                requestType: 'onboarding',
-                data: {
-                    id: request.id,
-                    status: request.status,
-                    statusLabel: STATUS_LABEL[request.status] || request.status,
-                    statusColor,
-                    createdAt: request.createdAt,
-                    updatedAt: request.updatedAt,
-                    location: request.location,
-                    department: request.department,
-                    designation: request.designation,
-                    approvalStatus: request.approvalStatus
-                }
-            });
-
-            // Link employee → request
-            links.push({
-                source: `emp_${employeeNumber}`,
-                target: requestNodeId,
-                type: 'owns'
-            });
-
-            // Add stage nodes if expanded or if this is the most recent request
-            const shouldExpand = expanded === 'true' || requests.indexOf(request) === 0;
-
-            if (shouldExpand) {
-                const stages = extractStagesFromRequest(request);
-
-                for (let i = 0; i < stages.length; i++) {
-                    const stage = stages[i];
-                    const stageNodeId = `stage_${request.id}_${i}`;
-
-                    nodes.push({
-                        id: stageNodeId,
-                        type: 'stage',
-                        data: {
-                            stage: stage.stage,
-                            stageLabel: stage.stageLabel,
-                            status: stage.status,
-                            timestamp: stage.timestamp,
-                            owner: stage.owner,
-                            durationHours: stage.durationHours
-                        }
-                    });
-
-                    // Link request → stage
-                    links.push({
-                        source: requestNodeId,
-                        target: stageNodeId,
-                        type: 'hasStage',
-                        order: i
-                    });
-
-                    // Link stage → next stage (sequential flow)
-                    if (i > 0) {
-                        links.push({
-                            source: `stage_${request.id}_${i - 1}`,
-                            target: stageNodeId,
-                            type: 'nextStage'
-                        });
-                    }
-                }
-            }
-        }
-
-        res.json({ nodes, links });
-
-    } catch (error) {
-        console.error('[EmployeeJourney] Get journey graph failed:', error);
-        res.status(500).json({ error: 'Failed to fetch journey graph' });
-    }
-}
-
-/**
- * Extract stages from OnboardingRequest timestamp fields
- * (Until we migrate to RequestStageEvents table)
- */
-function extractStagesFromRequest(request) {
-    const stages = [];
-
-    const stageMapping = [
-        { stage: 'Draft', field: 'createdAt', label: STATUS_LABEL.Draft },
-        { stage: 'PendingIT', field: 'hrSubmittedAt', label: STATUS_LABEL.PendingIT },
-        { stage: 'PendingHOD', field: 'itSubmittedAt', label: STATUS_LABEL.PendingHOD },
-        { stage: 'PendingDCI', field: 'hodApprovedAt', label: STATUS_LABEL.PendingDCI },
-        { stage: 'PendingDCIManager', field: 'dciSubmittedAt', label: STATUS_LABEL.PendingDCIManager },
-        { stage: 'PendingITHOD', field: 'dciManagerDecidedAt', label: STATUS_LABEL.PendingITHOD },
-        { stage: 'PendingDCIImplementation', field: 'itHodDecidedAt', label: STATUS_LABEL.PendingDCIImplementation },
-        { stage: 'PendingOPSAction', field: 'dciImplementedAt', label: STATUS_LABEL.PendingOPSAction },
-        { stage: 'Completed', field: 'opsCompletedAt', label: STATUS_LABEL.Completed }
-    ];
-
-    let previousTimestamp = null;
-
-    for (const mapping of stageMapping) {
-        const timestamp = request[mapping.field];
-
-        if (timestamp) {
-            const durationHours = previousTimestamp
-                ? Math.round((new Date(timestamp) - new Date(previousTimestamp)) / (1000 * 60 * 60))
-                : null;
-
-            stages.push({
-                stage: mapping.stage,
-                stageLabel: mapping.label,
-                status: request.status === mapping.stage ? 'current' : 'completed',
-                timestamp,
-                owner: null, // Not tracked in current schema
-                durationHours
-            });
-
-            previousTimestamp = timestamp;
-        }
-
-        // Stop if we've reached the current stage
-        if (request.status === mapping.stage) {
-            break;
-        }
-    }
-
-    return stages;
-}
-
-/**
- * GET /api/requests/:requestId/related
- * Get related requests (parent, children, dependencies)
- */
-export async function getRelatedRequests(req, res) {
-    try {
-        const { requestId } = req.params;
-
-        // Find all relationships for this request
-        const relationships = await RequestRelationship.findAll({
-            where: {
-                [Op.or]: [
-                    { requestId },
-                    { relatedRequestId: requestId }
-                ]
-            }
-        });
-
-        const relatedIds = new Set();
-        const relationshipMap = {};
-
-        for (const rel of relationships) {
-            if (rel.requestId === requestId) {
-                relatedIds.add(rel.relatedRequestId);
-                relationshipMap[rel.relatedRequestId] = rel.relationshipType;
-            } else {
-                relatedIds.add(rel.requestId);
-                // Inverse relationship
-                const inverseType = rel.relationshipType === 'parent' ? 'child' :
-                                   rel.relationshipType === 'child' ? 'parent' :
-                                   rel.relationshipType;
-                relationshipMap[rel.requestId] = inverseType;
-            }
-        }
-
-        // Fetch related request details
-        const relatedRequests = await OnboardingRequest.findAll({
-            where: {
-                id: Array.from(relatedIds)
-            },
-            attributes: ['id', 'status', 'employeeId', 'fullName', 'createdAt', 'approvalStatus']
-        });
-
-        const result = relatedRequests.map(req => ({
-            id: req.id,
-            type: 'onboarding',
-            status: req.status,
-            statusLabel: STATUS_LABEL[req.status] || req.status,
-            employeeId: req.employeeId,
-            employeeName: req.fullName,
-            createdAt: req.createdAt,
-            relationshipType: relationshipMap[req.id]
-        }));
-
-        res.json({ relatedRequests: result });
-
-    } catch (error) {
-        console.error('[EmployeeJourney] Get related requests failed:', error);
-        res.status(500).json({ error: 'Failed to fetch related requests' });
-    }
-}
-
-/**
- * GET /api/requests/:requestId/timeline
- * Get detailed timeline/stage events for a request
- */
+// ── Timeline — handles both onboarding and offboarding ────────────────────────
 export async function getRequestTimeline(req, res) {
     try {
         const { requestId } = req.params;
+        const { type = 'onboarding' } = req.query;
 
-        // First check if we have RequestStageEvents (new system)
+        // Check new event store first (works for any type)
         const events = await RequestStageEvent.findAll({
             where: { requestId },
             order: [['timestamp', 'ASC']]
         });
 
         if (events.length > 0) {
-            // Return events from new system
             return res.json({
-                requestId,
-                source: 'events',
+                requestId, type, source: 'events',
                 timeline: events.map(e => ({
-                    stage: e.stage,
-                    stageLabel: e.stageLabel,
-                    outcome: e.outcome,
-                    owner: e.owner,
-                    ownerLabel: e.ownerLabel,
-                    remarks: e.remarks,
-                    emailSent: e.emailSent,
-                    durationHours: e.durationHours,
-                    timestamp: e.timestamp,
-                    metadata: e.metadata
+                    stage: e.stage, stageLabel: e.stageLabel,
+                    outcome: e.outcome, owner: e.owner, ownerLabel: e.ownerLabel,
+                    remarks: e.remarks, emailSent: e.emailSent,
+                    durationHours: e.durationHours, timestamp: e.timestamp
                 }))
             });
         }
 
-        // Fallback: Extract from OnboardingRequest timestamp fields
-        const request = await OnboardingRequest.findOne({
-            where: { id: requestId }
-        });
-
-        if (!request) {
-            return res.status(404).json({ error: 'Request not found' });
+        // Fallback: derive timeline from timestamp fields
+        if (type === 'offboarding') {
+            const req_ = await OffboardingRequest.findOne({ where: { id: requestId } });
+            if (!req_) return res.status(404).json({ error: 'Request not found' });
+            return res.json({
+                requestId, type, source: 'legacy',
+                timeline: extractOffboardingStages(req_)
+            });
         }
 
-        const stages = extractStagesFromRequest(request);
-
+        // Default: onboarding
+        const req_ = await OnboardingRequest.findOne({ where: { id: requestId } });
+        if (!req_) return res.status(404).json({ error: 'Request not found' });
         res.json({
-            requestId,
-            source: 'legacy',
-            timeline: stages
+            requestId, type, source: 'legacy',
+            timeline: extractOnboardingStages(req_)
         });
 
     } catch (error) {
-        console.error('[EmployeeJourney] Get request timeline failed:', error);
+        console.error('[EJ] getRequestTimeline failed:', error);
         res.status(500).json({ error: 'Failed to fetch request timeline' });
     }
+}
+
+// ── Unused graph endpoints kept for future use ─────────────────────────────────
+export async function getEmployeeJourneyGraph(req, res) {
+    res.status(501).json({ error: 'Not implemented — use /timeline per request' });
+}
+
+export async function getRelatedRequests(req, res) {
+    res.status(501).json({ error: 'Not implemented yet' });
+}
+
+// ── Stage extraction helpers ───────────────────────────────────────────────────
+function extractOnboardingStages(request) {
+    const mapping = [
+        { stage: 'Draft',                    field: 'createdAt' },
+        { stage: 'PendingIT',                field: 'hrSubmittedAt' },
+        { stage: 'PendingHOD',               field: 'itSubmittedAt' },
+        { stage: 'PendingDCI',               field: 'hodApprovedAt' },
+        { stage: 'PendingDCIManager',        field: 'dciSubmittedAt' },
+        { stage: 'PendingITHOD',             field: 'dciManagerDecidedAt' },
+        { stage: 'PendingDCIImplementation', field: 'itHodDecidedAt' },
+        { stage: 'PendingOPSAction',         field: 'dciImplementedAt' },
+        { stage: 'Completed',                field: 'opsCompletedAt' }
+    ];
+
+    const stages = [];
+    let prevTs = null;
+    for (const m of mapping) {
+        const ts = request[m.field];
+        if (!ts) {
+            if (request.status === m.stage) {
+                stages.push({ stage: m.stage, stageLabel: STATUS_LABEL[m.stage] || m.stage, outcome: 'active', timestamp: null, durationHours: null });
+            }
+            if (request.status === m.stage) break;
+            continue;
+        }
+        const dur = prevTs ? Math.round((new Date(ts) - new Date(prevTs)) / 3600000) : null;
+        stages.push({
+            stage: m.stage, stageLabel: STATUS_LABEL[m.stage] || m.stage,
+            outcome: request.approvalStatus === 'Rejected' && request.status === m.stage ? 'rejected' : 'completed',
+            timestamp: ts, durationHours: dur
+        });
+        prevTs = ts;
+        if (request.status === m.stage) break;
+    }
+    return stages;
+}
+
+function extractOffboardingStages(request) {
+    const mapping = [
+        { stage: 'Draft',                  field: 'createdAt',          label: 'Initiated' },
+        { stage: 'PendingManagerApproval', field: 'initiatedAt',        label: 'Pending Manager Approval' },
+        { stage: 'PendingSystemTeam',      field: 'managerApprovedAt',  label: 'Pending System Team' },
+        { stage: 'Completed',              field: 'completedAt',        label: 'Completed' }
+    ];
+
+    const stages = [];
+    let prevTs = null;
+    for (const m of mapping) {
+        const ts = request[m.field];
+        if (!ts) {
+            if (request.status === m.stage) {
+                stages.push({ stage: m.stage, stageLabel: m.label, outcome: 'active', timestamp: null, durationHours: null });
+            }
+            if (request.status === m.stage) break;
+            continue;
+        }
+        const dur = prevTs ? Math.round((new Date(ts) - new Date(prevTs)) / 3600000) : null;
+        stages.push({
+            stage: m.stage, stageLabel: m.label,
+            outcome: request.status === 'Rejected' && request.status === m.stage ? 'rejected' : 'completed',
+            timestamp: ts, durationHours: dur
+        });
+        prevTs = ts;
+        if (request.status === m.stage) break;
+    }
+    return stages;
+}
+
+function offboardingLabel(status) {
+    const map = {
+        Draft:                  'Draft',
+        PendingManagerApproval: 'Pending Manager Approval',
+        PendingSystemTeam:      'Pending System Team',
+        Completed:              'Completed',
+        Rejected:               'Rejected'
+    };
+    return map[status] || status;
 }
