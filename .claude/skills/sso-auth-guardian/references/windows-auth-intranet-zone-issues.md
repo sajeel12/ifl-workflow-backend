@@ -1,115 +1,203 @@
-# Windows Authentication & Intranet Zone Issues
+# Windows Authentication & SPN Resolution
 
-**Date:** May 29, 2026
-**Status:** ✅ Working with IP address | ⏳ Pending fix for hostname
-**Priority:** High - Affects user experience
-
----
-
-## Current Status
-
-### ✅ What Works
-- **IP Address Access:** `http://192.168.1.92:3333`
-  - NO popup
-  - Seamless SSO
-  - All authentication layers pass (except IIS layer on initial HTML load, which is expected)
-
-### ❌ What Doesn't Work
-- **Hostname Access:** `http://hosppdevsrv.ifl.net:3333`
-  - Shows Windows Authentication popup
-  - Popup appears on EVERY request (browser won't cache credentials)
-  - After entering credentials manually, portal works correctly
+**Date:** May 29-30, 2026
+**Status:** ✅ **RESOLVED** - Missing SPNs were the root cause
+**Priority:** Critical - Required for Kerberos authentication
 
 ---
 
-## Root Cause Analysis
+## ✅ RESOLUTION (May 30, 2026)
 
-### Why IP Works But Hostname Doesn't
+### The REAL Root Cause: Missing HTTP SPNs
 
-**Windows Intranet Zone Matching Rules:**
+**The problem was NOT Intranet zone port matching.**
 
-1. **Domain entries** (e.g., `hosppdevsrv.ifl.net`)
-   - ONLY match **default ports** (80 for HTTP, 443 for HTTPS)
-   - Do NOT match custom ports like `:3333`
-   - Example: `hosppdevsrv.ifl.net` matches `http://hosppdevsrv.ifl.net:80` but NOT `http://hosppdevsrv.ifl.net:3333`
+**The ACTUAL issue:** HTTP Service Principal Names (SPNs) were not registered to the application pool account (sppadmin).
 
-2. **IP range entries** (e.g., `192.168.1.92`)
-   - Match **ALL ports** (port-agnostic)
-   - Example: `192.168.1.92` matches `http://192.168.1.92:ANY_PORT`
+### What Fixed It
 
-### Current Group Policy Configuration
+```cmd
+# Register HTTP SPNs to sppadmin application pool account
+setspn -S HTTP/HOSPPDEVSRV ibrahim1_nt\sppadmin
+setspn -S HTTP/HOSPPDEVSRV.IFL.NET ibrahim1_nt\sppadmin
 
-```
-HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\ifl.net\hosppdevsrv
-  http = 1  (Intranet zone)
-
-HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Ranges\Range1
-  :Range = 192.168.1.92
-  http = 1  (Intranet zone)
+# Restart IIS
+iisreset
 ```
 
-**Result:**
-- ✅ `http://hosppdevsrv.ifl.net` (port 80) → Would work (if site was on port 80)
-- ✅ `http://192.168.1.92:3333` → Works (IP matches all ports)
-- ❌ `http://hosppdevsrv.ifl.net:3333` → Doesn't work (port 3333 not matched)
+### Result
+
+**ALL hostname access now works WITHOUT popup:**
+- ✅ `http://hosppdevsrv.ifl.net:3333` - NO POPUP!
+- ✅ `http://hosppdevsrv:3333` - NO POPUP!
+- ✅ `http://192.168.1.92:3333` - NO POPUP!
+
+**Authentication method:** Kerberos (via Negotiate provider)
 
 ---
 
-## Authentication Flow Analysis
+## Why This Was Confusing
 
-### Successful Flow (IP Address)
+### Initial Symptoms (May 29, 2026)
 
+- ✅ **IP Address:** `http://192.168.1.92:3333` - NO popup, worked perfectly
+- ❌ **Hostname:** `http://hosppdevsrv.ifl.net:3333` - Showed popup every time
+
+This pattern led to the **incorrect theory** about Intranet zone port matching.
+
+### Why IP Address Worked But Hostname Didn't
+
+**IP Address (192.168.1.92):**
 ```
-User opens: http://192.168.1.92:3333/portal/it-ops
+Kerberos does NOT work with IP addresses (by design)
     ↓
-Browser checks: Is 192.168.1.92 in Intranet zone?
+Browser immediately uses NTLM (no Kerberos attempt)
     ↓
-YES (Range1 matches) → Browser AUTO-SENDS Windows credentials
+NTLM succeeds without popup (Intranet zone allows it)
     ↓
-IIS receives credentials → Validates → Sets X-Auth-User header
-    ↓
-Node.js receives request with X-Auth-User header
-    ↓
-✅ Page loads, NO POPUP!
+✅ NO POPUP!
 ```
 
-### Failed Flow (Hostname with Port)
-
+**Hostname (hosppdevsrv.ifl.net) BEFORE SPN fix:**
 ```
-User opens: http://hosppdevsrv.ifl.net:3333/portal/it-ops
+Browser tries Kerberos first (hostname-based)
     ↓
-Browser checks: Is hosppdevsrv.ifl.net:3333 in Intranet zone?
+SPN lookup: HTTP/hosppdevsrv.ifl.net
     ↓
-NO (only hosppdevsrv.ifl.net:80 matches) → Browser DOES NOT auto-send credentials
+Active Directory: SPN NOT FOUND
     ↓
-IIS challenges with 401
+Kerberos FAILS
     ↓
-Browser shows popup asking for credentials
+Falls back to NTLM
     ↓
-User enters credentials → Request succeeds
+NTLM challenge triggers popup
     ↓
-Next request → SAME PROBLEM → Popup again!
+❌ POPUP SHOWN!
+```
+
+**Hostname (hosppdevsrv.ifl.net) AFTER SPN fix:**
+```
+Browser tries Kerberos first (hostname-based)
     ↓
-❌ Infinite popup loop
+SPN lookup: HTTP/hosppdevsrv.ifl.net
+    ↓
+Active Directory: SPN FOUND (registered to sppadmin)
+    ↓
+Kerberos ticket issued
+    ↓
+IIS validates ticket (sppadmin can decrypt it)
+    ↓
+✅ Authentication successful - NO POPUP!
 ```
 
 ---
 
-## IIS Log Evidence
+## What Are SPNs and Why Do They Matter?
 
-### May 12, 2026 (When It Worked)
+### Service Principal Name (SPN)
+
+An SPN is a unique identifier for a service instance in Active Directory. It's **REQUIRED** for Kerberos authentication.
+
+**Format:** `ServiceClass/HostName`
+
+**Examples:**
+- `HTTP/hosppdevsrv.ifl.net`
+- `HTTP/hosppdevsrv`
+- `MSSQLSvc/server.domain.com:1433`
+
+**Important:** HTTP SPNs do NOT include port numbers!
+
+### Our web.config Uses Negotiate Provider
+
+```xml
+<windowsAuthentication enabled="true" useKernelMode="false" useAppPoolCredentials="true">
+    <providers>
+        <clear />
+        <add value="Negotiate" />  ← Tries Kerberos FIRST (requires SPNs)
+        <add value="NTLM" />       ← Falls back to NTLM if Kerberos fails
+    </providers>
+</windowsAuthentication>
 ```
-c-ip: 192.168.1.253
-Accessing: http://192.168.1.92:3333/api/onboarding/initiate
 
-401 2 5         cs-username: -  (browser didn't send credentials initially)
-401 1 2148074254  cs-username: -  (SEC_E_NO_CREDENTIALS)
-200 0 0         cs-username: IBRAHIM1_NT\ADNANJVD  (SUCCESS after popup)
+**Key setting:** `useAppPoolCredentials="true"`
+- IIS uses the application pool identity (sppadmin) to validate Kerberos tickets
+- SPNs MUST be registered to this account
+
+---
+
+## How We Discovered the Real Issue
+
+### Investigation Steps (May 29, 2026)
+
+1. **Initial theory:** Port 3333 not in Intranet zone
+2. **Checked registry:** Found `http = 1` but no `3333 = 1` property
+3. **Created diagnostic tools:** 5-layer authentication testing
+4. **Tested extensively:** Confirmed IP works, hostname doesn't
+
+### Breakthrough (May 30, 2026)
+
+**AD Admin's insight:** Checked application pool account and discovered missing SPNs
+
+```cmd
+C:\> setspn -Q HTTP/HOSPPDEVSRV
+Checking domain DC=IFL,DC=NET
+No such SPN found.  ← THE PROBLEM!
+
+C:\> setspn -Q HTTP/HOSPPDEVSRV.IFL.NET
+Checking domain DC=IFL,DC=NET
+No such SPN found.  ← THE PROBLEM!
 ```
 
-**Pattern:** Users were accessing via IP address, got popup ONCE, then credentials were cached.
+**Before fix:** sppadmin had only MSSQLSvc SPNs, NO HTTP SPNs
 
-### May 29, 2026 (Current Issue)
+```cmd
+C:\> setspn -L ibrahim1_nt\sppadmin
+Registered ServicePrincipalNames for CN=SPP Admin:
+        MSSQLSvc/IGCPROJECT.IFL.NET:1433
+        MSSQLSvc/IGCPROJECT.IFL.NET
+        ... (many SQL Server SPNs, but NO HTTP SPNs)
+```
+
+**After fix:** sppadmin now has HTTP SPNs
+
+```cmd
+C:\> setspn -L ibrahim1_nt\sppadmin
+Registered ServicePrincipalNames for CN=SPP Admin:
+        HTTP/HOSPPDEVSRV.IFL.NET      ← ADDED!
+        HTTP/HOSPPDEVSRV              ← ADDED!
+        MSSQLSvc/IGCPROJECT.IFL.NET:1433
+        MSSQLSvc/IGCPROJECT.IFL.NET
+        ... (SQL Server SPNs)
+```
+
+---
+
+## Original Investigation (May 29, 2026)
+
+### ~~Intranet Zone Port Matching Theory (INCORRECT)~~
+
+**We initially thought:**
+- Domain entries (e.g., `hosppdevsrv.ifl.net`) only match default ports (80/443)
+- IP ranges (e.g., `192.168.1.92`) match ALL ports
+- Port 3333 not in Intranet zone for hostname entries
+
+**This was a RED HERRING!** The real issue was missing SPNs.
+
+### Why We Thought It Was Intranet Zone
+
+**Registry showed:**
+```
+HKLM:\...\ZoneMap\Domains\ifl.net\hosppdevsrv
+  http = 1    (matches port 80)
+
+Missing: 3333 = 1  (thought this was needed for port 3333)
+```
+
+**We were wrong!** Domain entries don't need port-specific entries for Kerberos. The issue was the missing SPN, not the port configuration.
+
+### IIS Log Evidence (May 29, 2026)
+
+**Logs showed:**
 ```
 c-ip: 172.28.33.24
 Accessing: http://hosppdevsrv.ifl.net:3333/token.aspx
@@ -119,91 +207,11 @@ Accessing: http://hosppdevsrv.ifl.net:3333/token.aspx
 401 2 5         cs-username: -  (STILL failing on every request)
 ```
 
-**Pattern:** Using hostname with port 3333, popup appears on EVERY request (credentials not cached).
+**What we didn't realize:** This was Kerberos failing due to missing SPN, then NTLM also failing.
 
 ---
 
-## Solution Options
-
-### Option 1: Use IP Address (Current Workaround) ✅
-
-**Pros:**
-- ✅ Works immediately
-- ✅ No configuration changes needed
-- ✅ No AD admin involvement
-
-**Cons:**
-- ❌ Harder to remember
-- ❌ If server IP changes, URLs break
-- ❌ Less professional
-
-**Implementation:**
-```
-Update all documentation/bookmarks to:
-http://192.168.1.92:3333/portal/it-ops
-```
-
----
-
-### Option 2: Add Port to Group Policy (RECOMMENDED) 🔧
-
-**Pros:**
-- ✅ Clean hostname URLs
-- ✅ Professional appearance
-- ✅ IP-independent
-
-**Cons:**
-- ⏳ Requires AD admin
-- ⏳ Takes time for policy propagation
-
-**AD Admin Instructions:**
-
-```powershell
-# Add port 3333 for short hostname
-New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\hosppdevsrv" -Force
-New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\hosppdevsrv" -Name "3333" -Value 1 -PropertyType DWord -Force
-
-# Add port 3333 for FQDN
-New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\ifl.net\hosppdevsrv" -Force
-New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\ifl.net\hosppdevsrv" -Name "3333" -Value 1 -PropertyType DWord -Force
-```
-
-**After policy update, users must run:**
-```powershell
-gpupdate /force
-```
-
-**Verification:**
-```powershell
-Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\hosppdevsrv"
-# Should show: 3333 = 1
-
-Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\ifl.net\hosppdevsrv"
-# Should show: 3333 = 1
-```
-
----
-
-### Option 3: Move to Port 80 (Long-term) 🚀
-
-**Pros:**
-- ✅ No port number needed in URLs
-- ✅ Automatically matches Intranet zone
-- ✅ Most professional
-
-**Cons:**
-- ❌ Port 80 might be used by another site
-- ❌ Requires IIS reconfiguration
-
-**Implementation:**
-1. Check if port 80 is available: `netstat -an | findstr :80`
-2. If available, change IIS binding from `:3333` to `:80`
-3. Update Node.js to listen on different port (IIS proxies to it anyway)
-4. Access via: `http://hosppdevsrv.ifl.net/portal/it-ops`
-
----
-
-## Diagnostic Tools Created (May 29, 2026)
+## Diagnostic Tools Created (Still Useful!)
 
 ### 1. Full Diagnostic UI
 **URL:** `http://192.168.1.92:3333/diagnostics/auth-ui`
@@ -215,85 +223,111 @@ Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion
 - NETWORK: Loopback trust validation
 - NODE.JS: HMAC signature validation (timing-safe)
 
-**Expected Result with IP:**
-- Browser: PASS
-- IIS: FAIL (on initial HTML load - this is normal!)
-- token.aspx: PASS (hasSignature: true)
-- Network: PASS (isLoopback: true)
-- Node.js: PASS (signatureValid: true, v2)
-
-**Note:** IIS layer showing "FAIL" for initial page load is EXPECTED. The sidecar token pattern means the HTML page loads without X-Auth-User, then JavaScript fetches token.aspx which DOES have authentication. This is by design.
-
----
-
 ### 2. Simple Test Page
 **URL:** `http://192.168.1.92:3333/test-auth.html`
-
-**Tests:**
-- Connection check
-- token.aspx authentication
-- Diagnostics API call
-
-**Use Case:** Quick validation without running full diagnostics
-
----
 
 ### 3. Browser Fix Guide
 **URL:** `http://192.168.1.92:3333/fix-windows-auth.html`
 
-**Provides:**
-- Step-by-step troubleshooting
-- Browser configuration checks
-- Registry verification
-- Interactive testing
+These tools are still valuable for diagnosing authentication issues!
+
+---
+
+## How to Diagnose SPN Issues in the Future
+
+### Step 1: Check Application Pool Identity
+
+In IIS Manager:
+- Application Pools → Select pool → Advanced Settings
+- Identity: Custom account (e.g., IBRAHIM1_NT\sppadmin)
+
+### Step 2: Check if SPNs Exist
+
+```cmd
+# Check for HTTP SPNs matching your hostname
+setspn -Q HTTP/yourhostname
+setspn -Q HTTP/yourhostname.domain.com
+```
+
+**If "No such SPN found"** → This is likely your problem!
+
+### Step 3: Check SPNs Registered to Account
+
+```cmd
+# List all SPNs for the application pool account
+setspn -L domain\accountname
+```
+
+Look for HTTP SPNs. If missing, that's the problem.
+
+### Step 4: Add Missing SPNs
+
+```cmd
+# Add HTTP SPNs
+setspn -S HTTP/hostname domain\account
+setspn -S HTTP/hostname.domain.com domain\account
+
+# Restart IIS
+iisreset
+```
+
+### Step 5: Verify
+
+```cmd
+# Check SPNs were added
+setspn -L domain\account
+
+# Test in browser (close all windows first)
+# Navigate to: http://hostname.domain.com:port/
+# Expected: NO POPUP!
+```
 
 ---
 
 ## Key Learnings
 
-1. **DNS is NOT the issue** - hostname resolves correctly, issue is Windows security zone matching
+1. **Kerberos requires SPNs**
+   - Without SPNs, Kerberos fails silently
+   - Falls back to NTLM (which may trigger popups)
 
-2. **Port matching is STRICT for domains** - custom ports require explicit registry entries
+2. **IP addresses bypass Kerberos**
+   - Kerberos doesn't work with IP addresses
+   - That's why IP worked (used NTLM directly)
 
-3. **IP ranges are PORT-AGNOSTIC** - that's why IP address works with any port
+3. **Check application pool account first**
+   - SPNs must match the account IIS uses
+   - Not the machine account, not the user account
 
-4. **Browser behavior differs:**
-   - Chrome: More lenient, caches credentials after first popup
-   - Edge: Stricter, requires exact Intranet zone match
+4. **HTTP SPNs don't include ports**
+   - `HTTP/hostname` works for ALL ports
+   - Don't add `:3333` to the SPN
 
-5. **IIS logs are invaluable:**
-   - `401 2 5` = Access denied (no credentials sent)
-   - `401 1 2148074254` = SEC_E_NO_CREDENTIALS
-   - Empty `cs-username` = browser didn't auto-send credentials
-
-6. **Sidecar token pattern is CORRECT:**
-   - Initial HTML page load: X-Auth-User may be empty
-   - JavaScript then fetches token.aspx: Windows credentials ARE sent
-   - All subsequent API calls: Use sidecar HMAC token
-   - IIS layer "FAIL" in diagnostics is expected and normal!
-
----
-
-## Pending Actions
-
-### For AD Admin:
-- [ ] Add port 3333 to Group Policy Intranet zone for `hosppdevsrv`
-- [ ] Add port 3333 to Group Policy Intranet zone for `hosppdevsrv.ifl.net`
-- [ ] Verify policy propagation to test machines
-
-### After Group Policy Update:
-- [ ] Run `gpupdate /force` on all client machines
-- [ ] Verify registry entries exist
-- [ ] Test with hostname: `http://hosppdevsrv.ifl.net:3333/token.aspx`
-- [ ] Expected: NO popup, immediate load
-- [ ] Run full diagnostics: `http://hosppdevsrv.ifl.net:3333/diagnostics/auth-ui`
-- [ ] Update documentation with hostname URLs
+5. **Intranet zone was a red herring**
+   - IP worked because it bypassed Kerberos
+   - Hostname failed because Kerberos failed (missing SPN)
+   - Port matching was NOT the issue
 
 ---
 
 ## References
 
-- **Commit:** c72b239 (May 29, 2026) - "Add comprehensive SSO authentication diagnostics and troubleshooting tools"
-- **Working web.config:** Identical to May 13, 2026 version (anonymous=false, windows=true)
-- **Diagnostic tools:** All committed to main branch
-- **Documentation:** DIAGNOSTICS.md, TROUBLESHOOTING_POPUP.md, EDGE_POPUP_FIX.md, NEXT_STEPS.md
+- **SPN_TROUBLESHOOTING_GUIDE.md** - Comprehensive SPN troubleshooting (NEW)
+- **Commit c72b239** - Diagnostic tools
+- **Commit 1d00095** - SSO Auth Guardian skill
+- **web.config** - Windows Authentication configuration
+- **DIAGNOSTICS.md** - Diagnostic tool documentation
+
+---
+
+## Timeline
+
+- **May 12, 2026:** Users accessed via IP, got popup once (credentials cached)
+- **May 29, 2026:** Investigated popup issue, created diagnostic tools, suspected Intranet zone
+- **May 30, 2026:** ✅ **RESOLVED** - Admin added HTTP SPNs, issue fixed!
+
+---
+
+**Resolution:** SPNs added to sppadmin account
+**Fixed By:** AD Admin
+**Status:** ✅ WORKING - Kerberos authentication successful
+**No further action needed**

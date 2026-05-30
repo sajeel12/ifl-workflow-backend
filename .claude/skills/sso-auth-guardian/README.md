@@ -346,34 +346,45 @@ Interactive troubleshooting guide:
 - `EDGE_POPUP_FIX.md` - Edge-specific SSO fixes
 - `NEXT_STEPS.md` - Step-by-step fix instructions
 
-## Current Known Issues (May 29, 2026)
+## ✅ Resolved Issues
 
-### Windows Authentication with Hostname
-**Status:** ⏳ Pending AD admin fix
+### Windows Authentication with Hostname (RESOLVED May 30, 2026)
+**Status:** ✅ **RESOLVED** - Missing SPNs were the root cause
 
-**Issue:**
-- ✅ SSO works: `http://192.168.1.92:3333` (IP address)
+**Original Issue:**
+- ✅ SSO worked: `http://192.168.1.92:3333` (IP address)
 - ❌ Popup shown: `http://hosppdevsrv.ifl.net:3333` (hostname with port)
 
-**Root Cause:**
-Windows Intranet zone matches domain entries only on default ports (80/443). Custom port 3333 requires explicit Group Policy registry entry.
+**Original Theory (INCORRECT):**
+Windows Intranet zone port matching issue
 
-**Workaround:**
-Use IP address until AD admin adds port 3333 to Group Policy.
+**ACTUAL Root Cause:**
+Missing HTTP Service Principal Names (SPNs) for the application pool account (sppadmin).
 
-**Pending:**
-AD admin to add:
-```powershell
-HKLM:\...\ZoneMap\Domains\hosppdevsrv
-  3333 = 1
-
-HKLM:\...\ZoneMap\Domains\ifl.net\hosppdevsrv
-  3333 = 1
+**Resolution:**
+AD admin added HTTP SPNs:
+```cmd
+setspn -S HTTP/HOSPPDEVSRV ibrahim1_nt\sppadmin
+setspn -S HTTP/HOSPPDEVSRV.IFL.NET ibrahim1_nt\sppadmin
+iisreset
 ```
+
+**Current Status:**
+- ✅ `http://hosppdevsrv.ifl.net:3333` - NO POPUP!
+- ✅ `http://hosppdevsrv:3333` - NO POPUP!
+- ✅ `http://192.168.1.92:3333` - NO POPUP!
+
+**Authentication Method:** Kerberos (via Negotiate provider)
+
+**Key Learning:**
+IP address worked because Kerberos doesn't work with IPs (used NTLM directly). Hostname failed because Kerberos requires SPNs to be registered to the application pool account. Once SPNs were added, Kerberos authentication succeeded and popup disappeared.
+
+**See:** `SPN_TROUBLESHOOTING_GUIDE.md` for complete details
 
 ## Version History
 
-- **v1.1** (2026-05-29) - Added Windows Authentication diagnostics, Intranet zone troubleshooting, and comprehensive diagnostic tools
+- **v1.2** (2026-05-30) - ✅ RESOLVED Windows Auth popup issue - root cause was missing SPNs, not Intranet zone. Added comprehensive SPN troubleshooting guide.
+- **v1.1** (2026-05-29) - Added Windows Authentication diagnostics, Intranet zone troubleshooting (later found to be incorrect theory), and comprehensive diagnostic tools
 - **v1.0** (2026-05-29) - Initial release with comprehensive audit capabilities
 
 ## Support
@@ -381,10 +392,11 @@ HKLM:\...\ZoneMap\Domains\ifl.net\hosppdevsrv
 For issues or questions about this skill:
 1. Check the reference documentation in `references/`
 2. Review the troubleshooting guide in `architecture-overview.md`
-3. Ask Claude Code for help interpreting audit results
+3. For SPN/Kerberos issues, see `SPN_TROUBLESHOOTING_GUIDE.md`
+4. Ask Claude Code for help interpreting audit results
 
 ---
 
 **Maintained By:** Claude Code Skill Creator
 **License:** MIT
-**Last Updated:** 2026-05-29
+**Last Updated:** 2026-05-30
