@@ -1046,32 +1046,6 @@ class AdminController {
         }
     }
 
-    // ── Page Render Methods ──────────────────────────────────────────────────
-
-    renderHodPanel(req, res) {
-        res.render('pages/admin_hod_panel');
-    }
-
-    renderSettingsPanel(req, res) {
-        res.render('pages/admin_settings_panel');
-    }
-
-    renderOffboardingPanel(req, res) {
-        res.render('pages/admin_offboarding_panel');
-    }
-
-    renderWorkflowApproversPanel(req, res) {
-        res.render('pages/admin_workflow_approvers');
-    }
-
-    renderOnboardingHistoryPanel(req, res) {
-        res.render('pages/admin_onboarding_history');
-    }
-
-    renderSystemConfigPanel(req, res) {
-        res.render('pages/admin_system_config');
-    }
-
     renderEmployeeJourneyPanel(req, res) {
         res.render('pages/admin_employee_journey');
     }
