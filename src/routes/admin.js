@@ -1,5 +1,6 @@
 import express from 'express';
 import adminController from '../controllers/adminController.js';
+import * as ejController from '../controllers/employeeJourneyController.js';
 import { diagnoseLookup, findUserByEmail, searchUsersByName } from '../services/adService.js';
 import { adminApiGuard, adminPageGuard } from '../middleware/adminMiddleware.js';
 
@@ -16,6 +17,7 @@ router.get('/offboarding',        adminPageGuard, adminController.renderOffboard
 router.get('/workflow-approvers', adminPageGuard, adminController.renderWorkflowApproversPanel);
 router.get('/onboarding-history', adminPageGuard, adminController.renderOnboardingHistoryPanel);
 router.get('/system-config',      adminPageGuard, adminController.renderSystemConfigPanel);
+router.get('/employee-journey',   adminPageGuard, adminController.renderEmployeeJourneyPanel);
 
 // ── API guard ─────────────────────────────────────────────────────────────────
 // adminApiGuard reads X-Auth-User directly (same as adminPageGuard) and returns
@@ -40,6 +42,11 @@ router.put('/workflow-approvers/:id/revert',    ...guard, adminController.revert
 router.put('/workflow-approvers/:id',           ...guard, adminController.updateWorkflowApprover);
 router.get('/onboarding-requests',              ...guard, adminController.getOnboardingRequests);
 router.get('/onboarding-timeline/:id',          ...guard, adminController.getOnboardingTimeline);
+
+// ── Employee Journey APIs (admin-only, adminApiGuard) ─────────────────────
+router.get('/ej/employees',                     ...guard, ejController.listEmployees);
+router.get('/ej/employees/:employeeNumber',     ...guard, ejController.getEmployeeDetail);
+router.get('/ej/requests/:requestId/timeline',  ...guard, ejController.getRequestTimeline);
 router.post('/system-config/update',            ...guard, adminController.updateSystemConfig);
 router.post('/onboarding/:id/resend-email',     ...guard, adminController.resendStageEmail);
 

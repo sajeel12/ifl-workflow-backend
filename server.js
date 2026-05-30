@@ -15,6 +15,8 @@ import SyncLog from './src/models/SyncLog.js';
 import WorkflowApproverConfig from './src/models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from './src/models/WorkflowApproverLocationOverride.js';
 import SystemConfig from './src/models/SystemConfig.js';
+import RequestRelationship from './src/models/RequestRelationship.js';
+import RequestStageEvent from './src/models/RequestStageEvent.js';
 
 const DEFAULT_APPROVER_CONFIGS = [
     { roleKey: 'HR_INITIATOR', label: 'HR Initiator', description: 'Authorized HR users who can initiate onboarding requests. Configured per location group.', workflowStage: 'Step 1 – Initiate Request', approverEmail: null, approverName: 'HR' },
@@ -84,6 +86,32 @@ async function ensureColumn(sequelize, isSqlite, tableName, columnName, sqlType)
         }
     } catch (err) {
         logger.warn(`[Schema] ensureColumn(${tableName}.${columnName}) failed: ${err.message}`);
+    }
+}
+
+/**
+ * Idempotent ADD INDEX helper. Checks if the index exists and creates it if missing.
+ * Safe to call on every startup for both SQLite and SQL Server.
+ */
+async function ensureIndex(sequelize, isSqlite, tableName, indexName, columnName) {
+    try {
+        let exists = false;
+        if (isSqlite) {
+            const [indexes] = await sequelize.query(`PRAGMA index_list("${tableName}")`);
+            exists = Array.isArray(indexes) && indexes.some(idx => idx.name === indexName);
+        } else {
+            const [rows] = await sequelize.query(
+                `SELECT 1 AS ok FROM sys.indexes
+                 WHERE name = '${indexName}' AND object_id = OBJECT_ID('${tableName}')`
+            );
+            exists = Array.isArray(rows) && rows.length > 0;
+        }
+        if (!exists) {
+            await sequelize.query(`CREATE INDEX ${indexName} ON "${tableName}" (${columnName})`);
+            logger.info(`[Schema] Created index ${indexName} on ${tableName}(${columnName}).`);
+        }
+    } catch (err) {
+        logger.warn(`[Schema] ensureIndex(${tableName}.${indexName}) failed: ${err.message}`);
     }
 }
 
@@ -219,6 +247,11 @@ async function startServer() {
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeUsername', 'STRING');
         // Add future columns here as the model evolves.
+
+        // ── Employee Journey Tracking Enhancements (Phase 3) ──────────────
+        // Add performance index for employee-centric queries.
+        // Employee journey visualization requires fast lookup by employeeId.
+        await ensureIndex(sequelize, isSqlite, 'OnboardingRequests', 'idx_onboarding_employee', 'employeeId');
 
         // One-time schema repair for WorkflowApproverLocationOverrides.
         // Older builds created this table with a column-level UNIQUE on
