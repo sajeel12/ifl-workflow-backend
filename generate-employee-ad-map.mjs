@@ -26,6 +26,18 @@ function csvEscape(v) {
     return `"${String(v ?? '').replace(/"/g, '""')}"`;
 }
 
+// All known email domains in use across IFL / IGC
+const KNOWN_DOMAINS = ['ifl.net', 'igc.com.pk', 'igcpk.com', 'pp.ifl.net', 'lhr.ifl.net'];
+
+// Given an email, return the same username with every other known domain
+function alternateDomainEmails(email) {
+    if (!email || !email.includes('@')) return [];
+    const [user, domain] = email.toLowerCase().split('@');
+    return KNOWN_DOMAINS
+        .filter(d => d !== domain)
+        .map(d => `${user}@${d}`);
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 async function main() {
     await sequelize.authenticate();
@@ -52,22 +64,45 @@ async function main() {
             continue;
         }
 
-        let adUser = null;
+        let adUser     = null;
+        let matchMethod = '';
 
-        // Strategy 1: exact email lookup
+        // Strategy 1: exact DB email lookup
         try {
             adUser = await findUserByEmail(emp.email);
+            if (adUser?.sAMAccountName) matchMethod = `exact:${emp.email}`;
         } catch (_) {}
 
-        // Strategy 2: name search fallback (first token of name)
+        // Strategy 2: alternate domain variants of the same username
+        // e.g. user@ifl.net → try user@igc.com.pk, user@igcpk.com, etc.
+        if (!adUser) {
+            for (const altEmail of alternateDomainEmails(emp.email)) {
+                try {
+                    adUser = await findUserByEmail(altEmail);
+                    if (adUser?.sAMAccountName) {
+                        matchMethod = `alt-domain:${altEmail}`;
+                        break;
+                    }
+                } catch (_) {}
+                await sleep(80);
+            }
+        }
+
+        // Strategy 3: name search fallback — matches on email inside AD results
         if (!adUser && emp.name) {
             try {
                 const results = await searchUsersByName(emp.name.split(' ')[0]);
-                // Find the result whose email matches
+                const allEmails = [
+                    emp.email.toLowerCase(),
+                    ...alternateDomainEmails(emp.email)
+                ];
                 const hit = results.find(r =>
-                    (r.mail || r.email || '').toLowerCase() === emp.email.toLowerCase()
+                    allEmails.includes((r.mail || r.email || '').toLowerCase())
                 );
-                if (hit) adUser = hit;
+                if (hit) {
+                    adUser      = hit;
+                    matchMethod = `name-search:${emp.name.split(' ')[0]}`;
+                }
             } catch (_) {}
         }
 
@@ -79,10 +114,11 @@ async function main() {
                 dept:           emp.mainDept,
                 sAMAccountName: adUser.sAMAccountName,
                 adEmail:        adUser.mail || adUser.email || '',
-                adDisplayName:  adUser.displayName || ''
+                adDisplayName:  adUser.displayName || '',
+                matchMethod
             });
         } else {
-            unmatched.push({ emp, reason: 'Not found in AD (tried email + name search)' });
+            unmatched.push({ emp, reason: 'Not found in AD (tried exact + alternate domains + name search)' });
         }
 
         // Throttle — avoid hammering the sidecar
@@ -151,15 +187,15 @@ async function main() {
     writeFileSync('set-employee-ids.ps1', psLines.join('\n'), 'utf8');
 
     // ── CSV report ───────────────────────────────────────────────────────────────
-    const csvHeader = ['EmployeeID', 'Name', 'DB_Email', 'Department', 'sAMAccountName', 'AD_Email', 'AD_DisplayName', 'Matched', 'Notes'];
+    const csvHeader = ['EmployeeID', 'Name', 'DB_Email', 'Department', 'sAMAccountName', 'AD_Email', 'AD_DisplayName', 'Matched', 'MatchMethod', 'Notes'];
     const csvRows   = [
         ...matched.map(m => [
             m.employeeId, m.name, m.dbEmail, m.dept,
-            m.sAMAccountName, m.adEmail, m.adDisplayName, 'YES', ''
+            m.sAMAccountName, m.adEmail, m.adDisplayName, 'YES', m.matchMethod, ''
         ]),
         ...unmatched.map(({ emp, reason }) => [
             emp.employeeId, emp.name, emp.email || '', emp.mainDept || '',
-            '', '', '', 'NO', reason
+            '', '', '', 'NO', '', reason
         ])
     ];
 
@@ -171,9 +207,22 @@ async function main() {
     writeFileSync('employee-ad-map.csv', csv, 'utf8');
 
     // ── Summary ──────────────────────────────────────────────────────────────────
+    const byMethod = matched.reduce((acc, m) => {
+        const key = m.matchMethod.startsWith('exact')       ? 'exact email'
+                  : m.matchMethod.startsWith('alt-domain')  ? 'alternate domain'
+                  : 'name search';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {});
+
     console.log('━'.repeat(60));
     console.log(`✅  Matched   : ${matched.length} employees`);
+    Object.entries(byMethod).forEach(([k, v]) => console.log(`     • ${k}: ${v}`));
     console.log(`⚠️   Unmatched : ${unmatched.length} employees`);
+    const noEmail  = unmatched.filter(u => u.reason === 'No email in DB').length;
+    const notInAD  = unmatched.length - noEmail;
+    console.log(`     • no email in DB : ${noEmail}`);
+    console.log(`     • has email, not in AD : ${notInAD}`);
     console.log('━'.repeat(60));
     console.log('\nFiles written:');
     console.log('  📄 set-employee-ids.ps1    — send this to your AD admin');
