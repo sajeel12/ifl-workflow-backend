@@ -156,67 +156,70 @@ async function loadEmployees() {
   const dept   = document.getElementById('deptFilter').value;
   const status = document.getElementById('statusFilter').value;
 
-  // Require at least 2 chars OR a dept/location filter
-  if (search.length < 2 && !dept) {
-    showSearchPrompt();
-    return;
-  }
+  if (search.length < 2 && !dept) { showSearchPrompt(); return; }
 
-  const params = new URLSearchParams({
+  const isNumber = /^\d+$/.test(search);
+
+  const dbParams = new URLSearchParams({
     limit: PAGE_SIZE, offset: ejPage * PAGE_SIZE,
     ...(search && { search }),
     ...(dept   && { department: dept }),
     ...(status && { status })
   });
 
+  // AD search strategy decided BEFORE firing, not as a fallback:
+  //   number query  → search by employeeId directly (exact, no name/email guessing)
+  //   name/text     → search by name (username matching resolves cross-domain emails)
+  //   dept-only     → skip now, do per-employee lookups after DB results come back
+  let adPromise;
+  if (isNumber && search.length >= 2) {
+    adPromise = window.iflFetch(`/admin/ad-search?employeeId=${encodeURIComponent(search)}`)
+      .then(r => r.json()).catch(() => ({ results: [] }));
+  } else if (search.length >= 2) {
+    adPromise = window.iflFetch(`/admin/ad-search?q=${encodeURIComponent(search)}`)
+      .then(r => r.json()).catch(() => ({ results: [] }));
+  } else {
+    adPromise = Promise.resolve({ results: [] });
+  }
+
   document.getElementById('empList').innerHTML =
     `<div style="padding:32px;text-align:center;color:var(--a-text-muted);">Searching…</div>`;
 
   try {
-    // Fire DB + AD search in parallel.
-    // AD sidecar searches by name/SAM/email only — a pure-number query (employee ID)
-    // returns 0 AD results. We handle that below with a supplemental name search.
     const [dbData, adData] = await Promise.all([
-      window.iflFetch(`/admin/ej/employees?${params}`).then(r => r.json()),
-      search.length >= 2
-        ? window.iflFetch(`/admin/ad-search?q=${encodeURIComponent(search)}`).then(r => r.json()).catch(() => ({ results: [] }))
-        : Promise.resolve({ results: [] })
+      window.iflFetch(`/admin/ej/employees?${dbParams}`).then(r => r.json()),
+      adPromise
     ]);
 
     let adResults = adData.results || [];
 
-    // If primary AD search returned nothing (e.g. search was by employee number,
-    // which the name/email sidecar can't resolve), use the reliable employeeID path.
-    // One call per DB result — accurate regardless of name/email mismatches.
-    if (adResults.length === 0 && dbData.employees?.length) {
-      const idLookups = await Promise.all(
-        dbData.employees.slice(0, 10).map(e =>
+    // Dept-filter-only search: AD can't be searched by dept, so look up each
+    // DB employee by employeeId to get accurate "in AD" badges
+    if (!search && dept && dbData.employees?.length) {
+      const batch = await Promise.all(
+        dbData.employees.slice(0, 15).map(e =>
           window.iflFetch(`/admin/ad-search?employeeId=${encodeURIComponent(e.employeeId)}`)
             .then(r => r.json()).catch(() => ({ results: [] }))
         )
       );
-      adResults = idLookups.flatMap(r => r.results || []);
+      adResults = batch.flatMap(r => r.results || []);
     }
 
-    // Build lookup maps — three keys per AD user (most reliable first):
-    //   1. employeeID  — exact, immune to name/email differences
-    //   2. full email  — exact email match
-    //   3. username    — email prefix, cross-domain safe (ifl.net vs igc.com.pk)
+    // Build adMap — employeeID is primary key, email + username prefix as fallbacks
     adCache = adResults;
     adMap   = {};
     adCache.forEach(u => {
-      const email    = (u.mail || u.email || '').toLowerCase();
-      const username = email.split('@')[0];
-      if (u.employeeID) adMap[`id:${u.employeeID}`] = u;   // most reliable
-      if (email)        adMap[email]                 = u;   // exact email
-      if (username)     adMap[username]              = u;   // cross-domain
+      const email = (u.mail || u.email || '').toLowerCase();
+      const uname = email.split('@')[0];
+      if (u.employeeID) adMap[`id:${u.employeeID}`] = u;
+      if (email)        adMap[email]                 = u;
+      if (uname)        adMap[uname]                 = u;
     });
 
     ejTotal = dbData.total || 0;
     const emps = dbData.employees || [];
     renderEmpList(emps);
 
-    // Count matched (DB employees that have an AD account) not raw AD results
     const matchedCount = emps.filter(e => adLookup(e.email, e.employeeId)).length;
     document.getElementById('empCount').textContent =
       `${ejTotal} in DB · ${matchedCount} in AD`;
@@ -645,32 +648,64 @@ function selectStage(reqId, stageKey) {
   `;
 }
 
-function showAdOnly(idx) {
+async function showAdOnly(idx) {
   const u = adUnmatched[idx];
   if (!u) return;
 
   document.querySelectorAll('.ej-emp').forEach(el => el.classList.remove('ej-emp--active'));
+  document.querySelectorAll('.ej-emp')[idx + (ejTotal > 0 ? ejTotal : 0)];
   activeEmpId = null;
   clearDetails();
 
+  const ad      = u;
+  const adEmail = ad.mail || ad.email || '';
+  const groups  = (ad.memberOf || []).map(dn => {
+    const m = String(dn).match(/^CN=([^,]+)/i); return m ? m[1] : dn;
+  }).filter(Boolean);
+  const groupsHtml = groups.length
+    ? groups.slice(0,5).map(g =>
+        `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:.7rem;padding:1px 7px;border-radius:10px;margin:2px 2px 2px 0;">${escHtml(g)}</span>`
+      ).join('') + (groups.length > 5 ? `<span style="font-size:.7rem;color:var(--a-text-muted);">+${groups.length-5} more</span>` : '')
+    : '<span style="font-size:.78rem;color:var(--a-text-muted);">No groups</span>';
+
   document.getElementById('journeyCenter').innerHTML = `
     <div class="ej-emp-hd">
-      <div class="ej-emp-hd__name">${escHtml(u.displayName || u.sAMAccountName || '—')}
-        <span class="badge badge--yellow" style="margin-left:8px;">AD Only</span>
+      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div class="ej-emp-hd__name">${escHtml(ad.displayName || ad.sAMAccountName || '—')}
+            <span class="badge badge--yellow" style="margin-left:8px;">AD Only</span>
+          </div>
+          <div style="font-size:.75rem;color:var(--a-text-muted);margin-top:2px;">
+            ${ad.employeeID ? `Employee ID: <strong>${ad.employeeID}</strong>` : 'No Employee ID in DB'}
+          </div>
+        </div>
+        <span style="font-size:.68rem;background:#eff6ff;color:#1d4ed8;padding:3px 10px;border-radius:20px;font-weight:600;">360° Profile</span>
       </div>
-      <div class="ej-emp-hd__meta">
-        ${u.mail || u.email ? `<span>${escHtml(u.mail || u.email)}</span>` : ''}
-        ${u.title ? `<span>${escHtml(u.title)}</span>` : ''}
-      </div>
-      <div style="margin-top:10px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:.82rem;display:flex;gap:16px;align-items:center;">
-        <span style="font-weight:600;color:#065f46;">AD Account</span>
-        <span style="font-family:monospace;background:#dcfce7;padding:1px 7px;border-radius:4px;color:#166534;">${escHtml(u.sAMAccountName)}</span>
-        ${u.mail ? `<span style="color:#374151;">${escHtml(u.mail)}</span>` : ''}
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;border-right:1px solid var(--a-border);padding-right:20px;">
+          <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7c3aed;margin-bottom:8px;">HR / DB Record</div>
+          <div style="font-size:.84rem;color:var(--a-text-muted);padding:12px;background:#f9fafb;border-radius:6px;text-align:center;">
+            No employee record in HR database.<br>This account exists in AD only.
+          </div>
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0369a1;margin-bottom:8px;">
+            AD Account <span class="badge badge--${ad.accountEnabled === false ? 'red' : 'green'}">${ad.accountEnabled === false ? 'Disabled' : 'Enabled'}</span>
+          </div>
+          <table style="font-size:.8rem;border-collapse:collapse;width:100%;">
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Login</td>
+                <td><code style="background:#f0f9ff;padding:1px 6px;border-radius:3px;font-size:.78rem;">${escHtml(ad.sAMAccountName)}</code></td></tr>
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Email</td><td>${escHtml(adEmail || '—')}</td></tr>
+            ${ad.title ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Title</td><td>${escHtml(ad.title)}</td></tr>` : ''}
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;vertical-align:top;">Groups</td>
+                <td style="padding-top:4px;">${groupsHtml}</td></tr>
+          </table>
+        </div>
       </div>
     </div>
-    <div style="padding:20px;background:#fff;border:1px solid var(--a-border);border-radius:8px;color:var(--a-text-muted);font-size:.875rem;line-height:1.6;">
-      This user exists in Active Directory but has no employee record in the workflow database.
-      No workflow journey data is available.
+    <div style="padding:16px 20px;background:#fff;border:1px solid var(--a-border);border-radius:8px;color:var(--a-text-muted);font-size:.875rem;">
+      This user has an AD account but no employee record in the workflow database.
+      No onboarding or offboarding history is available.
     </div>
   `;
 }
