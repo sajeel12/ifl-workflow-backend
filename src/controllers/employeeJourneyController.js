@@ -222,16 +222,38 @@ export async function getEmployeeAdProfile(req, res) {
 
         if (!raw) return res.json({ found: false, profile: null });
 
-        // Enrich with full profile (account status, groups, timestamps) when available
-        const profile = raw.accountStatus
-            ? raw
-            : (await getFullADProfile(raw.sAMAccountName)) || parseADProfile(raw);
+        // Enrich basic records with full AD attributes (office, city, groups,
+        // account status, created date) via the sidecar search by sAMAccountName.
+        // Strategy 3 (findUserByEmail / adlookup.aspx) only returns sAM+mail+name,
+        // so without this the AD Office/City/Groups fields stay empty.
+        raw = await enrichViaSidecar(raw);
+
+        // LDAP full profile if configured, otherwise parse the enriched sidecar record.
+        const profile = (await getFullADProfile(raw.sAMAccountName)) || parseADProfile(raw);
 
         res.json({ found: true, profile });
     } catch (err) {
         console.error('[EJ] getEmployeeAdProfile failed:', err);
         res.status(500).json({ error: 'Failed to fetch AD profile' });
     }
+}
+
+// Enrich a basic AD record (sAM+mail+name from adlookup.aspx) with the full
+// attribute set by searching adsearch.aspx for the exact sAMAccountName.
+// adsearch.aspx returns office, locality, memberOf, accountEnabled, createdAt.
+// No-op if the record is already rich (came from employeeId/name sidecar search).
+async function enrichViaSidecar(raw) {
+    if (!raw || !raw.sAMAccountName) return raw;
+    // Already rich? sidecar search/employeeId results include memberOf + office.
+    if (Array.isArray(raw.memberOf) || raw.office !== undefined) return raw;
+    try {
+        const results = await searchUsersByName(raw.sAMAccountName);
+        const exact = (results || []).find(u =>
+            (u.sAMAccountName || '').toLowerCase() === raw.sAMAccountName.toLowerCase()
+        );
+        if (exact) return { ...raw, ...exact };
+    } catch (_) { /* keep basic record on failure */ }
+    return raw;
 }
 
 // ── Batch AD status check — same multi-strategy as getEmployeeAdProfile ──────────
