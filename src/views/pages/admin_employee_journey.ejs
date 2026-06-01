@@ -389,8 +389,10 @@ function renderCenter({ employee, summary, recentRequests }, ad) {
             <td><code style="background:#f0f9ff;padding:1px 6px;border-radius:3px;font-size:.78rem;">${escHtml(ad.sAMAccountName)}</code></td></tr>
         <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Email</td>
             <td>${escHtml(ad.mail || '—')}</td></tr>
-        ${ad.title ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Title</td><td>${escHtml(ad.title)}</td></tr>` : ''}
-        ${ad.phone ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Phone</td><td>${escHtml(ad.phone)}</td></tr>` : ''}
+        ${ad.title    ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Title</td><td>${escHtml(ad.title)}</td></tr>` : ''}
+        ${ad.office   ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Office</td><td>${escHtml(ad.office)}</td></tr>` : ''}
+        ${ad.locality ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD City</td><td>${escHtml(ad.locality)}</td></tr>` : ''}
+        ${ad.phone    ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Phone</td><td>${escHtml(ad.phone)}</td></tr>` : ''}
         <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Last Login</td>
             <td>${fmtD(ad.lastLogon)}</td></tr>
         <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Acc Created</td>
@@ -703,7 +705,9 @@ async function showAdOnly(idx) {
             <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Login</td>
                 <td><code style="background:#f0f9ff;padding:1px 6px;border-radius:3px;font-size:.78rem;">${escHtml(ad.sAMAccountName)}</code></td></tr>
             <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Email</td><td>${escHtml(adEmail || '—')}</td></tr>
-            ${ad.title ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Title</td><td>${escHtml(ad.title)}</td></tr>` : ''}
+            ${ad.title    ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Title</td><td>${escHtml(ad.title)}</td></tr>` : ''}
+            ${ad.office   ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Office</td><td>${escHtml(ad.office)}</td></tr>` : ''}
+            ${ad.locality ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD City</td><td>${escHtml(ad.locality)}</td></tr>` : ''}
             <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;vertical-align:top;">Groups</td>
                 <td style="padding-top:4px;">${groupsHtml}</td></tr>
           </table>

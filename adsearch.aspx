@@ -88,6 +88,9 @@
                 searcher.PropertiesToLoad.Add("userAccountControl");
                 searcher.PropertiesToLoad.Add("whenCreated");
                 searcher.PropertiesToLoad.Add("memberOf");
+                searcher.PropertiesToLoad.Add("physicalDeliveryOfficeName");
+                searcher.PropertiesToLoad.Add("l");
+                searcher.PropertiesToLoad.Add("streetAddress");
 
                 foreach (SearchResult r in searcher.FindAll()) {
                     string sam  = Prop(r, "sAMAccountName");
@@ -125,7 +128,10 @@
                         accountEnabled  = (uac & 2) == 0,
                         userAccountControl = uac,
                         createdAt       = createdAt,
-                        memberOf        = grps
+                        memberOf        = grps,
+                        office          = Prop(r, "physicalDeliveryOfficeName"),
+                        locality        = Prop(r, "l"),
+                        streetAddress   = Prop(r, "streetAddress")
                     });
                 }
                 return true;
