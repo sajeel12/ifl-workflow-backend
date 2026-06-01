@@ -4,7 +4,7 @@ import OffboardingRequest from '../models/OffboardingRequest.js';
 import RequestStageEvent from '../models/RequestStageEvent.js';
 import { Op } from 'sequelize';
 import { STATUS_LABEL } from '../utils/workflowLabels.js';
-import { findUserByEmployeeId, findUserByEmail, getFullADProfile, parseADProfile, searchUsersByName } from '../services/adService.js';
+import { findUserByEmployeeIdViaSidecar, findUserByEmployeeId, findUserByEmail, getFullADProfile, parseADProfile, searchUsersByName } from '../services/adService.js';
 
 const KNOWN_DOMAINS = ['ifl.net', 'igc.com.pk', 'igcpk.com', 'pp.ifl.net', 'lhr.ifl.net'];
 
@@ -192,11 +192,16 @@ export async function getEmployeeAdProfile(req, res) {
 
         let raw = null;
 
-        // Strategy 1: LDAP lookup by employeeID attribute (works when AD_URL configured)
-        raw = await findUserByEmployeeId(employeeNumber);
+        // Strategy 1: sidecar employeeID lookup — the most reliable path.
+        // Immune to name/email mismatches. Works as long as AD admin ran the bulk
+        // Set-ADUser script (465 accounts updated).
+        raw = await findUserByEmployeeIdViaSidecar(employeeNumber);
 
-        // Strategy 2: sidecar lookup with DB email + all alternate domain variants
-        // Handles the case where DB has @ifl.net but AD uses @igc.com.pk
+        // Strategy 2: LDAP lookup by employeeID (works when AD_URL is configured)
+        if (!raw) raw = await findUserByEmployeeId(employeeNumber);
+
+        // Strategy 3: sidecar email lookup with all domain variants
+        // Covers employees whose employeeID wasn't set in AD yet
         if (!raw && emp?.email) {
             const allEmails = [emp.email, ...alternateDomainEmails(emp.email)];
             for (const email of allEmails) {
@@ -205,7 +210,7 @@ export async function getEmployeeAdProfile(req, res) {
             }
         }
 
-        // Strategy 3: name search fallback — match by username part across domains
+        // Strategy 4: name search + username-part matching (last resort)
         if (!raw && emp?.name) {
             const dbUsername = (emp.email || '').toLowerCase().split('@')[0];
             const results    = await searchUsersByName(emp.name.split(' ')[0]);

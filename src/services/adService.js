@@ -269,8 +269,36 @@ export const findUserByEmail = async (email) => {
 };
 
 /**
+ * Find an AD user by their employeeID attribute via the adsearch.aspx sidecar.
+ * Uses the reliable ?employeeId= path — immune to name/email mismatches.
+ * Returns the user object or null.
+ */
+export const findUserByEmployeeIdViaSidecar = async (employeeId) => {
+    if (!employeeId || !ADSEARCH_URL) return null;
+    try {
+        const url = new URL(ADSEARCH_URL);
+        url.searchParams.set('employeeId', String(employeeId));
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6000) });
+        if (!res.ok) { logger.warn(`[ADSearch] employeeId HTTP ${res.status}`); return null; }
+        const data = await res.json();
+        if (!Array.isArray(data.results) || data.results.length === 0) return null;
+        const age      = Math.abs(Date.now() / 1000 - data.timestamp);
+        const expected = _hmacHex(`search|${employeeId}|${data.timestamp}|${data.results.length}`);
+        if (age > 30 || data.signature !== expected) {
+            logger.warn(`[ADSearch] HMAC mismatch for employeeId "${employeeId}"`);
+            return null;
+        }
+        logger.info(`[ADSearch] employeeId(${employeeId}) → ${data.results[0].sAMAccountName}`);
+        return data.results[0];
+    } catch (e) {
+        logger.warn(`[ADSearch] employeeId sidecar error: ${e.message}`);
+        return null;
+    }
+};
+
+/**
  * Search AD users by name / sAMAccountName / email via the adsearch.aspx sidecar.
- * Returns an array of { sAMAccountName, displayName, email, title } — empty on failure.
+ * Returns an array of { sAMAccountName, displayName, email, title, employeeID } — empty on failure.
  */
 export const searchUsersByName = async (q) => {
     if (!q || q.length < 2 || !ADSEARCH_URL) return [];

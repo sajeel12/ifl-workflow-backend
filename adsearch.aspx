@@ -20,20 +20,35 @@
             return;
         }
 
-        string q = (Request.QueryString["q"] ?? "").Trim();
-        if (q.Length < 2) {
-            Response.StatusCode = 400;
-            Response.Write("{\"error\":\"q must be at least 2 characters\"}");
-            return;
-        }
+        string q          = (Request.QueryString["q"]          ?? "").Trim();
+        string employeeId = (Request.QueryString["employeeId"] ?? "").Trim();
 
-        string esc = EscLdap(q);
-        // Match displayName, sAMAccountName, or mail — enabled accounts only
-        string filter = "(&(objectClass=user)"
-                      +   "(!(userAccountControl:1.2.840.113556.1.4.803:=2))"
-                      +   "(|(displayName=*" + esc + "*)"
-                      +     "(sAMAccountName=*" + esc + "*)"
-                      +     "(mail=*" + esc + "*)))";
+        string filter;
+        string sigKey; // used in HMAC — tells Node which path was taken
+
+        if (!string.IsNullOrEmpty(employeeId)) {
+            // ── Employee-ID path: exact match on the employeeID attribute ──────────
+            // Immune to name/email mismatches across domains.
+            // Only accounts that have had employeeID set (via Set-ADUser -EmployeeID)
+            // will be found this way.
+            string esc = EscLdap(employeeId);
+            filter = "(&(objectClass=user)(employeeID=" + esc + "))";
+            sigKey = employeeId;
+        } else {
+            // ── Name/email path (existing behaviour) ─────────────────────────────
+            if (q.Length < 2) {
+                Response.StatusCode = 400;
+                Response.Write("{\"error\":\"q or employeeId required (q min 2 chars)\"}");
+                return;
+            }
+            string esc = EscLdap(q);
+            filter = "(&(objectClass=user)"
+                   +   "(!(userAccountControl:1.2.840.113556.1.4.803:=2))"
+                   +   "(|(displayName=*" + esc + "*)"
+                   +     "(sAMAccountName=*" + esc + "*)"
+                   +     "(mail=*" + esc + "*)))";
+            sigKey = q;
+        }
 
         var results = new System.Collections.Generic.List<object>();
 
@@ -47,7 +62,7 @@
             TrySearch(null, filter, results, 15);
 
         long   timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        string sig       = Sign("search|" + q + "|" + timestamp + "|" + results.Count);
+        string sig       = Sign("search|" + sigKey + "|" + timestamp + "|" + results.Count);
 
         Response.Write(new JavaScriptSerializer().Serialize(new {
             results   = results,
@@ -69,6 +84,7 @@
                 searcher.PropertiesToLoad.Add("displayName");
                 searcher.PropertiesToLoad.Add("mail");
                 searcher.PropertiesToLoad.Add("title");
+                searcher.PropertiesToLoad.Add("employeeID");
 
                 foreach (SearchResult r in searcher.FindAll()) {
                     string sam  = Prop(r, "sAMAccountName");
@@ -78,7 +94,8 @@
                         sAMAccountName = sam,
                         displayName    = name,
                         email          = Prop(r, "mail"),
-                        title          = Prop(r, "title")
+                        title          = Prop(r, "title"),
+                        employeeID     = Prop(r, "employeeID")
                     });
                 }
                 return true;
