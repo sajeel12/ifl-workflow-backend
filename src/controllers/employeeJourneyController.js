@@ -4,7 +4,15 @@ import OffboardingRequest from '../models/OffboardingRequest.js';
 import RequestStageEvent from '../models/RequestStageEvent.js';
 import { Op } from 'sequelize';
 import { STATUS_LABEL } from '../utils/workflowLabels.js';
-import { findUserByEmployeeId, findUserByEmail, getFullADProfile, parseADProfile } from '../services/adService.js';
+import { findUserByEmployeeId, findUserByEmail, getFullADProfile, parseADProfile, searchUsersByName } from '../services/adService.js';
+
+const KNOWN_DOMAINS = ['ifl.net', 'igc.com.pk', 'igcpk.com', 'pp.ifl.net', 'lhr.ifl.net'];
+
+function alternateDomainEmails(email) {
+    if (!email || !email.includes('@')) return [];
+    const [user, domain] = email.toLowerCase().split('@');
+    return KNOWN_DOMAINS.filter(d => d !== domain).map(d => `${user}@${d}`);
+}
 
 // ── Employee list ──────────────────────────────────────────────────────────────
 export async function listEmployees(req, res) {
@@ -177,23 +185,41 @@ export async function getEmployeeAdProfile(req, res) {
     try {
         const { employeeNumber } = req.params;
 
-        // Strategy 1: match by employeeID attribute (set by AD admin bulk script)
-        let raw = await findUserByEmployeeId(employeeNumber);
+        const emp = await Employee.findOne({
+            where: { employeeId: employeeNumber },
+            attributes: ['email', 'name']
+        });
 
-        // Strategy 2: fallback to email lookup if employeeID not yet set in AD
-        if (!raw) {
-            const emp = await Employee.findOne({
-                where: { employeeId: employeeNumber },
-                attributes: ['email']
-            });
-            if (emp?.email) raw = await findUserByEmail(emp.email);
+        let raw = null;
+
+        // Strategy 1: LDAP lookup by employeeID attribute (works when AD_URL configured)
+        raw = await findUserByEmployeeId(employeeNumber);
+
+        // Strategy 2: sidecar lookup with DB email + all alternate domain variants
+        // Handles the case where DB has @ifl.net but AD uses @igc.com.pk
+        if (!raw && emp?.email) {
+            const allEmails = [emp.email, ...alternateDomainEmails(emp.email)];
+            for (const email of allEmails) {
+                raw = await findUserByEmail(email);
+                if (raw?.sAMAccountName) break;
+            }
+        }
+
+        // Strategy 3: name search fallback — match by username part across domains
+        if (!raw && emp?.name) {
+            const dbUsername = (emp.email || '').toLowerCase().split('@')[0];
+            const results    = await searchUsersByName(emp.name.split(' ')[0]);
+            const hit = results.find(u =>
+                (u.mail || u.email || '').toLowerCase().split('@')[0] === dbUsername
+            );
+            if (hit) raw = hit;
         }
 
         if (!raw) return res.json({ found: false, profile: null });
 
-        // Get full profile with account status, groups, timestamps
+        // Enrich with full profile (account status, groups, timestamps) when available
         const profile = raw.accountStatus
-            ? raw   // already parsed (came from findUserByEmployeeId with FULL_PROFILE_ATTRS)
+            ? raw
             : (await getFullADProfile(raw.sAMAccountName)) || parseADProfile(raw);
 
         res.json({ found: true, profile });

@@ -273,10 +273,12 @@ function renderEmpList(emps) {
 async function loadDepts() {
   try {
     const data = await (await window.iflFetch('/admin/departments')).json();
+    // /admin/departments returns { success, data: [{ departmentName, originalDeptName, ... }] }
+    const rows = data.data || data.departments || (Array.isArray(data) ? data : []);
     const sel  = document.getElementById('deptFilter');
-    (data.departments || data || []).forEach(d => {
-      const name = d.mainDept || d.name || d;
-      if (!name) return;
+    rows.forEach(d => {
+      const name = d.originalDeptName || d.departmentName || d.mainDept || d.name || d;
+      if (!name || typeof name !== 'string') return;
       const o = document.createElement('option');
       o.value = name; o.textContent = name;
       sel.appendChild(o);
