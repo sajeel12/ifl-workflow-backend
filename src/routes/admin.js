@@ -45,6 +45,7 @@ router.get('/onboarding-timeline/:id',          ...guard, adminController.getOnb
 
 // ── Employee Journey APIs (admin-only, adminApiGuard) ─────────────────────
 router.get('/ej/employees',                              ...guard, ejController.listEmployees);
+router.get('/ej/employees-ad-batch',                     ...guard, ejController.getEmployeesAdBatch);
 router.get('/ej/employees/:employeeNumber',              ...guard, ejController.getEmployeeDetail);
 router.get('/ej/employees/:employeeNumber/ad-profile',   ...guard, ejController.getEmployeeAdProfile);
 router.get('/ej/requests/:requestId/timeline',           ...guard, ejController.getRequestTimeline);

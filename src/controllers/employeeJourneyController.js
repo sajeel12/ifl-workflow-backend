@@ -234,6 +234,49 @@ export async function getEmployeeAdProfile(req, res) {
     }
 }
 
+// ── Batch AD status check — same multi-strategy as getEmployeeAdProfile ──────────
+// Used by the search list to populate badges after the DB results render.
+export async function getEmployeesAdBatch(req, res) {
+    try {
+        const ids = (req.query.ids || '')
+            .split(',').map(s => s.trim()).filter(Boolean).slice(0, 25);
+
+        if (!ids.length) return res.json({});
+
+        const out = {};
+        await Promise.all(ids.map(async id => {
+            let raw = null;
+
+            // Strategy 1: employeeId sidecar (exact, domain-agnostic)
+            raw = await findUserByEmployeeIdViaSidecar(id);
+
+            // Strategy 2: email + all domain variants via sidecar
+            if (!raw) {
+                try {
+                    const emp = await Employee.findOne({
+                        where: { employeeId: id }, attributes: ['email']
+                    });
+                    if (emp?.email) {
+                        for (const email of [emp.email, ...alternateDomainEmails(emp.email)]) {
+                            raw = await findUserByEmail(email);
+                            if (raw?.sAMAccountName) break;
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            out[id] = raw?.sAMAccountName
+                ? { found: true,  sam: raw.sAMAccountName, mail: raw.mail || raw.email || null }
+                : { found: false };
+        }));
+
+        res.json(out);
+    } catch (err) {
+        console.error('[EJ] getEmployeesAdBatch failed:', err);
+        res.status(500).json({ error: 'Batch lookup failed' });
+    }
+}
+
 // ── Unused graph endpoints kept for future use ─────────────────────────────────
 export async function getEmployeeJourneyGraph(req, res) {
     res.status(501).json({ error: 'Not implemented — use /timeline per request' });

@@ -151,14 +151,15 @@ function showSearchPrompt() {
   document.getElementById('pageInfo').textContent = '';
 }
 
+// adStatus cache: employeeId → { found, sam, mail } — populated by batch request
+let adStatus = {};
+
 async function loadEmployees() {
   const search = document.getElementById('searchInput').value.trim();
   const dept   = document.getElementById('deptFilter').value;
   const status = document.getElementById('statusFilter').value;
 
   if (search.length < 2 && !dept) { showSearchPrompt(); return; }
-
-  const isNumber = /^\d+$/.test(search);
 
   const dbParams = new URLSearchParams({
     limit: PAGE_SIZE, offset: ejPage * PAGE_SIZE,
@@ -167,46 +168,25 @@ async function loadEmployees() {
     ...(status && { status })
   });
 
-  // AD search strategy decided BEFORE firing, not as a fallback:
-  //   number query  → search by employeeId directly (exact, no name/email guessing)
-  //   name/text     → search by name (username matching resolves cross-domain emails)
-  //   dept-only     → skip now, do per-employee lookups after DB results come back
-  let adPromise;
-  if (isNumber && search.length >= 2) {
-    adPromise = window.iflFetch(`/admin/ad-search?employeeId=${encodeURIComponent(search)}`)
-      .then(r => r.json()).catch(() => ({ results: [] }));
-  } else if (search.length >= 2) {
-    adPromise = window.iflFetch(`/admin/ad-search?q=${encodeURIComponent(search)}`)
-      .then(r => r.json()).catch(() => ({ results: [] }));
-  } else {
-    adPromise = Promise.resolve({ results: [] });
-  }
+  // For name searches only: parallel AD name search to populate "AD Only" section.
+  // Number/dept searches don't use this — AD status comes from the batch endpoint.
+  const isNameSearch = search.length >= 2 && !/^\d+$/.test(search);
+  const adNamePromise = isNameSearch
+    ? window.iflFetch(`/admin/ad-search?q=${encodeURIComponent(search)}`)
+        .then(r => r.json()).catch(() => ({ results: [] }))
+    : Promise.resolve({ results: [] });
 
   document.getElementById('empList').innerHTML =
     `<div style="padding:32px;text-align:center;color:var(--a-text-muted);">Searching…</div>`;
 
   try {
-    const [dbData, adData] = await Promise.all([
+    const [dbData, adNameData] = await Promise.all([
       window.iflFetch(`/admin/ej/employees?${dbParams}`).then(r => r.json()),
-      adPromise
+      adNamePromise
     ]);
 
-    let adResults = adData.results || [];
-
-    // Dept-filter-only search: AD can't be searched by dept, so look up each
-    // DB employee by employeeId to get accurate "in AD" badges
-    if (!search && dept && dbData.employees?.length) {
-      const batch = await Promise.all(
-        dbData.employees.slice(0, 15).map(e =>
-          window.iflFetch(`/admin/ad-search?employeeId=${encodeURIComponent(e.employeeId)}`)
-            .then(r => r.json()).catch(() => ({ results: [] }))
-        )
-      );
-      adResults = batch.flatMap(r => r.results || []);
-    }
-
-    // Build adMap — employeeID is primary key, email + username prefix as fallbacks
-    adCache = adResults;
+    // adCache/adMap used only for "AD Only" section (name search)
+    adCache = adNameData.results || [];
     adMap   = {};
     adCache.forEach(u => {
       const email = (u.mail || u.email || '').toLowerCase();
@@ -216,19 +196,52 @@ async function loadEmployees() {
       if (uname)        adMap[uname]                 = u;
     });
 
-    ejTotal = dbData.total || 0;
+    ejTotal  = dbData.total || 0;
+    adStatus = {};
     const emps = dbData.employees || [];
-    renderEmpList(emps);
 
-    const matchedCount = emps.filter(e => adLookup(e.email, e.employeeId)).length;
-    document.getElementById('empCount').textContent =
-      `${ejTotal} in DB · ${matchedCount} in AD`;
+    // Render list immediately — badges show "checking…" spinner
+    renderEmpList(emps);
+    document.getElementById('empCount').textContent = `${ejTotal} in DB`;
     updatePager();
+
+    // Fire ONE server-side batch — uses the same 4-strategy approach as the
+    // detail panel (employeeId sidecar → email + all domain variants → name)
+    // so badges will ALWAYS match what the detail view shows.
+    if (emps.length) {
+      const ids = emps.map(e => e.employeeId).join(',');
+      window.iflFetch(`/admin/ej/employees-ad-batch?ids=${encodeURIComponent(ids)}`)
+        .then(r => r.json())
+        .then(batch => {
+          adStatus = batch;
+          updateAdBadges(emps);
+          const matched = emps.filter(e => batch[e.employeeId]?.found).length;
+          document.getElementById('empCount').textContent = `${ejTotal} in DB · ${matched} in AD`;
+        })
+        .catch(() => {});
+    }
   } catch (e) {
     console.error('[EJ] loadEmployees failed:', e);
     document.getElementById('empList').innerHTML =
       `<div style="padding:32px;text-align:center;color:#ef4444;">Search failed. Try again.</div>`;
   }
+}
+
+// Update badges in-place when batch result arrives (no re-render, no flicker)
+function updateAdBadges(emps) {
+  emps.forEach(e => {
+    const badgeEl = document.getElementById(`ad-badge-${e.employeeId}`);
+    const metaEl  = document.getElementById(`ad-meta-${e.employeeId}`);
+    if (!badgeEl) return;
+    const s = adStatus[e.employeeId];
+    if (s?.found) {
+      badgeEl.innerHTML = `<span style="font-size:.67rem;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:10px;margin-left:5px;">AD ✓</span>`;
+      if (metaEl) metaEl.textContent = s.sam || '';
+    } else {
+      badgeEl.innerHTML = `<span style="font-size:.67rem;background:#f3f4f6;color:#9ca3af;padding:1px 6px;border-radius:10px;margin-left:5px;">No AD</span>`;
+      if (metaEl) metaEl.textContent = '';
+    }
+  });
 }
 
 // Extract username part before @ — the stable key across all domains
@@ -264,20 +277,14 @@ function renderEmpList(emps) {
 
   let html = '';
 
-  // DB employees — badge shows AD account status; employeeID match is most reliable
+  // DB employees — badges start as "checking…" and update in-place via updateAdBadges()
   html += emps.map(e => {
-    const adUser = adLookup(e.email, e.employeeId);
-    const adBadge = adUser
-      ? `<span style="font-size:.67rem;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:10px;margin-left:5px;">AD ✓</span>`
-      : `<span style="font-size:.67rem;background:#f3f4f6;color:#9ca3af;padding:1px 6px;border-radius:10px;margin-left:5px;">No AD</span>`;
-    const adSam = adUser
-      ? `<span style="font-family:monospace;font-size:.72rem;">${escHtml(adUser.sAMAccountName)}</span>`
-      : '';
+    const checking = `<span style="font-size:.67rem;background:#f3f4f6;color:#9ca3af;padding:1px 6px;border-radius:10px;margin-left:5px;">…</span>`;
     return `
       <div class="ej-emp${activeEmpId === e.employeeId ? ' ej-emp--active' : ''}"
            onclick="selectEmployee(this, '${e.employeeId}')">
-        <div class="ej-emp__name">${escHtml(e.name || '—')}${adBadge}</div>
-        <div class="ej-emp__meta">#${e.employeeId} · ${escHtml(e.mainDept || 'N/A')}${adSam ? ' · ' + adSam : ''}</div>
+        <div class="ej-emp__name">${escHtml(e.name || '—')}<span id="ad-badge-${e.employeeId}">${checking}</span></div>
+        <div class="ej-emp__meta">#${e.employeeId} · ${escHtml(e.mainDept || 'N/A')} · <span id="ad-meta-${e.employeeId}" style="font-family:monospace;font-size:.72rem;"></span></div>
       </div>`;
   }).join('');
 
