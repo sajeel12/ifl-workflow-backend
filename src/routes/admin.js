@@ -52,10 +52,18 @@ router.post('/system-config/update',            ...guard, adminController.update
 router.post('/onboarding/:id/resend-email',     ...guard, adminController.resendStageEmail);
 
 // Search AD users by name/sAMAccountName/email — powers the approver search box.
+// Also accepts ?employeeId=X for a reliable exact-match lookup by employeeID attribute.
 router.get('/ad-search', ...guard, async (req, res) => {
-    const q = (req.query.q || '').trim();
-    if (q.length < 2) return res.status(400).json({ success: false, error: 'q must be at least 2 characters' });
+    const q          = (req.query.q          || '').trim();
+    const employeeId = (req.query.employeeId || '').trim();
+
     try {
+        if (employeeId) {
+            const { findUserByEmployeeIdViaSidecar } = await import('../services/adService.js');
+            const user = await findUserByEmployeeIdViaSidecar(employeeId);
+            return res.json({ success: true, results: user ? [user] : [] });
+        }
+        if (q.length < 2) return res.status(400).json({ success: false, error: 'q must be at least 2 characters' });
         const results = await searchUsersByName(q);
         res.json({ success: true, results });
     } catch (err) {

@@ -85,17 +85,47 @@
                 searcher.PropertiesToLoad.Add("mail");
                 searcher.PropertiesToLoad.Add("title");
                 searcher.PropertiesToLoad.Add("employeeID");
+                searcher.PropertiesToLoad.Add("userAccountControl");
+                searcher.PropertiesToLoad.Add("whenCreated");
+                searcher.PropertiesToLoad.Add("memberOf");
 
                 foreach (SearchResult r in searcher.FindAll()) {
                     string sam  = Prop(r, "sAMAccountName");
                     string name = Prop(r, "displayName");
                     if (string.IsNullOrEmpty(sam) || string.IsNullOrEmpty(name)) continue;
+
+                    // userAccountControl — bit 1 (value 2) means disabled
+                    int uac = 0;
+                    if (r.Properties["userAccountControl"].Count > 0)
+                        int.TryParse(r.Properties["userAccountControl"][0]?.ToString(), out uac);
+
+                    // whenCreated — comes back as DateTime from DirectorySearcher
+                    string createdAt = "";
+                    try {
+                        if (r.Properties["whenCreated"].Count > 0) {
+                            var v = r.Properties["whenCreated"][0];
+                            createdAt = (v is DateTime)
+                                ? ((DateTime)v).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                                : v?.ToString() ?? "";
+                        }
+                    } catch {}
+
+                    // memberOf — array of group DN strings
+                    var grps = new System.Collections.Generic.List<string>();
+                    foreach (var g in r.Properties["memberOf"])
+                        if (g != null) grps.Add(g.ToString());
+
                     out_results.Add(new {
-                        sAMAccountName = sam,
-                        displayName    = name,
-                        email          = Prop(r, "mail"),
-                        title          = Prop(r, "title"),
-                        employeeID     = Prop(r, "employeeID")
+                        sAMAccountName  = sam,
+                        displayName     = name,
+                        mail            = Prop(r, "mail"),
+                        email           = Prop(r, "mail"),   // alias — both keys for compat
+                        title           = Prop(r, "title"),
+                        employeeID      = Prop(r, "employeeID"),
+                        accountEnabled  = (uac & 2) == 0,
+                        userAccountControl = uac,
+                        createdAt       = createdAt,
+                        memberOf        = grps
                     });
                 }
                 return true;

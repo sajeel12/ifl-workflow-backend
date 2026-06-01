@@ -401,26 +401,37 @@ export const getFullADProfile = async (sAMAccountName) => {
 export function parseADProfile(raw) {
     if (!raw) return null;
 
-    const uac      = parseInt(raw.userAccountControl || '0', 10);
-    const disabled = (uac & 2) !== 0;
+    // accountEnabled: sidecar pre-computes this as a boolean; LDAP uses UAC bits
+    let disabled;
+    if (typeof raw.accountEnabled === 'boolean') {
+        disabled = !raw.accountEnabled;
+    } else {
+        const uac = parseInt(raw.userAccountControl || '0', 10);
+        disabled  = (uac & 2) !== 0;
+    }
 
-    // Extract friendly group names from DN strings
+    // Groups: sidecar returns full DN strings; LDAP also returns DN strings
+    // Extract friendly CN name from each DN
     const groups = []
         .concat(raw.memberOf || [])
         .map(dn => { const m = String(dn).match(/^CN=([^,]+)/i); return m ? m[1] : dn; })
         .filter(Boolean);
 
-    // Windows FILETIME → JS Date
+    // Windows FILETIME → JS Date (LDAP path only — sidecar returns ISO string for whenCreated)
     const ft2date = v => {
         const n = parseInt(v, 10);
         if (!n || n <= 0) return null;
         return new Date(Math.round(n / 10000) - 11644473600000);
     };
 
+    // createdAt: sidecar returns ISO string; LDAP returns via whenCreated field
+    const createdAt = raw.createdAt || (raw.whenCreated ? String(raw.whenCreated) : null) || null;
+
     return {
         sAMAccountName:  raw.sAMAccountName  || null,
         displayName:     raw.displayName     || null,
-        mail:            raw.mail            || null,
+        // sidecar returns both 'mail' and 'email' keys; LDAP returns 'mail'
+        mail:            raw.mail || raw.email || null,
         upn:             raw.userPrincipalName || null,
         employeeID:      raw.employeeID      || null,
         department:      raw.department      || null,
@@ -430,7 +441,7 @@ export function parseADProfile(raw) {
         accountEnabled:  !disabled,
         accountStatus:   disabled ? 'Disabled' : 'Enabled',
         groups,
-        createdAt:       raw.whenCreated     || null,
+        createdAt:       createdAt,
         lastLogon:       ft2date(raw.lastLogonTimestamp),
         pwdLastSet:      ft2date(raw.pwdLastSet),
     };
