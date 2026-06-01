@@ -4,6 +4,7 @@ import OffboardingRequest from '../models/OffboardingRequest.js';
 import RequestStageEvent from '../models/RequestStageEvent.js';
 import { Op } from 'sequelize';
 import { STATUS_LABEL } from '../utils/workflowLabels.js';
+import { findUserByEmployeeId, findUserByEmail, getFullADProfile, parseADProfile } from '../services/adService.js';
 
 // ── Employee list ──────────────────────────────────────────────────────────────
 export async function listEmployees(req, res) {
@@ -168,6 +169,37 @@ export async function getRequestTimeline(req, res) {
     } catch (error) {
         console.error('[EJ] getRequestTimeline failed:', error);
         res.status(500).json({ error: 'Failed to fetch request timeline' });
+    }
+}
+
+// ── 360° AD profile for a single employee ─────────────────────────────────────
+export async function getEmployeeAdProfile(req, res) {
+    try {
+        const { employeeNumber } = req.params;
+
+        // Strategy 1: match by employeeID attribute (set by AD admin bulk script)
+        let raw = await findUserByEmployeeId(employeeNumber);
+
+        // Strategy 2: fallback to email lookup if employeeID not yet set in AD
+        if (!raw) {
+            const emp = await Employee.findOne({
+                where: { employeeId: employeeNumber },
+                attributes: ['email']
+            });
+            if (emp?.email) raw = await findUserByEmail(emp.email);
+        }
+
+        if (!raw) return res.json({ found: false, profile: null });
+
+        // Get full profile with account status, groups, timestamps
+        const profile = raw.accountStatus
+            ? raw   // already parsed (came from findUserByEmployeeId with FULL_PROFILE_ATTRS)
+            : (await getFullADProfile(raw.sAMAccountName)) || parseADProfile(raw);
+
+        res.json({ found: true, profile });
+    } catch (err) {
+        console.error('[EJ] getEmployeeAdProfile failed:', err);
+        res.status(500).json({ error: 'Failed to fetch AD profile' });
     }
 }
 

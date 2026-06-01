@@ -294,6 +294,120 @@ export const searchUsersByName = async (q) => {
     }
 };
 
+// ── Internal: search by arbitrary LDAP filter, returns first match ────────────────
+function _searchByFilter(client, filter, attrs, label) {
+    return new Promise(resolve => {
+        try {
+            client.findUsers({ filter, attributes: attrs }, false, (err, users) => {
+                if (err) { logger.debug(`[ADService] [${label}] filter search error: ${err.message}`); resolve(null); }
+                else      resolve(users && users.length ? users[0] : null);
+            });
+        } catch (e) {
+            logger.warn(`[ADService] [${label}] filter search exception: ${e.message}`);
+            resolve(null);
+        }
+    });
+}
+
+// Full set of attributes we want for the 360° employee profile
+const FULL_PROFILE_ATTRS = [
+    'sAMAccountName', 'displayName', 'cn', 'mail', 'userPrincipalName',
+    'employeeID', 'department', 'title', 'description',
+    'userAccountControl', 'memberOf',
+    'whenCreated', 'lastLogonTimestamp', 'pwdLastSet',
+    'telephoneNumber', 'mobile', 'physicalDeliveryOfficeName'
+];
+
+/**
+ * Find an AD user by their employeeID attribute.
+ * Uses direct LDAP (not the sidecar — sidecar only searches by name/email).
+ * Returns a rich profile object or null.
+ */
+export const findUserByEmployeeId = async (employeeId) => {
+    if (!employeeId) return null;
+    const filter = `(employeeID=${employeeId})`;
+
+    const sources = [
+        ad   && { client: ad,   label: 'PRIMARY' },
+        adGC && { client: adGC, label: 'GC' },
+        ...adExtra.map((c, i) => ({ client: c, label: `EXTRA_${i}` })),
+    ].filter(Boolean);
+
+    if (!sources.length) { logger.warn(`[ADService] No AD clients — cannot search by employeeID`); return null; }
+
+    for (const { client, label } of sources) {
+        const user = await _searchByFilter(client, filter, FULL_PROFILE_ATTRS, label);
+        if (user && user.sAMAccountName) {
+            logger.info(`[ADService] findUserByEmployeeId(${employeeId}) → ${user.sAMAccountName} via ${label}`);
+            return user;
+        }
+    }
+    logger.warn(`[ADService] findUserByEmployeeId(${employeeId}) not found`);
+    return null;
+};
+
+/**
+ * Get the full AD profile for a known sAMAccountName.
+ * Returns a rich object with account status, groups, timestamps — or null.
+ */
+export const getFullADProfile = async (sAMAccountName) => {
+    if (!sAMAccountName) return null;
+    const filter = `(sAMAccountName=${sAMAccountName})`;
+
+    const sources = [
+        ad   && { client: ad,   label: 'PRIMARY' },
+        adGC && { client: adGC, label: 'GC' },
+        ...adExtra.map((c, i) => ({ client: c, label: `EXTRA_${i}` })),
+    ].filter(Boolean);
+
+    for (const { client, label } of sources) {
+        const user = await _searchByFilter(client, filter, FULL_PROFILE_ATTRS, label);
+        if (user && user.sAMAccountName) return parseADProfile(user);
+    }
+    return null;
+};
+
+/**
+ * Parse raw AD object into a clean profile for the UI.
+ */
+export function parseADProfile(raw) {
+    if (!raw) return null;
+
+    const uac      = parseInt(raw.userAccountControl || '0', 10);
+    const disabled = (uac & 2) !== 0;
+
+    // Extract friendly group names from DN strings
+    const groups = []
+        .concat(raw.memberOf || [])
+        .map(dn => { const m = String(dn).match(/^CN=([^,]+)/i); return m ? m[1] : dn; })
+        .filter(Boolean);
+
+    // Windows FILETIME → JS Date
+    const ft2date = v => {
+        const n = parseInt(v, 10);
+        if (!n || n <= 0) return null;
+        return new Date(Math.round(n / 10000) - 11644473600000);
+    };
+
+    return {
+        sAMAccountName:  raw.sAMAccountName  || null,
+        displayName:     raw.displayName     || null,
+        mail:            raw.mail            || null,
+        upn:             raw.userPrincipalName || null,
+        employeeID:      raw.employeeID      || null,
+        department:      raw.department      || null,
+        title:           raw.title           || null,
+        phone:           raw.telephoneNumber || raw.mobile || null,
+        office:          raw.physicalDeliveryOfficeName || null,
+        accountEnabled:  !disabled,
+        accountStatus:   disabled ? 'Disabled' : 'Enabled',
+        groups,
+        createdAt:       raw.whenCreated     || null,
+        lastLogon:       ft2date(raw.lastLogonTimestamp),
+        pwdLastSet:      ft2date(raw.pwdLastSet),
+    };
+}
+
 // ── Expose raw attempt details for the diagnostic endpoint ─────────────────────
 export const diagnoseLookup = async (username) => {
     const results = [];

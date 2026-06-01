@@ -292,49 +292,91 @@ async function selectEmployee(el, empId) {
   center.innerHTML = `<div style="padding:60px;text-align:center;color:var(--a-text-muted);">Loading…</div>`;
 
   try {
-    const detail = await (await window.iflFetch(`/admin/ej/employees/${empId}`)).json();
-
-    // Try to find AD user — first from current search cache, then via /admin/ad-user
-    let adUser = adMap[(detail.employee.email || '').toLowerCase()] || null;
-    if (!adUser && detail.employee.email) {
-      try {
-        const r = await window.iflFetch(`/admin/ad-user?email=${encodeURIComponent(detail.employee.email)}`);
-        const d = await r.json();
-        if (d.found) adUser = { sAMAccountName: d.sAMAccountName, displayName: d.displayName, mail: d.mail };
-      } catch (_) {}
-    }
-
-    renderCenter(detail, adUser);
+    // Fire DB profile and AD profile in parallel
+    const [detail, adResult] = await Promise.all([
+      window.iflFetch(`/admin/ej/employees/${empId}`).then(r => r.json()),
+      window.iflFetch(`/admin/ej/employees/${empId}/ad-profile`).then(r => r.json()).catch(() => ({ found: false, profile: null }))
+    ]);
+    renderCenter(detail, adResult.found ? adResult.profile : null);
   } catch (e) {
     console.error('[EJ] selectEmployee failed:', e);
     center.innerHTML = `<div style="padding:60px;text-align:center;color:#ef4444;">Failed to load journey.</div>`;
   }
 }
 
-function renderCenter({ employee, summary, recentRequests }, adUser) {
-  const statusBadge = `<span class="badge badge--${employee.status === 'Active' ? 'green' : 'gray'}">${escHtml(employee.status || 'Unknown')}</span>`;
+function fmtD(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }); }
+  catch { return '—'; }
+}
 
-  const adSection = adUser
-    ? `<div style="margin-top:10px;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:.82rem;display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
-         <span style="font-weight:600;color:#065f46;">AD Account</span>
-         <span style="font-family:monospace;background:#dcfce7;padding:1px 7px;border-radius:4px;color:#166534;">${escHtml(adUser.sAMAccountName)}</span>
-         ${adUser.mail ? `<span style="color:#374151;">${escHtml(adUser.mail)}</span>` : ''}
-         ${adUser.title ? `<span style="color:#6b7280;">${escHtml(adUser.title)}</span>` : ''}
-       </div>`
-    : `<div style="margin-top:10px;padding:7px 12px;background:#f9fafb;border:1px solid var(--a-border);border-radius:6px;font-size:.8rem;color:#9ca3af;">
-         No AD account found for this employee
-       </div>`;
+function renderCenter({ employee, summary, recentRequests }, ad) {
+  const empStatusBadge = `<span class="badge badge--${employee.status === 'Active' ? 'green' : 'gray'}">${escHtml(employee.status || 'Unknown')}</span>`;
+  const adStatusBadge  = ad
+    ? `<span class="badge badge--${ad.accountEnabled ? 'green' : 'red'}">${ad.accountStatus}</span>`
+    : '';
+
+  // AD groups — show top 5, collapse rest
+  const groups = ad?.groups || [];
+  const groupsHtml = groups.length
+    ? groups.slice(0, 5).map(g =>
+        `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:.7rem;padding:1px 7px;border-radius:10px;margin:2px 2px 2px 0;">${escHtml(g)}</span>`
+      ).join('') + (groups.length > 5 ? `<span style="font-size:.7rem;color:var(--a-text-muted);margin-left:4px;">+${groups.length - 5} more</span>` : '')
+    : '<span style="font-size:.78rem;color:var(--a-text-muted);">No groups</span>';
+
+  const adPanel = ad ? `
+    <div style="flex:1;min-width:220px;">
+      <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0369a1;margin-bottom:8px;">AD Account ${adStatusBadge}</div>
+      <table style="font-size:.8rem;border-collapse:collapse;width:100%;">
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;white-space:nowrap;">Login</td>
+            <td><code style="background:#f0f9ff;padding:1px 6px;border-radius:3px;font-size:.78rem;">${escHtml(ad.sAMAccountName)}</code></td></tr>
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Email</td>
+            <td>${escHtml(ad.mail || '—')}</td></tr>
+        ${ad.title ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Title</td><td>${escHtml(ad.title)}</td></tr>` : ''}
+        ${ad.phone ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Phone</td><td>${escHtml(ad.phone)}</td></tr>` : ''}
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Last Login</td>
+            <td>${fmtD(ad.lastLogon)}</td></tr>
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Acc Created</td>
+            <td>${fmtD(ad.createdAt)}</td></tr>
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;vertical-align:top;">Groups</td>
+            <td style="padding-top:4px;">${groupsHtml}</td></tr>
+      </table>
+    </div>` : `
+    <div style="flex:1;min-width:220px;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;color:var(--a-text-muted);font-size:.82rem;padding:16px;">
+        <div style="font-size:1.5rem;opacity:.3;margin-bottom:6px;">🔒</div>
+        No AD account<br>linked via Employee ID
+      </div>
+    </div>`;
 
   document.getElementById('journeyCenter').innerHTML = `
+    <!-- 360° Profile Card -->
     <div class="ej-emp-hd">
-      <div class="ej-emp-hd__name">${escHtml(employee.name || '—')} ${statusBadge}</div>
-      <div class="ej-emp-hd__meta">
-        <span>ID: ${employee.employeeId}</span>
-        <span>${escHtml(employee.department || 'N/A')}</span>
-        <span>${escHtml(employee.location || 'N/A')}</span>
-        <span>${escHtml(employee.email || '—')}</span>
+      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div class="ej-emp-hd__name">${escHtml(employee.name || '—')} ${empStatusBadge}</div>
+          <div style="font-size:.75rem;color:var(--a-text-muted);margin-top:2px;">Employee ID: <strong>${employee.employeeId}</strong></div>
+        </div>
+        <span style="font-size:.68rem;background:#eff6ff;color:#1d4ed8;padding:3px 10px;border-radius:20px;font-weight:600;align-self:flex-start;">360° Profile</span>
       </div>
-      ${adSection}
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <!-- DB Profile -->
+        <div style="flex:1;min-width:200px;border-right:1px solid var(--a-border);padding-right:20px;">
+          <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7c3aed;margin-bottom:8px;">HR / DB Record</div>
+          <table style="font-size:.8rem;border-collapse:collapse;width:100%;">
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;white-space:nowrap;">Department</td>
+                <td>${escHtml(employee.department || 'N/A')}</td></tr>
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Location</td>
+                <td>${escHtml(employee.location || 'N/A')}</td></tr>
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Email</td>
+                <td>${escHtml(employee.email || '—')}</td></tr>
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Joined</td>
+                <td>${fmtD(employee.joiningDate)}</td></tr>
+          </table>
+        </div>
+        <!-- AD Profile -->
+        ${adPanel}
+      </div>
     </div>
     <div class="ej-stats">
       <div class="ej-stat"><div class="ej-stat__num" style="color:#0078D4;">${summary.totalRequests}</div><div class="ej-stat__lbl">Total</div></div>
