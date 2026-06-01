@@ -98,18 +98,23 @@
                     if (string.IsNullOrEmpty(sam) || string.IsNullOrEmpty(name)) continue;
 
                     // userAccountControl — bit 1 (value 2) means disabled
+                    // NOTE: no C# 6 null-conditional (?.) — the inline ASPX compiler
+                    // on this server is C# 5; ?. causes a compile error (HTTP 500).
                     int uac = 0;
-                    if (r.Properties["userAccountControl"].Count > 0)
-                        int.TryParse(r.Properties["userAccountControl"][0]?.ToString(), out uac);
+                    if (r.Properties["userAccountControl"].Count > 0) {
+                        object uacVal = r.Properties["userAccountControl"][0];
+                        if (uacVal != null) int.TryParse(uacVal.ToString(), out uac);
+                    }
 
                     // whenCreated — comes back as DateTime from DirectorySearcher
                     string createdAt = "";
                     try {
                         if (r.Properties["whenCreated"].Count > 0) {
-                            var v = r.Properties["whenCreated"][0];
-                            createdAt = (v is DateTime)
-                                ? ((DateTime)v).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-                                : v?.ToString() ?? "";
+                            object v = r.Properties["whenCreated"][0];
+                            if (v is DateTime)
+                                createdAt = ((DateTime)v).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
+                            else if (v != null)
+                                createdAt = v.ToString();
                         }
                     } catch {}
 
