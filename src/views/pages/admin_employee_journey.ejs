@@ -173,7 +173,9 @@ async function loadEmployees() {
     `<div style="padding:32px;text-align:center;color:var(--a-text-muted);">Searching…</div>`;
 
   try {
-    // Fire DB search and AD search in parallel
+    // Fire DB + AD search in parallel.
+    // AD sidecar searches by name/SAM/email only — a pure-number query (employee ID)
+    // returns 0 AD results. We handle that below with a supplemental name search.
     const [dbData, adData] = await Promise.all([
       window.iflFetch(`/admin/ej/employees?${params}`).then(r => r.json()),
       search.length >= 2
@@ -181,23 +183,42 @@ async function loadEmployees() {
         : Promise.resolve({ results: [] })
     ]);
 
-    // Build lookup maps keyed by BOTH full email AND username-part (before @)
-    // This handles the multi-domain case: user@ifl.net and user@igc.com.pk
-    // are the same person — both index to the same AD entry.
-    adCache = adData.results || [];
+    let adResults = adData.results || [];
+
+    // If the primary AD search returned nothing but DB has results, the search was
+    // likely by employee ID (a number) which the sidecar can't resolve.
+    // Fire supplemental name-based AD searches for each DB employee's first name.
+    if (adResults.length === 0 && dbData.employees?.length) {
+      const tokens = [...new Set(
+        dbData.employees.map(e => (e.name || '').split(' ')[0]).filter(t => t.length >= 2)
+      )].slice(0, 5);                    // cap at 5 to avoid too many calls
+      const supplemental = await Promise.all(
+        tokens.map(t =>
+          window.iflFetch(`/admin/ad-search?q=${encodeURIComponent(t)}`)
+            .then(r => r.json()).catch(() => ({ results: [] }))
+        )
+      );
+      adResults = supplemental.flatMap(r => r.results || []);
+    }
+
+    // Build lookup maps: full email AND username-part (cross-domain safe)
+    adCache = adResults;
     adMap   = {};
     adCache.forEach(u => {
       const email    = (u.mail || u.email || '').toLowerCase();
       const username = email.split('@')[0];
-      if (email)    adMap[email]    = u;   // exact match
-      if (username) adMap[username] = u;   // username-only match (cross-domain)
+      if (email)    adMap[email]    = u;
+      if (username) adMap[username] = u;
     });
 
     ejTotal = dbData.total || 0;
-    renderEmpList(dbData.employees || []);
-    const adCount = adCache.length;
+    const emps = dbData.employees || [];
+    renderEmpList(emps);
+
+    // Count matched (DB employees that have an AD account) not raw AD results
+    const matchedCount = emps.filter(e => adLookup(e.email)).length;
     document.getElementById('empCount').textContent =
-      `${ejTotal} in DB · ${adCount} in AD`;
+      `${ejTotal} in DB · ${matchedCount} in AD`;
     updatePager();
   } catch (e) {
     console.error('[EJ] loadEmployees failed:', e);
