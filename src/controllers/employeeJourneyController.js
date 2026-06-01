@@ -222,15 +222,14 @@ export async function getEmployeeAdProfile(req, res) {
 
         if (!raw) return res.json({ found: false, profile: null });
 
-        // Enrich basic records with full AD attributes (office, city, groups,
-        // account status, created date) via the sidecar search by sAMAccountName.
-        // Strategy 3 (findUserByEmail / adlookup.aspx) only returns sAM+mail+name,
-        // so without this the AD Office/City/Groups fields stay empty.
+        // SIDECAR ONLY — LDAP is not used. Always enrich the resolved account via
+        // adsearch.aspx (by sAMAccountName) to pull the full attribute set:
+        // office, locality, memberOf, accountEnabled, createdAt. Strategy 3
+        // (findUserByEmail) only returns sAM+mail+name, so this is what makes the
+        // AD Office / City / Groups / Created fields populate.
         raw = await enrichViaSidecar(raw);
 
-        // LDAP full profile if configured, otherwise parse the enriched sidecar record.
-        const profile = (await getFullADProfile(raw.sAMAccountName)) || parseADProfile(raw);
-
+        const profile = parseADProfile(raw);
         res.json({ found: true, profile });
     } catch (err) {
         console.error('[EJ] getEmployeeAdProfile failed:', err);
@@ -238,14 +237,13 @@ export async function getEmployeeAdProfile(req, res) {
     }
 }
 
-// Enrich a basic AD record (sAM+mail+name from adlookup.aspx) with the full
-// attribute set by searching adsearch.aspx for the exact sAMAccountName.
-// adsearch.aspx returns office, locality, memberOf, accountEnabled, createdAt.
-// No-op if the record is already rich (came from employeeId/name sidecar search).
+// Enrich an AD record with the full attribute set by searching adsearch.aspx
+// for the exact sAMAccountName. adsearch.aspx returns office, locality,
+// memberOf, accountEnabled, createdAt. Always runs unless the record already
+// carries office (i.e. it already came from a rich sidecar search).
 async function enrichViaSidecar(raw) {
     if (!raw || !raw.sAMAccountName) return raw;
-    // Already rich? sidecar search/employeeId results include memberOf + office.
-    if (Array.isArray(raw.memberOf) || raw.office !== undefined) return raw;
+    if (raw.office !== undefined && raw.createdAt !== undefined) return raw; // already rich
     try {
         const results = await searchUsersByName(raw.sAMAccountName);
         const exact = (results || []).find(u =>
