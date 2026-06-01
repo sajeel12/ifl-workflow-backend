@@ -181,12 +181,16 @@ async function loadEmployees() {
         : Promise.resolve({ results: [] })
     ]);
 
-    // Build email → adUser map
+    // Build lookup maps keyed by BOTH full email AND username-part (before @)
+    // This handles the multi-domain case: user@ifl.net and user@igc.com.pk
+    // are the same person — both index to the same AD entry.
     adCache = adData.results || [];
     adMap   = {};
     adCache.forEach(u => {
-      const email = (u.mail || u.email || '').toLowerCase();
-      if (email) adMap[email] = u;
+      const email    = (u.mail || u.email || '').toLowerCase();
+      const username = email.split('@')[0];
+      if (email)    adMap[email]    = u;   // exact match
+      if (username) adMap[username] = u;   // username-only match (cross-domain)
     });
 
     ejTotal = dbData.total || 0;
@@ -202,12 +206,26 @@ async function loadEmployees() {
   }
 }
 
+// Extract username part before @ — the stable key across all domains
+function emailUsername(email) {
+  return (email || '').toLowerCase().split('@')[0];
+}
+
+// Look up an AD user by DB email, trying full email first then username-only
+function adLookup(dbEmail) {
+  if (!dbEmail) return null;
+  const full = dbEmail.toLowerCase();
+  const user = emailUsername(dbEmail);
+  return adMap[full] || adMap[user] || null;
+}
+
 function renderEmpList(emps) {
-  // Find AD users that have no matching DB employee record
-  const dbEmails = new Set(emps.map(e => (e.email || '').toLowerCase()).filter(Boolean));
-  adUnmatched    = adCache.filter(u => {
-    const email = (u.mail || u.email || '').toLowerCase();
-    return email && !dbEmails.has(email);
+  // An AD user is "matched" to a DB employee if their username parts are equal
+  // (covers @ifl.net vs @igc.com.pk vs @igcpk.com — same person, different domain)
+  const dbUsernames = new Set(emps.map(e => emailUsername(e.email)).filter(Boolean));
+  adUnmatched = adCache.filter(u => {
+    const adUsername = emailUsername(u.mail || u.email || '');
+    return adUsername && !dbUsernames.has(adUsername);
   });
 
   if (!emps.length && !adUnmatched.length) {
@@ -218,13 +236,15 @@ function renderEmpList(emps) {
 
   let html = '';
 
-  // DB employees with AD match badge
+  // DB employees — badge shows AD account status matched via username (cross-domain safe)
   html += emps.map(e => {
-    const adUser = adMap[(e.email || '').toLowerCase()];
+    const adUser = adLookup(e.email);
     const adBadge = adUser
       ? `<span style="font-size:.67rem;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:10px;margin-left:5px;">AD ✓</span>`
       : `<span style="font-size:.67rem;background:#f3f4f6;color:#9ca3af;padding:1px 6px;border-radius:10px;margin-left:5px;">No AD</span>`;
-    const adSam  = adUser ? `<span style="font-family:monospace;font-size:.72rem;">${escHtml(adUser.sAMAccountName)}</span>` : '';
+    const adSam = adUser
+      ? `<span style="font-family:monospace;font-size:.72rem;">${escHtml(adUser.sAMAccountName)}</span>`
+      : '';
     return `
       <div class="ej-emp${activeEmpId === e.employeeId ? ' ej-emp--active' : ''}"
            onclick="selectEmployee(this, '${e.employeeId}')">
