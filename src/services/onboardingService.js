@@ -224,7 +224,8 @@ export const handleOPSAction = async (token, checklistData, opsName) => {
             opsChecklist: checklistData,
             opsCompletedAt: new Date(),
             currentStageToken: null, // Flow Ends
-            currentStageAssigneeEmail: null
+            currentStageAssigneeEmail:    null,
+            currentStageAssigneeUsername: null
         });
         await logTimelineEvent(request.id, 'OPS Checklist Completed', 'OPS', JSON.stringify(checklistData));
         logger.info(`[Onboarding] Request ${request.id} COMPLETED.`);

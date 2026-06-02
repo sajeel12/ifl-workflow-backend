@@ -15,9 +15,13 @@
         display: flex; flex-wrap: wrap; gap: 14px;
         align-items: center; justify-content: space-between;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        border-top: 4px solid var(--role-accent, #0078D4);
     }
-    .pd-hero-left h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 4px; }
-    .pd-hero-left p  { font-size: 0.84rem; color: #64748b; margin: 0; }
+    .pd-hero-left h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+    .pd-hero-left .pd-role-desc {
+        font-size: 0.8rem; color: #64748b; margin: 0 0 4px; line-height: 1.4;
+    }
+    .pd-hero-left .pd-user-email { font-size: 0.78rem; color: #94a3b8; margin: 0; }
 
     .pd-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pd-badge {
@@ -149,6 +153,29 @@
     .sp-pending   { background: #FEF3C7; color: #92400E; }
     .sp-other     { background: #F1F5F9; color: #475569; }
 
+    /* ── Multi-role notice ──────────────────────────────── */
+    .pd-multi-role {
+        background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px;
+        padding: 14px 18px; margin-bottom: 20px;
+        display: flex; align-items: flex-start; gap: 12px;
+        font-size: 0.855rem; color: #334155;
+    }
+    .pd-mr-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .pd-mr-body strong { color: #0f172a; }
+    .pd-mr-body p { margin: 0 0 10px; line-height: 1.5; }
+    .pd-mr-links { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pd-mr-link {
+        display: flex; flex-direction: column; gap: 3px;
+        padding: 9px 13px; border-radius: 7px;
+        background: #fff; border: 1px solid #e2e8f0;
+        border-left-width: 3px; text-decoration: none;
+        transition: box-shadow 0.12s;
+        min-width: 170px;
+    }
+    .pd-mr-link:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .pd-mr-label { font-size: 0.82rem; font-weight: 700; }
+    .pd-mr-url   { font-size: 0.7rem; color: #94a3b8; font-family: monospace; }
+
     /* ── HR-specific: initiate banner ───────────────────── */
     .hr-initiate {
         background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px;
@@ -164,13 +191,14 @@
     .btn-initiate:hover { background: #15803d; }
 </style>
 
-<div class="pd-wrap">
+<div class="pd-wrap" style="--role-accent: <%= roleAccentColor %>;">
 
     <!-- ── Hero ── -->
     <div class="pd-hero">
         <div class="pd-hero-left">
             <h1><%= roleName %> Portal</h1>
-            <p><%= userEmail %></p>
+            <p class="pd-role-desc"><%= roleDescription %></p>
+            <p class="pd-user-email"><%= userEmail %></p>
         </div>
         <div class="pd-badges">
             <% if (roleModel === 'parallel') { %>
@@ -197,6 +225,30 @@
             <%= delegateName ? delegateName + ' (' + delegateEmail + ')' : delegateEmail %> is currently
             covering all pending requests on your behalf. You can view the queue below but cannot take
             any actions until the delegation is reverted. Contact an administrator to restore your access.
+        </div>
+    </div>
+    <% } %>
+
+    <!-- ── Multi-role notice: shown only when this account also holds other roles ── -->
+    <% if (myOtherPortals && myOtherPortals.length > 0) { %>
+    <div class="pd-multi-role">
+        <span class="pd-mr-icon">&#9888;</span>
+        <div class="pd-mr-body">
+            <p>
+                <strong>Your account has access to multiple portals.</strong>
+                You are currently in the <strong><%= roleName %></strong> portal — tasks here are specific to this role only.
+                Each role has its own URL and its own queue.
+            </p>
+            <div class="pd-mr-links">
+                <% myOtherPortals.forEach(p => { %>
+                <a href="/portal/<%= p.slug %>/enter"
+                   class="pd-mr-link"
+                   style="border-left-color: <%= p.accentColor %>;">
+                    <span class="pd-mr-label" style="color: <%= p.accentColor %>;"><%= p.label %></span>
+                    <span class="pd-mr-url">/portal/<%= p.slug %></span>
+                </a>
+                <% }) %>
+            </div>
         </div>
     </div>
     <% } %>
@@ -252,8 +304,8 @@
             <div class="req-card <%= r.canAct ? 'can-act' : 'read-only' %> <%= (expandId && r.id === expandId) ? 'is-expanded' : '' %>" id="req-<%= r.id %>">
                 <div class="req-info">
                     <% if (expandId && r.id === expandId) { %>
-                    <div class="expanded-banner">
-                        &#128279; <span>You arrived here from your email — this request is assigned to you</span>
+                    <div class="expanded-banner" style="background: <%= roleAccentColor %>;">
+                        &#128279; <span>You are acting as <strong><%= roleName %></strong> — this request is assigned to you</span>
                     </div>
                     <% } %>
                     <p class="req-name">#<%= r.id %> — <%= r.fullName || '—' %></p>

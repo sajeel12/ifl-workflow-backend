@@ -7,9 +7,11 @@ import { jest, describe, test, expect, afterEach } from '@jest/globals';
  * DB dependencies are):
  *  - First routing stamps lastAssignedAt on the config row and returns primary.
  *  - Primary is still used if lastAssignedAt is < 2 days ago.
- *  - Secondary triggers when lastAssignedAt > 2 days; primaryExpiredAt is stamped.
- *  - When primaryExpiredAt is already set, secondary is returned immediately
- *    with no further timer check.
+ *  - NEW REQUEST (requestId provided): ALWAYS routes to primary and resets
+ *    primaryExpiredAt — no matter what state a previous escalation left behind.
+ *    This is the fix for: secondary HR seat initiating → secondary IT Ops routed.
+ *  - Display-only resolution (no requestId): stale/expired checks apply so
+ *    callers can read current routing state without creating a new assignment.
  *  - When primary is stale but no secondary exists, primary stays (no crash).
  *  - A per-location override row is used in place of the global config; the
  *    fallback timer tracks independently on the override row.
@@ -91,31 +93,47 @@ describe('RecipientService 2-day fallback timer', () => {
         );
     });
 
-    test('secondary triggered and primaryExpiredAt stamped when lastAssignedAt > 2 days', async () => {
+    test('new request (requestId provided) routes to primary even when lastAssignedAt is stale — resets clock', async () => {
         const cfg = makeCfg({ lastAssignedAt: STALE, primaryExpiredAt: null });
         const svc = await loadService({ cfg });
 
         const result = await svc.getWithFallback('IT_OPS', { location: 'KHI', requestId: 3 });
 
-        expect(result.email).toBe('secondary@ifl.com');
-        expect(result.isFallback).toBe(true);
+        // New request always starts with primary — stale lastAssignedAt is ignored
+        expect(result.email).toBe('primary@ifl.com');
+        expect(result.isFallback).toBe(false);
         expect(cfg.update).toHaveBeenCalledWith(
-            expect.objectContaining({ primaryExpiredAt: expect.any(Date) })
+            expect.objectContaining({ lastAssignedAt: expect.any(Date), primaryExpiredAt: null })
         );
     });
 
-    test('when primaryExpiredAt already set, secondary returned immediately without re-stamping', async () => {
+    test('new request (requestId provided) routes to primary even when primaryExpiredAt is set — resets flag', async () => {
+        // This is the core fix: secondary HR seat (or any initiator) creating a new
+        // request must get primary IT Ops, not secondary, regardless of what a
+        // previous escalation left on the config row.
         const cfg = makeCfg({ lastAssignedAt: RECENT, primaryExpiredAt: new Date() });
         const svc = await loadService({ cfg });
 
         const result = await svc.getWithFallback('IT_OPS', { location: 'KHI', requestId: 4 });
 
+        expect(result.email).toBe('primary@ifl.com');
+        expect(result.isFallback).toBe(false);
+        // primaryExpiredAt must be cleared so the clock restarts for this new request
+        expect(cfg.update).toHaveBeenCalledWith(
+            expect.objectContaining({ primaryExpiredAt: null })
+        );
+    });
+
+    test('display-only resolution (no requestId) still shows secondary when primaryExpiredAt is set', async () => {
+        // Without a requestId the call is for display / info — no new assignment.
+        // Stale/expired state is preserved so callers can read current routing status.
+        const cfg = makeCfg({ lastAssignedAt: RECENT, primaryExpiredAt: new Date() });
+        const svc = await loadService({ cfg });
+
+        const result = await svc.getWithFallback('IT_OPS', { location: 'KHI' }); // no requestId
+
         expect(result.email).toBe('secondary@ifl.com');
         expect(result.isFallback).toBe(true);
-        // Should NOT call update again — primaryExpiredAt is already recorded
-        expect(cfg.update).not.toHaveBeenCalledWith(
-            expect.objectContaining({ primaryExpiredAt: expect.any(Date) })
-        );
     });
 
     test('when primary is stale but no secondary configured, primary is returned (no crash)', async () => {
@@ -141,36 +159,29 @@ describe('RecipientService 2-day fallback timer', () => {
         expect(globalCfg.update).not.toHaveBeenCalled();
     });
 
-    test('DCI_MANAGER uses IT_HOD as cross-backup when its own emails are empty', async () => {
-        jest.resetModules();
-        process.env.EMAIL_MODE = 'PROD';
+    test('DCI_MANAGER bypasses timer — returns primary directly, never stamps lastAssignedAt', async () => {
+        // DCI_MANAGER is a delegation role: admin reassigns via dashboard.
+        // Even if lastAssignedAt is STALE the 2-day timer must not fire.
+        const cfg = makeCfg({ lastAssignedAt: STALE, primaryExpiredAt: null });
+        const svc = await loadService({ cfg });
 
-        const emptyCfg = makeCfg({ approverEmail: null, approverName: null, secondaryEmail: null, secondaryName: null });
-        const itHodCfg = makeCfg({ approverEmail: 'ithod@ifl.com', approverName: 'IT HOD' });
+        const result = await svc.getWithFallback('DCI_MANAGER', { requestId: 8 });
 
-        await jest.unstable_mockModule('../src/models/WorkflowApproverLocationOverride.js', () => ({
-            default: { findOne: jest.fn().mockResolvedValue(null) }
-        }));
-        await jest.unstable_mockModule('../src/models/WorkflowApproverConfig.js', () => ({
-            default: {
-                findOne: jest.fn().mockImplementation(({ where }) =>
-                    Promise.resolve(where.roleKey === 'DCI_MANAGER' ? emptyCfg : itHodCfg)
-                )
-            }
-        }));
-        await jest.unstable_mockModule('../src/services/hrmsService.js', () => ({
-            default: { getManager: jest.fn().mockResolvedValue(null) }
-        }));
-        await jest.unstable_mockModule('../src/utils/logger.js', () => ({
-            default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
-        }));
+        expect(result.email).toBe('primary@ifl.com');
+        expect(result.isFallback).toBe(false);
+        // No timer writes allowed on delegation roles
+        expect(cfg.update).not.toHaveBeenCalled();
+    });
 
-        const { default: RecipientService } = await import('../src/services/recipientService.js');
-        const result = await RecipientService.getWithFallback('DCI_MANAGER', { requestId: 7 });
+    test('IT_HOD bypasses timer — returns primary directly, never stamps lastAssignedAt', async () => {
+        const cfg = makeCfg({ lastAssignedAt: STALE, primaryExpiredAt: null });
+        const svc = await loadService({ cfg });
 
-        expect(result.email).toBe('ithod@ifl.com');
-        expect(result.isFallback).toBe(true);
-        expect(result.source).toContain('CrossBackup');
+        const result = await svc.getWithFallback('IT_HOD', { requestId: 9 });
+
+        expect(result.email).toBe('primary@ifl.com');
+        expect(result.isFallback).toBe(false);
+        expect(cfg.update).not.toHaveBeenCalled();
     });
 
 });

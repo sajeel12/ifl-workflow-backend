@@ -164,4 +164,37 @@ describe('Email routing chain audit', () => {
         );
     });
 
+    test('updateDCIDetails sends DCI_MANAGER_APPROVAL notification to the email returned by getWithFallback', async () => {
+        const { onboardingService, sendOnboardingNotification } = await loadService({
+            resolvedEmail: 'dci.manager@ifl.com',
+            status: 'PendingDCI'
+        });
+
+        await onboardingService.updateDCIDetails('tok', {});
+
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'dci.manager@ifl.com',
+            expect.anything(),
+            expect.stringContaining('/portal/dci-manager/enter?action='),
+            'DCI_MANAGER_APPROVAL'
+        );
+    });
+
+    test('handleDCIManagerApproval (email required) sends IT_HOD_APPROVAL notification to the email returned by getWithFallback', async () => {
+        const { onboardingService, sendOnboardingNotification } = await loadService({
+            resolvedEmail: 'it.hod@ifl.com',
+            status: 'PendingDCIManager',
+            extraRequestFields: { emailIncoming: true }
+        });
+
+        await onboardingService.handleDCIManagerApproval('tok', 'Approve', 'Approved');
+
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'it.hod@ifl.com',
+            expect.anything(),
+            expect.stringContaining('/portal/it-hod/enter?action='),
+            'IT_HOD_APPROVAL'
+        );
+    });
+
 });

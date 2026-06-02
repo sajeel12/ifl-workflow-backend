@@ -1,5 +1,6 @@
 import express from 'express';
 import adminController from '../controllers/adminController.js';
+import * as ejController from '../controllers/employeeJourneyController.js';
 import { diagnoseLookup, findUserByEmail, searchUsersByName } from '../services/adService.js';
 import { adminApiGuard, adminPageGuard } from '../middleware/adminMiddleware.js';
 
@@ -16,6 +17,7 @@ router.get('/offboarding',        adminPageGuard, adminController.renderOffboard
 router.get('/workflow-approvers', adminPageGuard, adminController.renderWorkflowApproversPanel);
 router.get('/onboarding-history', adminPageGuard, adminController.renderOnboardingHistoryPanel);
 router.get('/system-config',      adminPageGuard, adminController.renderSystemConfigPanel);
+router.get('/employee-journey',   adminPageGuard, adminController.renderEmployeeJourneyPanel);
 
 // ── API guard ─────────────────────────────────────────────────────────────────
 // adminApiGuard reads X-Auth-User directly (same as adminPageGuard) and returns
@@ -40,14 +42,29 @@ router.put('/workflow-approvers/:id/revert',    ...guard, adminController.revert
 router.put('/workflow-approvers/:id',           ...guard, adminController.updateWorkflowApprover);
 router.get('/onboarding-requests',              ...guard, adminController.getOnboardingRequests);
 router.get('/onboarding-timeline/:id',          ...guard, adminController.getOnboardingTimeline);
+
+// ── Employee Journey APIs (admin-only, adminApiGuard) ─────────────────────
+router.get('/ej/employees',                              ...guard, ejController.listEmployees);
+router.get('/ej/employees-ad-batch',                     ...guard, ejController.getEmployeesAdBatch);
+router.get('/ej/employees/:employeeNumber',              ...guard, ejController.getEmployeeDetail);
+router.get('/ej/employees/:employeeNumber/ad-profile',   ...guard, ejController.getEmployeeAdProfile);
+router.get('/ej/requests/:requestId/timeline',           ...guard, ejController.getRequestTimeline);
 router.post('/system-config/update',            ...guard, adminController.updateSystemConfig);
 router.post('/onboarding/:id/resend-email',     ...guard, adminController.resendStageEmail);
 
 // Search AD users by name/sAMAccountName/email — powers the approver search box.
+// Also accepts ?employeeId=X for a reliable exact-match lookup by employeeID attribute.
 router.get('/ad-search', ...guard, async (req, res) => {
-    const q = (req.query.q || '').trim();
-    if (q.length < 2) return res.status(400).json({ success: false, error: 'q must be at least 2 characters' });
+    const q          = (req.query.q          || '').trim();
+    const employeeId = (req.query.employeeId || '').trim();
+
     try {
+        if (employeeId) {
+            const { findUserByEmployeeIdViaSidecar } = await import('../services/adService.js');
+            const user = await findUserByEmployeeIdViaSidecar(employeeId);
+            return res.json({ success: true, results: user ? [user] : [] });
+        }
+        if (q.length < 2) return res.status(400).json({ success: false, error: 'q must be at least 2 characters' });
         const results = await searchUsersByName(q);
         res.json({ success: true, results });
     } catch (err) {

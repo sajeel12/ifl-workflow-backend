@@ -22,6 +22,8 @@ const ROLE_SLUGS = {
 const ROLE_META = {
     IT_OPS: {
         label:           'IT Operations',
+        description:     'Configure workstation, email account, network access, printers and file shares for new joiners.',
+        accentColor:     '#0078D4',
         pendingStatuses: ['PendingIT', 'PendingOPSAction'],
         historyField:    'itSubmittedAt',
         roleModel:       'fallback',
@@ -29,6 +31,8 @@ const ROLE_META = {
     },
     DCI_TEAM: {
         label:           'DCI Team',
+        description:     'Gather and submit the DCI requirements needed for the new employee\'s system setup.',
+        accentColor:     '#D97706',
         pendingStatuses: ['PendingDCI'],
         historyField:    'dciSubmittedAt',
         roleModel:       'fallback',
@@ -36,6 +40,8 @@ const ROLE_META = {
     },
     DCI_IMPLEMENTER: {
         label:           'DCI Implementer',
+        description:     'Implement DCI configurations and services once requirements are approved.',
+        accentColor:     '#7C3AED',
         pendingStatuses: ['PendingDCIImplementation'],
         historyField:    'dciImplementedAt',
         roleModel:       'fallback',
@@ -43,6 +49,8 @@ const ROLE_META = {
     },
     IT_HOD: {
         label:           'IT Head of Department',
+        description:     'Authorise email and communication services for senior-grade new joiners.',
+        accentColor:     '#059669',
         pendingStatuses: ['PendingITHOD'],
         historyField:    'itHodDecidedAt',
         roleModel:       'delegation',
@@ -50,6 +58,8 @@ const ROLE_META = {
     },
     DCI_MANAGER: {
         label:           'DCI Manager',
+        description:     'Review and approve DCI team submissions before implementation begins.',
+        accentColor:     '#0891B2',
         pendingStatuses: ['PendingDCIManager'],
         historyField:    'dciManagerDecidedAt',
         roleModel:       'delegation',
@@ -57,6 +67,8 @@ const ROLE_META = {
     },
     HR_INITIATOR: {
         label:           'HR Initiator',
+        description:     'Initiate onboarding requests for incoming employees and track their progress.',
+        accentColor:     '#16A34A',
         pendingStatuses: [],
         historyField:    null,
         roleModel:       'parallel',
@@ -64,6 +76,8 @@ const ROLE_META = {
     },
     IT_OPS_MGR: {
         label:           'IT Operations Manager',
+        description:     'Monitor IT Operations workload across all locations and manage escalations.',
+        accentColor:     '#64748B',
         pendingStatuses: [],   // sees IT_OPS statuses directly — not its own pending queue
         historyField:    null,
         roleModel:       'delegation',
@@ -370,7 +384,7 @@ export async function showDashboard(req, res) {
         if (roleKey === 'IT_OPS_MGR') {
             const STAGE_START = { PendingIT: 'hrSubmittedAt', PendingOPSAction: 'dciImplementedAt' };
 
-            const [locationConfigs, globalITOPS, allPending] = await Promise.all([
+            const [locationConfigs, globalITOPS, allPending, allRequests] = await Promise.all([
                 WorkflowApproverLocationOverride.findAll({
                     where: { roleKey: 'IT_OPS' },
                     order: [['location', 'ASC']],
@@ -379,6 +393,10 @@ export async function showDashboard(req, res) {
                 OnboardingRequest.findAll({
                     where: { status: { [Op.in]: ['PendingIT', 'PendingOPSAction'] } },
                     order: [['createdAt', 'ASC']],
+                }),
+                OnboardingRequest.findAll({
+                    where: { status: { [Op.in]: ['PendingIT', 'PendingOPSAction', 'Completed'] } },
+                    order: [['createdAt', 'DESC']],
                 }),
             ]);
 
@@ -420,8 +438,10 @@ export async function showDashboard(req, res) {
                 locationSummary,
                 pendingRequests: enrichedRequests,
                 pendingCount:    enrichedRequests.length,
-                token:          req.query.token,
-                appUrl:         process.env.APP_URL || '',
+                allRequests:     allRequests.map(r => r.toJSON()),
+                totalCount:      allRequests.length,
+                token:           req.query.token,
+                appUrl:          process.env.APP_URL || '',
             });
         }
 
@@ -491,12 +511,33 @@ export async function showDashboard(req, res) {
         const isPrimary = accesses.some(a => a.isPrimary);
         const expandId  = parseInt(req.query.expand, 10) || null;
 
+        // Discover every OTHER portal this user's account is configured for.
+        // Both tables are tiny (<20 rows each) so two findAll calls are cheap.
+        const [allGlobalCfgs, allLocationCfgs] = await Promise.all([
+            WorkflowApproverConfig.findAll({ where: { isActive: true } }),
+            WorkflowApproverLocationOverride.findAll({ where: { isActive: true } }),
+        ]);
+        const myOtherPortals = [];
+        for (const [slug, key] of Object.entries(ROLE_SLUGS)) {
+            if (key === roleKey) continue;
+            const m = ROLE_META[key];
+            if (!m) continue;
+            const matchesAny =
+                allGlobalCfgs.some(c  => c.roleKey === key && (rowMatchesPrimary(c, username) || rowMatchesSecondary(c, username))) ||
+                allLocationCfgs.some(c => c.roleKey === key && (rowMatchesPrimary(c, username) || rowMatchesSecondary(c, username)));
+            if (matchesAny) {
+                myOtherPortals.push({ label: m.label, slug, accentColor: m.accentColor });
+            }
+        }
+
         res.render('pages/portal_dashboard', {
             roleSlug,
             roleKey,
             roleName,
-            roleModel:      meta.roleModel,
-            userEmail:      email,
+            roleDescription:  meta.description || '',
+            roleAccentColor:  meta.accentColor  || '#0078D4',
+            roleModel:        meta.roleModel,
+            userEmail:        email,
             locationLabels,
             isPrimary,
             isDelegator,
@@ -504,11 +545,12 @@ export async function showDashboard(req, res) {
             delegateEmail,
             pending,
             history,
-            pendingCount:   pending.length,
-            actionCount:    pending.filter(r => r.canAct).length,
+            pendingCount:     pending.length,
+            actionCount:      pending.filter(r => r.canAct).length,
+            myOtherPortals,
             expandId,
-            token:          req.query.token,
-            appUrl:         process.env.APP_URL,
+            token:            req.query.token,
+            appUrl:           process.env.APP_URL,
         });
     } catch (err) {
         logger.error(`[Portal] showDashboard error: ${err.message}`);

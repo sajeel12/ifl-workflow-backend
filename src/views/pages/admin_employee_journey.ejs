@@ -1,0 +1,746 @@
+<%- include('../partials/admin_shell_top', { activeTab: 'employee-journey' }) %>
+
+<style>
+/* Full-height three-panel override — scoped to this page only */
+.a-page:has(.ej) .a-shell { height: calc(100vh - 64px); overflow: hidden; }
+.a-page:has(.ej) .a-main  { padding: 0; overflow: hidden; height: 100%; }
+
+/* ── Three-panel layout ─────────────────────────────────────────────────── */
+.ej {
+  display: grid;
+  grid-template-columns: 280px 1fr 320px;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Left: employee list */
+.ej-left { border-right: 1px solid var(--a-border); display: flex; flex-direction: column; overflow: hidden; background: var(--a-surface, #fff); }
+.ej-left__filters { padding: 12px; border-bottom: 1px solid var(--a-border); flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; }
+.ej-left__count   { font-size: .75rem; color: var(--a-text-muted); padding: 6px 14px 2px; flex-shrink: 0; }
+.ej-left__list    { overflow-y: auto; flex: 1; }
+.ej-left__pager   { padding: 8px 12px; border-top: 1px solid var(--a-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+
+.ej-emp           { padding: 11px 14px; border-bottom: 1px solid var(--a-border); cursor: pointer; transition: background .12s; }
+.ej-emp:hover     { background: var(--a-bg-hover, #f5f7fa); }
+.ej-emp--active   { background: #eff6ff !important; border-left: 3px solid #2563eb; padding-left: 11px; }
+.ej-emp__name     { font-weight: 600; font-size: .875rem; }
+.ej-emp__meta     { font-size: .75rem; color: var(--a-text-muted); margin-top: 2px; }
+
+/* Center: journey */
+.ej-center   { overflow-y: auto; padding: 20px; background: var(--a-bg, #f8fafc); }
+.ej-empty    { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--a-text-muted); text-align: center; }
+.ej-empty__icon { font-size: 3rem; opacity: .3; margin-bottom: 16px; }
+
+.ej-emp-hd        { background: #fff; border: 1px solid var(--a-border); border-radius: 10px; padding: 18px 20px; margin-bottom: 14px; }
+.ej-emp-hd__name  { font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; }
+.ej-emp-hd__meta  { font-size: .82rem; color: var(--a-text-muted); display: flex; gap: 14px; flex-wrap: wrap; }
+
+.ej-stats     { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 14px; }
+.ej-stat      { background: #fff; border: 1px solid var(--a-border); border-radius: 8px; padding: 12px; text-align: center; }
+.ej-stat__num { font-size: 1.6rem; font-weight: 700; }
+.ej-stat__lbl { font-size: .72rem; color: var(--a-text-muted); margin-top: 2px; }
+
+.ej-req            { background: #fff; border: 1px solid var(--a-border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.ej-req__hd        { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; cursor: pointer; transition: background .12s; user-select: none; }
+.ej-req__hd:hover  { background: var(--a-bg-hover, #f5f7fa); }
+.ej-req__title     { font-weight: 600; font-size: .875rem; }
+.ej-req__meta      { font-size: .75rem; color: var(--a-text-muted); margin-top: 3px; }
+.ej-req__body      { padding: 16px 20px; border-top: 1px solid var(--a-border); display: none; }
+.ej-req__body--open { display: block; }
+
+/* Stage stepper */
+.ej-stage        { display: flex; gap: 12px; cursor: pointer; padding: 3px 8px; border-radius: 6px; transition: background .12s; }
+.ej-stage:hover  { background: #f5f7fa; }
+.ej-stage--sel   { background: #eff6ff; }
+.ej-stage__spine { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 26px; }
+.ej-stage__dot   { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.ej-stage__dot--done   { background: #d1fae5; color: #065f46; }
+.ej-stage__dot--active { background: #fef3c7; color: #92400e; }
+.ej-stage__dot--fail   { background: #fee2e2; color: #991b1b; }
+.ej-stage__dot--future { background: #f3f4f6; color: #9ca3af; }
+.ej-stage__line        { width: 2px; flex: 1; min-height: 14px; margin: 2px 0; background: #e5e7eb; }
+.ej-stage__line--done  { background: #6ee7b7; }
+.ej-stage__info { flex: 1; padding: 3px 0 10px; }
+.ej-stage__lbl  { font-size: .85rem; font-weight: 600; }
+.ej-stage__sub  { font-size: .73rem; color: var(--a-text-muted); margin-top: 2px; line-height: 1.4; }
+
+/* Right: details */
+.ej-right        { border-left: 1px solid var(--a-border); overflow-y: auto; padding: 20px; background: var(--a-surface, #fff); }
+.ej-right__empty { color: var(--a-text-muted); text-align: center; padding-top: 60px; }
+.ej-drow         { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--a-border); font-size: .84rem; }
+.ej-drow:last-child { border-bottom: none; }
+.ej-drow__k      { color: var(--a-text-muted); flex-shrink: 0; }
+.ej-drow__v      { font-weight: 500; text-align: right; word-break: break-word; max-width: 60%; }
+
+.badge         { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: .73rem; font-weight: 600; }
+.badge--green  { background: #d1fae5; color: #065f46; }
+.badge--yellow { background: #fef3c7; color: #92400e; }
+.badge--red    { background: #fee2e2; color: #991b1b; }
+.badge--blue   { background: #dbeafe; color: #1e40af; }
+.badge--gray   { background: #f3f4f6; color: #4b5563; }
+</style>
+
+<div class="ej">
+
+  <!-- ── Left: Employee List ───────────────────────────────────────────── -->
+  <div class="ej-left">
+    <div class="ej-left__filters">
+      <input type="text" id="searchInput" class="a-input" placeholder="Search employees…" oninput="onSearchChange()">
+      <select id="deptFilter" class="a-input" onchange="onFilterChange()">
+        <option value="">All Departments</option>
+      </select>
+      <select id="statusFilter" class="a-input" onchange="onFilterChange()">
+        <option value="Active">Active</option>
+        <option value="">All Statuses</option>
+        <option value="Terminated">Terminated</option>
+      </select>
+    </div>
+    <div class="ej-left__count" id="empCount">Loading…</div>
+    <div class="ej-left__list" id="empList">
+      <div style="padding:40px;text-align:center;color:var(--a-text-muted);">Loading…</div>
+    </div>
+    <div class="ej-left__pager">
+      <button class="a-btn a-btn--secondary a-btn--sm" id="btnPrev" onclick="prevPage()" disabled>← Prev</button>
+      <span id="pageInfo" style="font-size:.75rem;color:var(--a-text-muted);"></span>
+      <button class="a-btn a-btn--secondary a-btn--sm" id="btnNext" onclick="nextPage()">Next →</button>
+    </div>
+  </div>
+
+  <!-- ── Center: Journey View ──────────────────────────────────────────── -->
+  <div class="ej-center" id="journeyCenter">
+    <div class="ej-empty">
+      <div class="ej-empty__icon">👤</div>
+      <div style="font-size:1.05rem;font-weight:600;margin-bottom:8px;">Select an employee</div>
+      <div style="font-size:.875rem;">Click an employee on the left to view their complete workflow journey.</div>
+    </div>
+  </div>
+
+  <!-- ── Right: Stage Details ──────────────────────────────────────────── -->
+  <div class="ej-right" id="detailsPanel">
+    <div class="ej-right__empty">
+      <div style="font-size:2rem;opacity:.3;margin-bottom:10px;">📋</div>
+      <div style="font-size:.875rem;">Click a stage to see details</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const PAGE_SIZE = 25;
+let ejPage = 0, ejTotal = 0, searchTimer = null, activeEmpId = null;
+const timelines = {};   // cache: requestId → { stageKey → event }
+const reqMeta   = {};   // cache: index → { id, type }
+let   adCache      = [];   // last AD search results
+let   adMap        = {};   // email(lower) → adUser, populated on each search
+let   adUnmatched  = [];   // AD users with no DB employee record (updated in renderEmpList)
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadDepts();
+  showSearchPrompt();
+});
+
+// ── Employee list ─────────────────────────────────────────────────────────
+function showSearchPrompt() {
+  document.getElementById('empCount').textContent = '';
+  document.getElementById('empList').innerHTML =
+    `<div style="padding:32px 16px;text-align:center;color:var(--a-text-muted);font-size:.85rem;">
+       Type a name, ID, or department<br>to search employees
+     </div>`;
+  document.getElementById('btnPrev').disabled = true;
+  document.getElementById('btnNext').disabled = true;
+  document.getElementById('pageInfo').textContent = '';
+}
+
+// adStatus cache: employeeId → { found, sam, mail } — populated by batch request
+let adStatus = {};
+
+async function loadEmployees() {
+  const search = document.getElementById('searchInput').value.trim();
+  const dept   = document.getElementById('deptFilter').value;
+  const status = document.getElementById('statusFilter').value;
+
+  if (search.length < 2 && !dept) { showSearchPrompt(); return; }
+
+  const dbParams = new URLSearchParams({
+    limit: PAGE_SIZE, offset: ejPage * PAGE_SIZE,
+    ...(search && { search }),
+    ...(dept   && { department: dept }),
+    ...(status && { status })
+  });
+
+  // For name searches only: parallel AD name search to populate "AD Only" section.
+  // Number/dept searches don't use this — AD status comes from the batch endpoint.
+  const isNameSearch = search.length >= 2 && !/^\d+$/.test(search);
+  const adNamePromise = isNameSearch
+    ? window.iflFetch(`/admin/ad-search?q=${encodeURIComponent(search)}`)
+        .then(r => r.json()).catch(() => ({ results: [] }))
+    : Promise.resolve({ results: [] });
+
+  document.getElementById('empList').innerHTML =
+    `<div style="padding:32px;text-align:center;color:var(--a-text-muted);">Searching…</div>`;
+
+  try {
+    const [dbData, adNameData] = await Promise.all([
+      window.iflFetch(`/admin/ej/employees?${dbParams}`).then(r => r.json()),
+      adNamePromise
+    ]);
+
+    // adCache/adMap used only for "AD Only" section (name search)
+    adCache = adNameData.results || [];
+    adMap   = {};
+    adCache.forEach(u => {
+      const email = (u.mail || u.email || '').toLowerCase();
+      const uname = email.split('@')[0];
+      if (u.employeeID) adMap[`id:${u.employeeID}`] = u;
+      if (email)        adMap[email]                 = u;
+      if (uname)        adMap[uname]                 = u;
+    });
+
+    ejTotal  = dbData.total || 0;
+    adStatus = {};
+    const emps = dbData.employees || [];
+
+    // Render list immediately — badges show "checking…" spinner
+    renderEmpList(emps);
+    document.getElementById('empCount').textContent = `${ejTotal} in DB`;
+    updatePager();
+
+    // Fire ONE server-side batch — uses the same 4-strategy approach as the
+    // detail panel (employeeId sidecar → email + all domain variants → name)
+    // so badges will ALWAYS match what the detail view shows.
+    if (emps.length) {
+      const ids = emps.map(e => e.employeeId).join(',');
+      window.iflFetch(`/admin/ej/employees-ad-batch?ids=${encodeURIComponent(ids)}`)
+        .then(r => r.json())
+        .then(batch => {
+          adStatus = batch;
+          updateAdBadges(emps);
+          const matched = emps.filter(e => batch[e.employeeId]?.found).length;
+          document.getElementById('empCount').textContent = `${ejTotal} in DB · ${matched} in AD`;
+        })
+        .catch(() => {});
+    }
+  } catch (e) {
+    console.error('[EJ] loadEmployees failed:', e);
+    document.getElementById('empList').innerHTML =
+      `<div style="padding:32px;text-align:center;color:#ef4444;">Search failed. Try again.</div>`;
+  }
+}
+
+// Update badges in-place when batch result arrives (no re-render, no flicker)
+function updateAdBadges(emps) {
+  emps.forEach(e => {
+    const badgeEl = document.getElementById(`ad-badge-${e.employeeId}`);
+    const metaEl  = document.getElementById(`ad-meta-${e.employeeId}`);
+    if (!badgeEl) return;
+    const s = adStatus[e.employeeId];
+    if (s?.found) {
+      badgeEl.innerHTML = `<span style="font-size:.67rem;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:10px;margin-left:5px;">AD ✓</span>`;
+      if (metaEl) metaEl.textContent = s.sam || '';
+    } else {
+      badgeEl.innerHTML = `<span style="font-size:.67rem;background:#f3f4f6;color:#9ca3af;padding:1px 6px;border-radius:10px;margin-left:5px;">No AD</span>`;
+      if (metaEl) metaEl.textContent = '';
+    }
+  });
+}
+
+// Extract username part before @ — the stable key across all domains
+function emailUsername(email) {
+  return (email || '').toLowerCase().split('@')[0];
+}
+
+// Look up an AD user — tries employeeID first (reliable), then email, then username
+function adLookup(dbEmail, employeeId) {
+  if (employeeId && adMap[`id:${employeeId}`]) return adMap[`id:${employeeId}`];
+  if (!dbEmail) return null;
+  const full = dbEmail.toLowerCase();
+  const user = emailUsername(dbEmail);
+  return adMap[full] || adMap[user] || null;
+}
+
+function renderEmpList(emps) {
+  // An AD user is matched if its employeeID matches a DB employee ID,
+  // or if its email username matches (cross-domain fallback)
+  const dbEmployeeIds = new Set(emps.map(e => String(e.employeeId)).filter(Boolean));
+  const dbUsernames   = new Set(emps.map(e => emailUsername(e.email)).filter(Boolean));
+  adUnmatched = adCache.filter(u => {
+    if (u.employeeID && dbEmployeeIds.has(String(u.employeeID))) return false;
+    const adUsername = emailUsername(u.mail || u.email || '');
+    return adUsername && !dbUsernames.has(adUsername);
+  });
+
+  if (!emps.length && !adUnmatched.length) {
+    document.getElementById('empList').innerHTML =
+      `<div style="padding:32px;text-align:center;color:var(--a-text-muted);">No results found</div>`;
+    return;
+  }
+
+  let html = '';
+
+  // DB employees — badges start as "checking…" and update in-place via updateAdBadges()
+  html += emps.map(e => {
+    const checking = `<span style="font-size:.67rem;background:#f3f4f6;color:#9ca3af;padding:1px 6px;border-radius:10px;margin-left:5px;">…</span>`;
+    return `
+      <div class="ej-emp${activeEmpId === e.employeeId ? ' ej-emp--active' : ''}"
+           onclick="selectEmployee(this, '${e.employeeId}')">
+        <div class="ej-emp__name">${escHtml(e.name || '—')}<span id="ad-badge-${e.employeeId}">${checking}</span></div>
+        <div class="ej-emp__meta">#${e.employeeId} · ${escHtml(e.mainDept || 'N/A')} · <span id="ad-meta-${e.employeeId}" style="font-family:monospace;font-size:.72rem;"></span></div>
+      </div>`;
+  }).join('');
+
+  // AD-only users (in AD but no employee DB record)
+  if (adUnmatched.length) {
+    html += `<div style="padding:5px 14px 4px;background:#fffbeb;font-size:.71rem;font-weight:600;color:#92400e;border-top:1px solid #fde68a;border-bottom:1px solid #fde68a;letter-spacing:.03em;">
+      AD ONLY — not in employee DB (${adUnmatched.length})
+    </div>`;
+    html += adUnmatched.map((u, i) => `
+      <div class="ej-emp" style="opacity:.85;" onclick="showAdOnly(${i})">
+        <div class="ej-emp__name">${escHtml(u.displayName || u.sAMAccountName || '—')}
+          <span style="font-size:.67rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;margin-left:5px;">AD Only</span>
+        </div>
+        <div class="ej-emp__meta">${escHtml(u.sAMAccountName || '')} · ${escHtml(u.mail || u.email || 'No email')}${u.title ? ' · ' + escHtml(u.title) : ''}</div>
+      </div>`).join('');
+  }
+
+  document.getElementById('empList').innerHTML = html;
+}
+
+async function loadDepts() {
+  try {
+    const data = await (await window.iflFetch('/admin/departments')).json();
+    // /admin/departments returns { success, data: [{ departmentName, originalDeptName, ... }] }
+    const rows = data.data || data.departments || (Array.isArray(data) ? data : []);
+    const sel  = document.getElementById('deptFilter');
+    rows.forEach(d => {
+      const name = d.originalDeptName || d.departmentName || d.mainDept || d.name || d;
+      if (!name || typeof name !== 'string') return;
+      const o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      sel.appendChild(o);
+    });
+  } catch (e) {
+    console.error('[EJ] loadDepts failed:', e);
+  }
+}
+
+function onSearchChange() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { ejPage = 0; loadEmployees(); }, 350);
+}
+function onFilterChange() { ejPage = 0; loadEmployees(); }
+function prevPage()       { if (ejPage > 0)                          { ejPage--; loadEmployees(); } }
+function nextPage()       { if ((ejPage + 1) * PAGE_SIZE < ejTotal) { ejPage++; loadEmployees(); } }
+function updatePager() {
+  const start = ejPage * PAGE_SIZE + 1;
+  const end   = Math.min((ejPage + 1) * PAGE_SIZE, ejTotal);
+  document.getElementById('pageInfo').textContent = ejTotal ? `${start}–${end}` : '';
+  document.getElementById('btnPrev').disabled = ejPage === 0;
+  document.getElementById('btnNext').disabled = end >= ejTotal;
+}
+
+// ── Journey center ────────────────────────────────────────────────────────
+async function selectEmployee(el, empId) {
+  activeEmpId = empId;
+  document.querySelectorAll('.ej-emp').forEach(e => e.classList.remove('ej-emp--active'));
+  el.classList.add('ej-emp--active');
+  clearDetails();
+
+  const center = document.getElementById('journeyCenter');
+  center.innerHTML = `<div style="padding:60px;text-align:center;color:var(--a-text-muted);">Loading…</div>`;
+
+  try {
+    // Fire DB profile and AD profile in parallel
+    const [detail, adResult] = await Promise.all([
+      window.iflFetch(`/admin/ej/employees/${empId}`).then(r => r.json()),
+      window.iflFetch(`/admin/ej/employees/${empId}/ad-profile`).then(r => r.json()).catch(() => ({ found: false, profile: null }))
+    ]);
+    renderCenter(detail, adResult.found ? adResult.profile : null);
+  } catch (e) {
+    console.error('[EJ] selectEmployee failed:', e);
+    center.innerHTML = `<div style="padding:60px;text-align:center;color:#ef4444;">Failed to load journey.</div>`;
+  }
+}
+
+function fmtD(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }); }
+  catch { return '—'; }
+}
+
+function renderCenter({ employee, summary, recentRequests }, ad) {
+  const empStatusBadge = `<span class="badge badge--${employee.status === 'Active' ? 'green' : 'gray'}">${escHtml(employee.status || 'Unknown')}</span>`;
+  const adStatusBadge  = ad
+    ? `<span class="badge badge--${ad.accountEnabled ? 'green' : 'red'}">${ad.accountStatus}</span>`
+    : '';
+
+  // AD groups — show top 5, collapse rest
+  const groups = ad?.groups || [];
+  const groupsHtml = groups.length
+    ? groups.slice(0, 5).map(g =>
+        `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:.7rem;padding:1px 7px;border-radius:10px;margin:2px 2px 2px 0;">${escHtml(g)}</span>`
+      ).join('') + (groups.length > 5 ? `<span style="font-size:.7rem;color:var(--a-text-muted);margin-left:4px;">+${groups.length - 5} more</span>` : '')
+    : '<span style="font-size:.78rem;color:var(--a-text-muted);">No groups</span>';
+
+  const adPanel = ad ? `
+    <div style="flex:1;min-width:220px;">
+      <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0369a1;margin-bottom:8px;">AD Account ${adStatusBadge}</div>
+      <table style="font-size:.8rem;border-collapse:collapse;width:100%;">
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;white-space:nowrap;">Login</td>
+            <td><code style="background:#f0f9ff;padding:1px 6px;border-radius:3px;font-size:.78rem;">${escHtml(ad.sAMAccountName)}</code></td></tr>
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Email</td>
+            <td>${escHtml(ad.mail || '—')}</td></tr>
+        ${ad.title    ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Title</td><td>${escHtml(ad.title)}</td></tr>` : ''}
+        ${ad.office   ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Office</td><td>${escHtml(ad.office)}</td></tr>` : ''}
+        ${ad.locality ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD City</td><td>${escHtml(ad.locality)}</td></tr>` : ''}
+        ${ad.phone    ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Phone</td><td>${escHtml(ad.phone)}</td></tr>` : ''}
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Last Login</td>
+            <td>${fmtD(ad.lastLogon)}</td></tr>
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Acc Created</td>
+            <td>${fmtD(ad.createdAt)}</td></tr>
+        <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;vertical-align:top;">Groups</td>
+            <td style="padding-top:4px;">${groupsHtml}</td></tr>
+      </table>
+    </div>` : `
+    <div style="flex:1;min-width:220px;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;color:var(--a-text-muted);font-size:.82rem;padding:16px;">
+        <div style="font-size:1.5rem;opacity:.3;margin-bottom:6px;">🔒</div>
+        No AD account<br>linked via Employee ID
+      </div>
+    </div>`;
+
+  document.getElementById('journeyCenter').innerHTML = `
+    <!-- 360° Profile Card -->
+    <div class="ej-emp-hd">
+      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div class="ej-emp-hd__name">${escHtml(employee.name || '—')} ${empStatusBadge}</div>
+          <div style="font-size:.75rem;color:var(--a-text-muted);margin-top:2px;">Employee ID: <strong>${employee.employeeId}</strong></div>
+        </div>
+        <span style="font-size:.68rem;background:#eff6ff;color:#1d4ed8;padding:3px 10px;border-radius:20px;font-weight:600;align-self:flex-start;">360° Profile</span>
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <!-- DB Profile -->
+        <div style="flex:1;min-width:200px;border-right:1px solid var(--a-border);padding-right:20px;">
+          <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7c3aed;margin-bottom:8px;">HR / DB Record</div>
+          <table style="font-size:.8rem;border-collapse:collapse;width:100%;">
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;white-space:nowrap;">Department</td>
+                <td>${escHtml(employee.department || 'N/A')}</td></tr>
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Location</td>
+                <td>${escHtml(employee.location || 'N/A')}</td></tr>
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Email</td>
+                <td>${escHtml(employee.email || '—')}</td></tr>
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Joined</td>
+                <td>${fmtD(employee.joiningDate)}</td></tr>
+          </table>
+        </div>
+        <!-- AD Profile -->
+        ${adPanel}
+      </div>
+    </div>
+    <div class="ej-stats">
+      <div class="ej-stat"><div class="ej-stat__num" style="color:#0078D4;">${summary.totalRequests}</div><div class="ej-stat__lbl">Total</div></div>
+      <div class="ej-stat"><div class="ej-stat__num" style="color:#10b981;">${summary.completedRequests}</div><div class="ej-stat__lbl">Completed</div></div>
+      <div class="ej-stat"><div class="ej-stat__num" style="color:#f59e0b;">${summary.pendingRequests}</div><div class="ej-stat__lbl">Pending</div></div>
+      <div class="ej-stat"><div class="ej-stat__num" style="color:#6b7280;">${summary.draftRequests}</div><div class="ej-stat__lbl">Draft</div></div>
+    </div>
+    <div id="reqCards">
+      ${recentRequests.length
+        ? recentRequests.map((r, i) => reqCard(r, i)).join('')
+        : `<div style="text-align:center;padding:40px;color:var(--a-text-muted);">No requests found for this employee.</div>`
+      }
+    </div>
+  `;
+  // Auto-expand the most recent request
+  if (recentRequests.length) {
+    // store meta for all requests
+    recentRequests.forEach((r, i) => { reqMeta[i] = { id: r.id, type: r.type }; });
+    toggleReq(0);
+  }
+}
+
+const TYPE_LABEL = {
+  onboarding:  'Onboarding',
+  offboarding: 'Offboarding',
+};
+const TYPE_COLOR = {
+  onboarding:  '#0078D4',
+  offboarding: '#7c3aed',
+};
+
+function reqCard(req, i) {
+  reqMeta[i] = { id: req.id, type: req.type };
+  const bc     = { Completed: 'green', Draft: 'blue', Rejected: 'red' }[req.status] || 'yellow';
+  const dt     = new Date(req.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const tLabel = TYPE_LABEL[req.type] || req.type;
+  const tColor = TYPE_COLOR[req.type] || '#6b7280';
+  const meta   = [req.location, req.department].filter(Boolean).join(' · ') || '';
+  return `
+    <div class="ej-req" id="req-${i}">
+      <div class="ej-req__hd" onclick="toggleReq(${i})">
+        <div>
+          <div class="ej-req__title">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${tColor};margin-right:6px;vertical-align:middle;"></span>
+            ${tLabel} Request
+            <span class="badge badge--${bc}" style="margin-left:6px;">${escHtml(req.statusLabel)}</span>
+          </div>
+          <div class="ej-req__meta">REQ #${req.id} · ${dt}${meta ? ' · ' + escHtml(meta) : ''}</div>
+        </div>
+        <svg id="arr-${i}" style="width:18px;height:18px;flex-shrink:0;transition:transform .2s;color:var(--a-text-muted);"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+      <div class="ej-req__body" id="body-${i}"></div>
+    </div>`;
+}
+
+async function toggleReq(i) {
+  const { id: reqId, type } = reqMeta[i] || {};
+  if (!reqId) return;
+  const body  = document.getElementById(`body-${i}`);
+  const arrow = document.getElementById(`arr-${i}`);
+  if (body.classList.contains('ej-req__body--open')) {
+    body.classList.remove('ej-req__body--open');
+    arrow.style.transform = '';
+    return;
+  }
+  body.classList.add('ej-req__body--open');
+  arrow.style.transform = 'rotate(180deg)';
+  if (body.dataset.loaded) return;
+  body.dataset.loaded = '1';
+  body.innerHTML = `<div style="text-align:center;padding:20px;color:var(--a-text-muted);">Loading stages…</div>`;
+  try {
+    const data = await (await window.iflFetch(`/admin/ej/requests/${reqId}/timeline?type=${type}`)).json();
+    timelines[reqId] = {};
+    (data.timeline || []).forEach(e => { timelines[reqId][e.stage] = e; });
+    body.innerHTML = renderStepper(data.timeline || [], reqId, type);
+  } catch (e) {
+    console.error('[EJ] toggleReq failed:', e);
+    body.innerHTML = `<div style="color:#ef4444;padding:12px;">Failed to load timeline.</div>`;
+  }
+}
+
+// ── Stepper ───────────────────────────────────────────────────────────────
+const STAGES_ONBOARDING = [
+  { key: 'Draft',                    lbl: 'Draft' },
+  { key: 'PendingIT',                lbl: 'Pending IT Operations' },
+  { key: 'PendingHOD',               lbl: 'Pending HOD Approval' },
+  { key: 'PendingDCI',               lbl: 'Pending DCI Configuration' },
+  { key: 'PendingDCIManager',        lbl: 'Pending Manager Approval' },
+  { key: 'PendingITHOD',             lbl: 'Pending IT HOD Approval' },
+  { key: 'PendingDCIImplementation', lbl: 'Pending Implementation' },
+  { key: 'PendingOPSAction',         lbl: 'Pending OPS Verification' },
+  { key: 'Completed',                lbl: 'Closed' },
+];
+
+const STAGES_OFFBOARDING = [
+  { key: 'Draft',                  lbl: 'Initiated' },
+  { key: 'PendingManagerApproval', lbl: 'Pending Manager Approval' },
+  { key: 'PendingSystemTeam',      lbl: 'Pending System Team' },
+  { key: 'Completed',              lbl: 'Completed' },
+];
+
+function stagesFor(type) {
+  if (type === 'offboarding') return STAGES_OFFBOARDING;
+  return STAGES_ONBOARDING;
+}
+
+function renderStepper(timeline, reqId, type) {
+  const STAGES = stagesFor(type);
+  const doneMap    = {};
+  (timeline || []).forEach(e => { doneMap[e.stage] = e; });
+  const last       = timeline.length ? timeline[timeline.length - 1] : null;
+  const isRejected = last && last.outcome === 'rejected';
+
+  let html = '';
+  STAGES.forEach(({ key, lbl }, i) => {
+    const ev     = doneMap[key];
+    const done   = !!ev;
+    const isLast = i === STAGES.length - 1;
+    const isCur  = !!(last && last.stage === key && !isRejected);
+
+    let dotCls, icon;
+    if (isRejected && isCur) { dotCls = 'ej-stage__dot--fail';   icon = '✕'; }
+    else if (done)           { dotCls = 'ej-stage__dot--done';   icon = '✓'; }
+    else if (isCur)          { dotCls = 'ej-stage__dot--active'; icon = '◉'; }
+    else                     { dotCls = 'ej-stage__dot--future'; icon = '○'; }
+
+    const lineCls = done ? 'ej-stage__line--done' : '';
+    let sub = '';
+    if (ev) {
+      if (ev.timestamp)        sub += fmtDate(ev.timestamp);
+      if (ev.durationHours != null) sub += ` · ${ev.durationHours}h`;
+      if (ev.owner)            sub += ` · ${escHtml(ev.owner)}`;
+    }
+
+    html += `
+      <div class="ej-stage" id="stg-${reqId}-${key}" onclick="selectStage('${reqId}','${key}')">
+        <div class="ej-stage__spine">
+          <div class="ej-stage__dot ${dotCls}">${icon}</div>
+          ${!isLast ? `<div class="ej-stage__line ${lineCls}"></div>` : ''}
+        </div>
+        <div class="ej-stage__info">
+          <div class="ej-stage__lbl">${lbl}</div>
+          ${sub ? `<div class="ej-stage__sub">${sub}</div>` : ''}
+        </div>
+      </div>`;
+  });
+
+  if (isRejected) {
+    timelines[reqId]['Rejected'] = last;
+    html += `
+      <div class="ej-stage" id="stg-${reqId}-Rejected" onclick="selectStage('${reqId}','Rejected')">
+        <div class="ej-stage__spine">
+          <div class="ej-stage__dot ej-stage__dot--fail">✕</div>
+        </div>
+        <div class="ej-stage__info">
+          <div class="ej-stage__lbl" style="color:#991b1b;">Rejected</div>
+          ${last.timestamp ? `<div class="ej-stage__sub">${fmtDate(last.timestamp)}</div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  return html;
+}
+
+// ── Stage details panel ───────────────────────────────────────────────────
+function selectStage(reqId, stageKey) {
+  document.querySelectorAll('.ej-stage--sel').forEach(el => el.classList.remove('ej-stage--sel'));
+  const el = document.getElementById(`stg-${reqId}-${stageKey}`);
+  if (el) el.classList.add('ej-stage--sel');
+
+  const ev        = (timelines[reqId] || {})[stageKey] || null;
+  // Find label from whichever stage set contains this key
+  const allStages = [...STAGES_ONBOARDING, ...STAGES_OFFBOARDING];
+  const stageInfo = allStages.find(s => s.key === stageKey);
+  const lbl       = stageInfo ? stageInfo.lbl : stageKey;
+  const panel     = document.getElementById('detailsPanel');
+
+  if (!ev) {
+    panel.innerHTML = `
+      <div style="font-size:.78rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Stage Details</div>
+      <div style="font-size:.9rem;font-weight:600;margin-bottom:10px;">${lbl}</div>
+      <span class="badge badge--gray">Not yet reached</span>
+      <p style="font-size:.84rem;color:var(--a-text-muted);margin-top:14px;">
+        This stage has not been reached in the workflow yet.
+      </p>`;
+    return;
+  }
+
+  const oc = { approved:'green', completed:'green', submitted:'blue',
+               rejected:'red', escalated:'yellow', delegated:'yellow' }[ev.outcome] || 'gray';
+  const rows = [
+    ['Stage',     lbl],
+    ['Request',   `#${reqId}`],
+    ['Outcome',   `<span class="badge badge--${oc}">${escHtml(ev.outcome || '—')}</span>`],
+    ['Timestamp', ev.timestamp ? fmtDate(ev.timestamp) : '—'],
+    ['Owner',     escHtml(ev.ownerLabel || ev.owner || '—')],
+    ['Duration',  ev.durationHours != null ? `${ev.durationHours}h` : '—'],
+    ['Email',     ev.emailSent ? 'Sent' : 'Not sent'],
+  ];
+
+  panel.innerHTML = `
+    <div style="font-size:.78rem;color:var(--a-text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Stage Details</div>
+    <div style="font-size:.9rem;font-weight:600;margin-bottom:12px;">${lbl}</div>
+    ${rows.map(([k, v]) => `
+      <div class="ej-drow">
+        <span class="ej-drow__k">${k}</span>
+        <span class="ej-drow__v">${v}</span>
+      </div>`).join('')}
+    ${ev.remarks ? `
+      <div style="margin-top:14px;">
+        <div style="font-size:.75rem;color:var(--a-text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">Remarks</div>
+        <div style="font-size:.84rem;background:var(--a-surface-2,#f8fafc);border:1px solid var(--a-border);border-radius:6px;padding:10px;line-height:1.5;">
+          ${escHtml(ev.remarks)}
+        </div>
+      </div>` : ''}
+  `;
+}
+
+async function showAdOnly(idx) {
+  const u = adUnmatched[idx];
+  if (!u) return;
+
+  document.querySelectorAll('.ej-emp').forEach(el => el.classList.remove('ej-emp--active'));
+  document.querySelectorAll('.ej-emp')[idx + (ejTotal > 0 ? ejTotal : 0)];
+  activeEmpId = null;
+  clearDetails();
+
+  const ad      = u;
+  const adEmail = ad.mail || ad.email || '';
+  const groups  = (ad.memberOf || []).map(dn => {
+    const m = String(dn).match(/^CN=([^,]+)/i); return m ? m[1] : dn;
+  }).filter(Boolean);
+  const groupsHtml = groups.length
+    ? groups.slice(0,5).map(g =>
+        `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:.7rem;padding:1px 7px;border-radius:10px;margin:2px 2px 2px 0;">${escHtml(g)}</span>`
+      ).join('') + (groups.length > 5 ? `<span style="font-size:.7rem;color:var(--a-text-muted);">+${groups.length-5} more</span>` : '')
+    : '<span style="font-size:.78rem;color:var(--a-text-muted);">No groups</span>';
+
+  document.getElementById('journeyCenter').innerHTML = `
+    <div class="ej-emp-hd">
+      <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div class="ej-emp-hd__name">${escHtml(ad.displayName || ad.sAMAccountName || '—')}
+            <span class="badge badge--yellow" style="margin-left:8px;">AD Only</span>
+          </div>
+          <div style="font-size:.75rem;color:var(--a-text-muted);margin-top:2px;">
+            ${ad.employeeID ? `Employee ID: <strong>${ad.employeeID}</strong>` : 'No Employee ID in DB'}
+          </div>
+        </div>
+        <span style="font-size:.68rem;background:#eff6ff;color:#1d4ed8;padding:3px 10px;border-radius:20px;font-weight:600;">360° Profile</span>
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;border-right:1px solid var(--a-border);padding-right:20px;">
+          <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7c3aed;margin-bottom:8px;">HR / DB Record</div>
+          <div style="font-size:.84rem;color:var(--a-text-muted);padding:12px;background:#f9fafb;border-radius:6px;text-align:center;">
+            No employee record in HR database.<br>This account exists in AD only.
+          </div>
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0369a1;margin-bottom:8px;">
+            AD Account <span class="badge badge--${ad.accountEnabled === false ? 'red' : 'green'}">${ad.accountEnabled === false ? 'Disabled' : 'Enabled'}</span>
+          </div>
+          <table style="font-size:.8rem;border-collapse:collapse;width:100%;">
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Login</td>
+                <td><code style="background:#f0f9ff;padding:1px 6px;border-radius:3px;font-size:.78rem;">${escHtml(ad.sAMAccountName)}</code></td></tr>
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Email</td><td>${escHtml(adEmail || '—')}</td></tr>
+            ${ad.title    ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">Title</td><td>${escHtml(ad.title)}</td></tr>` : ''}
+            ${ad.office   ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD Office</td><td>${escHtml(ad.office)}</td></tr>` : ''}
+            ${ad.locality ? `<tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;">AD City</td><td>${escHtml(ad.locality)}</td></tr>` : ''}
+            <tr><td style="color:var(--a-text-muted);padding:3px 8px 3px 0;vertical-align:top;">Groups</td>
+                <td style="padding-top:4px;">${groupsHtml}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div style="padding:16px 20px;background:#fff;border:1px solid var(--a-border);border-radius:8px;color:var(--a-text-muted);font-size:.875rem;">
+      This user has an AD account but no employee record in the workflow database.
+      No onboarding or offboarding history is available.
+    </div>
+  `;
+}
+
+function clearDetails() {
+  document.getElementById('detailsPanel').innerHTML = `
+    <div class="ej-right__empty">
+      <div style="font-size:2rem;opacity:.3;margin-bottom:10px;">📋</div>
+      <div style="font-size:.875rem;">Click a stage to see details</div>
+    </div>`;
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function fmtDate(d) {
+  return new Date(d).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+</script>
+
+<%- include('../partials/admin_shell_bottom') %>

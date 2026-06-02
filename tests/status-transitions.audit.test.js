@@ -148,13 +148,18 @@ describe('Stage status transition audit', () => {
         );
     });
 
-    test('handleOPSAction sets status Completed and clears token', async () => {
+    test('handleOPSAction sets status Completed and clears token and both assignee fields', async () => {
         const { onboardingService, requestUpdate } = await loadService({ status: 'PendingOPSAction' });
 
         await onboardingService.handleOPSAction('tok', { check1: true }, 'OPS Name');
 
         expect(requestUpdate).toHaveBeenCalledWith(
-            expect.objectContaining({ status: 'Completed', currentStageToken: null })
+            expect.objectContaining({
+                status:                      'Completed',
+                currentStageToken:           null,
+                currentStageAssigneeEmail:    null,
+                currentStageAssigneeUsername: null,
+            })
         );
     });
 

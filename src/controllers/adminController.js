@@ -1046,6 +1046,10 @@ class AdminController {
         }
     }
 
+    renderEmployeeJourneyPanel(req, res) {
+        res.render('pages/admin_employee_journey');
+    }
+
 }
 
 export default new AdminController();

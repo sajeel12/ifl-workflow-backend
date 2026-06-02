@@ -8,6 +8,7 @@ import { ssoMiddleware } from '../middleware/ssoMiddleware.js';
 import * as authController from '../controllers/authController.js';
 import * as offboardingController from '../controllers/offboardingController.js';
 import * as portalController from '../controllers/portalController.js';
+import * as employeeJourneyController from '../controllers/employeeJourneyController.js';
 
 
 router.post('/test/access-request', workflowTestController.createTestAccessRequest);
@@ -17,6 +18,19 @@ router.get('/test/request/:requestId/status', workflowTestController.getRequestS
 
 
 router.post('/test/approve/:token', workflowTestController.testApproveReject);
+
+
+// Manually fire the escalation check — for testing the 5-min threshold.
+// Remove or guard this before going to production.
+router.post('/test/trigger-escalation', async (req, res) => {
+    const { runEscalationCheck } = await import('../services/escalationService.js');
+    try {
+        const result = await runEscalationCheck();
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
 
 
 router.all('/approvals/handle', approvalController.handleApprovalClick);
@@ -81,6 +95,25 @@ router.get('/onboarding/:id/details', ssoMiddleware, onboardingController.getReq
 
 // /onboarding/queue and /my/queue removed — role-based portal (/portal/:slug/view)
 // is the single source of truth for pending and history.
+
+// ── Employee Journey Tracking (Phase 3) ──────────────────────────────────
+// Employee-centric journey visualization APIs.
+// All routes are SSO-protected since they expose employee data.
+
+// List all employees with search/filter
+router.get('/employees', ssoMiddleware, employeeJourneyController.listEmployees);
+
+// Get employee detail with journey summary
+router.get('/employees/:employeeNumber', ssoMiddleware, employeeJourneyController.getEmployeeDetail);
+
+// Get employee journey data formatted for D3.js visualization
+router.get('/employees/:employeeNumber/journey-graph', ssoMiddleware, employeeJourneyController.getEmployeeJourneyGraph);
+
+// Get related requests (parent, children, dependencies)
+router.get('/requests/:requestId/related', ssoMiddleware, employeeJourneyController.getRelatedRequests);
+
+// Get detailed timeline/stage events for a request
+router.get('/requests/:requestId/timeline', ssoMiddleware, employeeJourneyController.getRequestTimeline);
 
 
 router.get('/health', (req, res) => {

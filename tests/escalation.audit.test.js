@@ -9,7 +9,7 @@ import { jest, describe, test, expect, afterEach } from '@jest/globals';
  *    > 48 hours is automatically escalated to the configured secondary.
  *  - Escalation: (a) stamps primaryExpiredAt on the config row so new
  *    requests also route to secondary; (b) updates currentStageAssigneeEmail
- *    on the request; (c) sends an action email to secondary with the SAME
+ *    AND currentStageAssigneeUsername on the request; (c) sends an action email to secondary with the SAME
  *    token so they can complete the same form; (d) logs a System timeline event.
  *  - A request fresh (< 48h) is NOT escalated.
  *  - A request already escalated (currentStageAssigneeEmail matches secondary)
@@ -48,10 +48,12 @@ function makeRequest(overrides = {}) {
 
 function makeConfig(overrides = {}) {
     return {
-        approverEmail:   'primary@ifl.com',
-        approverName:    'Primary IT',
-        secondaryEmail:  'secondary@ifl.com',
-        secondaryName:   'Secondary IT',
+        approverEmail:    'primary@ifl.com',
+        approverName:     'Primary IT',
+        approverUsername: 'primary',
+        secondaryEmail:   'secondary@ifl.com',
+        secondaryName:    'Secondary IT',
+        secondaryUsername:'secondary',
         primaryExpiredAt: null,
         isActive: true,
         update: jest.fn().mockResolvedValue(undefined),
@@ -111,9 +113,12 @@ describe('48h automatic escalation audit', () => {
             expect.stringContaining('tok-abc'),
             'IT_OPS'
         );
-        // Request's assignee updated to secondary
+        // Request's assignee updated to secondary (both email AND username)
         expect(request.update).toHaveBeenCalledWith(
-            expect.objectContaining({ currentStageAssigneeEmail: 'secondary@ifl.com' })
+            expect.objectContaining({
+                currentStageAssigneeEmail:    'secondary@ifl.com',
+                currentStageAssigneeUsername: 'secondary'
+            })
         );
         // Timeline event logged by System
         expect(timelineCreate).toHaveBeenCalledWith(
@@ -215,8 +220,8 @@ describe('48h automatic escalation audit', () => {
 
     test('IT_OPS escalation uses per-location override config, not global', async () => {
         const request = makeRequest({ status: 'PendingIT', hrSubmittedAt: STALE, location: 'KHI' });
-        const globalCfg   = makeConfig({ approverEmail: 'global.itops@ifl.com', secondaryEmail: 'global.secondary@ifl.com' });
-        const overrideCfg = makeConfig({ approverEmail: 'khi.primary@ifl.com',  secondaryEmail: 'khi.secondary@ifl.com' });
+        const globalCfg   = makeConfig({ approverEmail: 'global.itops@ifl.com', approverUsername: 'global.primary', secondaryEmail: 'global.secondary@ifl.com', secondaryUsername: 'global.secondary' });
+        const overrideCfg = makeConfig({ approverEmail: 'khi.primary@ifl.com',  approverUsername: 'khi.primary',   secondaryEmail: 'khi.secondary@ifl.com',    secondaryUsername: 'khi.secondary'   });
         const { runEscalationCheck, sendOnboardingNotification } =
             await loadEscalationService({ requests: [request], globalCfg, overrideCfg });
 
@@ -234,6 +239,13 @@ describe('48h automatic escalation audit', () => {
             expect.anything(),
             expect.anything(),
             expect.anything()
+        );
+        // Username must also be updated from the location override row
+        expect(request.update).toHaveBeenCalledWith(
+            expect.objectContaining({
+                currentStageAssigneeEmail:    'khi.secondary@ifl.com',
+                currentStageAssigneeUsername: 'khi.secondary'
+            })
         );
     });
 

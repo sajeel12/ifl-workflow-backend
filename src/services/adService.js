@@ -269,8 +269,36 @@ export const findUserByEmail = async (email) => {
 };
 
 /**
+ * Find an AD user by their employeeID attribute via the adsearch.aspx sidecar.
+ * Uses the reliable ?employeeId= path — immune to name/email mismatches.
+ * Returns the user object or null.
+ */
+export const findUserByEmployeeIdViaSidecar = async (employeeId) => {
+    if (!employeeId || !ADSEARCH_URL) return null;
+    try {
+        const url = new URL(ADSEARCH_URL);
+        url.searchParams.set('employeeId', String(employeeId));
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6000) });
+        if (!res.ok) { logger.warn(`[ADSearch] employeeId HTTP ${res.status}`); return null; }
+        const data = await res.json();
+        if (!Array.isArray(data.results) || data.results.length === 0) return null;
+        const age      = Math.abs(Date.now() / 1000 - data.timestamp);
+        const expected = _hmacHex(`search|${employeeId}|${data.timestamp}|${data.results.length}`);
+        if (age > 30 || data.signature !== expected) {
+            logger.warn(`[ADSearch] HMAC mismatch for employeeId "${employeeId}"`);
+            return null;
+        }
+        logger.info(`[ADSearch] employeeId(${employeeId}) → ${data.results[0].sAMAccountName}`);
+        return data.results[0];
+    } catch (e) {
+        logger.warn(`[ADSearch] employeeId sidecar error: ${e.message}`);
+        return null;
+    }
+};
+
+/**
  * Search AD users by name / sAMAccountName / email via the adsearch.aspx sidecar.
- * Returns an array of { sAMAccountName, displayName, email, title } — empty on failure.
+ * Returns an array of { sAMAccountName, displayName, email, title, employeeID } — empty on failure.
  */
 export const searchUsersByName = async (q) => {
     if (!q || q.length < 2 || !ADSEARCH_URL) return [];
@@ -293,6 +321,133 @@ export const searchUsersByName = async (q) => {
         return [];
     }
 };
+
+// ── Internal: search by arbitrary LDAP filter, returns first match ────────────────
+function _searchByFilter(client, filter, attrs, label) {
+    return new Promise(resolve => {
+        try {
+            client.findUsers({ filter, attributes: attrs }, false, (err, users) => {
+                if (err) { logger.debug(`[ADService] [${label}] filter search error: ${err.message}`); resolve(null); }
+                else      resolve(users && users.length ? users[0] : null);
+            });
+        } catch (e) {
+            logger.warn(`[ADService] [${label}] filter search exception: ${e.message}`);
+            resolve(null);
+        }
+    });
+}
+
+// Full set of attributes we want for the 360° employee profile
+const FULL_PROFILE_ATTRS = [
+    'sAMAccountName', 'displayName', 'cn', 'mail', 'userPrincipalName',
+    'employeeID', 'department', 'title', 'description',
+    'userAccountControl', 'memberOf',
+    'whenCreated', 'lastLogonTimestamp', 'pwdLastSet',
+    'telephoneNumber', 'mobile', 'physicalDeliveryOfficeName'
+];
+
+/**
+ * Find an AD user by their employeeID attribute.
+ * Uses direct LDAP (not the sidecar — sidecar only searches by name/email).
+ * Returns a rich profile object or null.
+ */
+export const findUserByEmployeeId = async (employeeId) => {
+    if (!employeeId) return null;
+    const filter = `(employeeID=${employeeId})`;
+
+    const sources = [
+        ad   && { client: ad,   label: 'PRIMARY' },
+        adGC && { client: adGC, label: 'GC' },
+        ...adExtra.map((c, i) => ({ client: c, label: `EXTRA_${i}` })),
+    ].filter(Boolean);
+
+    if (!sources.length) { logger.warn(`[ADService] No AD clients — cannot search by employeeID`); return null; }
+
+    for (const { client, label } of sources) {
+        const user = await _searchByFilter(client, filter, FULL_PROFILE_ATTRS, label);
+        if (user && user.sAMAccountName) {
+            logger.info(`[ADService] findUserByEmployeeId(${employeeId}) → ${user.sAMAccountName} via ${label}`);
+            return user;
+        }
+    }
+    logger.warn(`[ADService] findUserByEmployeeId(${employeeId}) not found`);
+    return null;
+};
+
+/**
+ * Get the full AD profile for a known sAMAccountName.
+ * Returns a rich object with account status, groups, timestamps — or null.
+ */
+export const getFullADProfile = async (sAMAccountName) => {
+    if (!sAMAccountName) return null;
+    const filter = `(sAMAccountName=${sAMAccountName})`;
+
+    const sources = [
+        ad   && { client: ad,   label: 'PRIMARY' },
+        adGC && { client: adGC, label: 'GC' },
+        ...adExtra.map((c, i) => ({ client: c, label: `EXTRA_${i}` })),
+    ].filter(Boolean);
+
+    for (const { client, label } of sources) {
+        const user = await _searchByFilter(client, filter, FULL_PROFILE_ATTRS, label);
+        if (user && user.sAMAccountName) return parseADProfile(user);
+    }
+    return null;
+};
+
+/**
+ * Parse raw AD object into a clean profile for the UI.
+ */
+export function parseADProfile(raw) {
+    if (!raw) return null;
+
+    // accountEnabled: sidecar pre-computes this as a boolean; LDAP uses UAC bits
+    let disabled;
+    if (typeof raw.accountEnabled === 'boolean') {
+        disabled = !raw.accountEnabled;
+    } else {
+        const uac = parseInt(raw.userAccountControl || '0', 10);
+        disabled  = (uac & 2) !== 0;
+    }
+
+    // Groups: sidecar returns full DN strings; LDAP also returns DN strings
+    // Extract friendly CN name from each DN
+    const groups = []
+        .concat(raw.memberOf || [])
+        .map(dn => { const m = String(dn).match(/^CN=([^,]+)/i); return m ? m[1] : dn; })
+        .filter(Boolean);
+
+    // Windows FILETIME → JS Date (LDAP path only — sidecar returns ISO string for whenCreated)
+    const ft2date = v => {
+        const n = parseInt(v, 10);
+        if (!n || n <= 0) return null;
+        return new Date(Math.round(n / 10000) - 11644473600000);
+    };
+
+    // createdAt: sidecar returns ISO string; LDAP returns via whenCreated field
+    const createdAt = raw.createdAt || (raw.whenCreated ? String(raw.whenCreated) : null) || null;
+
+    return {
+        sAMAccountName:  raw.sAMAccountName  || null,
+        displayName:     raw.displayName     || null,
+        // sidecar returns both 'mail' and 'email' keys; LDAP returns 'mail'
+        mail:            raw.mail || raw.email || null,
+        upn:             raw.userPrincipalName || null,
+        employeeID:      raw.employeeID      || null,
+        department:      raw.department      || null,
+        title:           raw.title           || null,
+        phone:           raw.telephoneNumber || raw.mobile || null,
+        office:          raw.physicalDeliveryOfficeName || raw.office    || null,
+        locality:        raw.l                          || raw.locality  || null,
+        streetAddress:   raw.streetAddress             || null,
+        accountEnabled:  !disabled,
+        accountStatus:   disabled ? 'Disabled' : 'Enabled',
+        groups,
+        createdAt:       createdAt,
+        lastLogon:       ft2date(raw.lastLogonTimestamp),
+        pwdLastSet:      ft2date(raw.pwdLastSet),
+    };
+}
 
 // ── Expose raw attempt details for the diagnostic endpoint ─────────────────────
 export const diagnoseLookup = async (username) => {

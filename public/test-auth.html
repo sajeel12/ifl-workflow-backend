@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Auth Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-box {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-box h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.pending { background: #ffc107; color: white; }
+        .status.pass { background: #4caf50; color: white; }
+        .status.fail { background: #f44336; color: white; }
+        button {
+            padding: 10px 25px;
+            font-size: 16px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .error {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .success {
+            color: #4caf50;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Simple Authentication Test</h1>
+    <p>This page tests authentication components individually without complex diagnostic logic.</p>
+
+    <div class="test-box">
+        <h3>Test 1: Can you access this page? <span class="status pass">PASS</span></h3>
+        <p>✅ If you can see this, Node.js is running and serving pages correctly.</p>
+        <p><strong>Current URL:</strong> <code id="currentUrl"></code></p>
+        <p><strong>Your IP (from browser):</strong> <span id="clientIp">Detecting...</span></p>
+    </div>
+
+    <div class="test-box">
+        <h3>Test 2: Fetch token.aspx <span id="tokenStatus" class="status pending">PENDING</span></h3>
+        <button onclick="testTokenAspx()">Run Test</button>
+        <div id="tokenResult"></div>
+    </div>
+
+    <div class="test-box">
+        <h3>Test 3: Call Diagnostics API <span id="diagStatus" class="status pending">PENDING</span></h3>
+        <button onclick="testDiagnostics()">Run Test</button>
+        <div id="diagResult"></div>
+    </div>
+
+    <div class="test-box">
+        <h3>Quick Checks</h3>
+        <ul>
+            <li>Using hostname? <strong id="hostnameCheck"></strong></li>
+            <li>Protocol: <strong id="protocolCheck"></strong></li>
+            <li>Browser: <strong id="browserCheck"></strong></li>
+        </ul>
+    </div>
+
+    <script>
+        // Display current info
+        document.getElementById('currentUrl').textContent = window.location.href;
+
+        // Check if using hostname or IP
+        const hostname = window.location.hostname;
+        const hostnameCheck = document.getElementById('hostnameCheck');
+        if (hostname === 'hosppdevsrv' || hostname.includes('.')) {
+            hostnameCheck.textContent = '✅ ' + hostname;
+            hostnameCheck.style.color = 'green';
+        } else {
+            hostnameCheck.textContent = '❌ ' + hostname + ' (should be hosppdevsrv)';
+            hostnameCheck.style.color = 'red';
+        }
+
+        // Protocol check
+        document.getElementById('protocolCheck').textContent = window.location.protocol;
+
+        // Browser check
+        const ua = navigator.userAgent;
+        let browser = 'Unknown';
+        if (ua.includes('Edg/')) browser = 'Edge';
+        else if (ua.includes('Chrome/')) browser = 'Chrome';
+        else if (ua.includes('Firefox/')) browser = 'Firefox';
+        else if (ua.includes('Safari/')) browser = 'Safari';
+        document.getElementById('browserCheck').textContent = browser;
+
+        // Get client IP
+        fetch('https://api.ipify.org?format=json')
+            .then(r => r.json())
+            .then(d => document.getElementById('clientIp').textContent = d.ip)
+            .catch(() => document.getElementById('clientIp').textContent = 'Could not detect');
+
+        async function testTokenAspx() {
+            const statusEl = document.getElementById('tokenStatus');
+            const resultEl = document.getElementById('tokenResult');
+
+            statusEl.className = 'status pending';
+            statusEl.textContent = 'TESTING...';
+            resultEl.innerHTML = '<p>⏳ Fetching token.aspx...</p>';
+
+            try {
+                console.log('Fetching /token.aspx...');
+                const start = Date.now();
+                const response = await fetch('/token.aspx', {
+                    credentials: 'include'
+                });
+                const duration = Date.now() - start;
+
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+
+                const text = await response.text();
+                console.log('Response body:', text);
+
+                let html = '<h4>Response Details:</h4>';
+                html += '<p><strong>Status:</strong> ' + response.status + ' ' + response.statusText + '</p>';
+                html += '<p><strong>Content-Type:</strong> ' + response.headers.get('content-type') + '</p>';
+                html += '<p><strong>Response Time:</strong> ' + duration + 'ms</p>';
+                html += '<p><strong>Response Body:</strong></p>';
+                html += '<pre>' + text.substring(0, 500) + (text.length > 500 ? '...' : '') + '</pre>';
+
+                if (response.status === 200 && text.trim().startsWith('{')) {
+                    try {
+                        const json = JSON.parse(text);
+                        statusEl.className = 'status pass';
+                        statusEl.textContent = 'PASS';
+                        html += '<p class="success">✅ token.aspx returned valid JSON</p>';
+                        html += '<h4>Parsed Token:</h4>';
+                        html += '<pre>' + JSON.stringify(json, null, 2) + '</pre>';
+                    } catch (e) {
+                        statusEl.className = 'status fail';
+                        statusEl.textContent = 'FAIL';
+                        html += '<p class="error">❌ Response looks like JSON but failed to parse: ' + e.message + '</p>';
+                    }
+                } else if (response.status === 401) {
+                    statusEl.className = 'status fail';
+                    statusEl.textContent = 'FAIL';
+                    html += '<p class="error">❌ Got 401 Unauthorized - Windows Authentication is challenging the request</p>';
+                    html += '<p><strong>Fix:</strong></p>';
+                    html += '<ul>';
+                    html += '<li>Enable Windows Authentication in IIS</li>';
+                    html += '<li>Use hostname instead of IP (http://hosppdevsrv:3333)</li>';
+                    html += '<li>Add site to browser Intranet zone</li>';
+                    html += '<li>Ensure computer is domain-joined</li>';
+                    html += '</ul>';
+                } else {
+                    statusEl.className = 'status fail';
+                    statusEl.textContent = 'FAIL';
+                    html += '<p class="error">❌ Unexpected response (not JSON)</p>';
+                }
+
+                resultEl.innerHTML = html;
+
+            } catch (error) {
+                console.error('Error:', error);
+                statusEl.className = 'status fail';
+                statusEl.textContent = 'FAIL';
+                resultEl.innerHTML = '<p class="error">❌ Error: ' + error.message + '</p>';
+            }
+        }
+
+        async function testDiagnostics() {
+            const statusEl = document.getElementById('diagStatus');
+            const resultEl = document.getElementById('diagResult');
+
+            statusEl.className = 'status pending';
+            statusEl.textContent = 'TESTING...';
+            resultEl.innerHTML = '<p>⏳ Calling /diagnostics/auth...</p>';
+
+            try {
+                console.log('Fetching /diagnostics/auth...');
+                const start = Date.now();
+                const response = await fetch('/diagnostics/auth', {
+                    credentials: 'include'
+                });
+                const duration = Date.now() - start;
+
+                console.log('Response status:', response.status);
+                const text = await response.text();
+                console.log('Response body:', text);
+
+                let html = '<h4>Response Details:</h4>';
+                html += '<p><strong>Status:</strong> ' + response.status + '</p>';
+                html += '<p><strong>Response Time:</strong> ' + duration + 'ms</p>';
+
+                if (response.status === 200 && text.trim().startsWith('{')) {
+                    try {
+                        const data = JSON.parse(text);
+                        if (data.overallStatus === 'PASS') {
+                            statusEl.className = 'status pass';
+                            statusEl.textContent = 'PASS';
+                        } else {
+                            statusEl.className = 'status fail';
+                            statusEl.textContent = 'PARTIAL';
+                        }
+                        html += '<p class="success">✅ Diagnostic API returned valid JSON</p>';
+                        html += '<p><strong>Overall Status:</strong> ' + data.overallStatus + '</p>';
+                        html += '<p><strong>Summary:</strong> ' + data.summary + '</p>';
+                        html += '<h4>Full Response:</h4>';
+                        html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                    } catch (e) {
+                        statusEl.className = 'status fail';
+                        statusEl.textContent = 'FAIL';
+                        html += '<p class="error">❌ Failed to parse JSON: ' + e.message + '</p>';
+                    }
+                } else {
+                    statusEl.className = 'status fail';
+                    statusEl.textContent = 'FAIL';
+                    html += '<p class="error">❌ Unexpected response</p>';
+                    html += '<pre>' + text.substring(0, 500) + '</pre>';
+                }
+
+                resultEl.innerHTML = html;
+
+            } catch (error) {
+                console.error('Error:', error);
+                statusEl.className = 'status fail';
+                statusEl.textContent = 'FAIL';
+                resultEl.innerHTML = '<p class="error">❌ Error: ' + error.message + '</p>';
+            }
+        }
+    </script>
+
+    <div class="test-box">
+        <h3>💡 Tips</h3>
+        <ul>
+            <li><strong>Always use hostname:</strong> <code>http://hosppdevsrv:3333</code> (not IP address)</li>
+            <li><strong>Check browser console (F12):</strong> Look for detailed error messages</li>
+            <li><strong>If tests fail:</strong> See <a href="/TROUBLESHOOTING_POPUP.md" target="_blank">TROUBLESHOOTING_POPUP.md</a></li>
+            <li><strong>Full diagnostics:</strong> <a href="/diagnostics/auth-ui">Open full diagnostic tool</a></li>
+        </ul>
+    </div>
+
+    <div class="test-box">
+        <h3>📖 Common Issues</h3>
+        <details>
+            <summary><strong>"Unexpected token '&lt;'"</strong> - Click to expand</summary>
+            <p>This means the server returned HTML instead of JSON. Usually happens when:</p>
+            <ul>
+                <li>Windows Authentication is triggering a 401 challenge</li>
+                <li>IIS is returning an error page</li>
+                <li>The endpoint doesn't exist (404 page)</li>
+            </ul>
+            <p><strong>Fix:</strong> Check if Windows Authentication is enabled in IIS, and use hostname instead of IP.</p>
+        </details>
+
+        <details>
+            <summary><strong>Persistent popup asking for credentials</strong> - Click to expand</summary>
+            <p>Windows Authentication is challenging every request but not accepting credentials.</p>
+            <ul>
+                <li>Ensure you're using <code>http://hosppdevsrv:3333</code> (hostname)</li>
+                <li>Add site to browser's Intranet zone</li>
+                <li>Ensure computer is domain-joined</li>
+                <li>Check that user account is in ifl.net domain</li>
+            </ul>
+        </details>
+
+        <details>
+            <summary><strong>CORS errors in console</strong> - Click to expand</summary>
+            <p>Usually not the problem for same-origin requests. If you see CORS errors:</p>
+            <ul>
+                <li>Check that you're accessing the same hostname/port</li>
+                <li>Don't mix http and https</li>
+                <li>Check IIS CORS settings if needed</li>
+            </ul>
+        </details>
+    </div>
+</body>
+</html>
