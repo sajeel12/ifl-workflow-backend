@@ -256,7 +256,7 @@ const handleSubmission = async (req, res, token) => {
                 res,
                 'Request Submitted',
                 'Request submitted successfully. The request has been forwarded to IT Operations for service configuration.',
-                { status: 'PendingIT', requestId: created && created.id }
+                { status: 'PendingIT', requestId: created && created.id, actorRole: 'HR' }
             );
         } else {
             const context = await onboardingService.getFormContext(token);
@@ -1258,7 +1258,7 @@ export const renderHistory = async (req, res) => {
 // post-submission message page so the user can immediately see their other
 // pending tasks / history without going back to email.
 const FORM_ROLE_TO_PORTAL = {
-    HR:             null,                 // HR isn't part of the role queue
+    HR:             { key: 'HR_INITIATOR',    label: 'HR' },
     IT:             { key: 'IT_OPS',          label: 'IT Operations' },
     HOD:            { key: 'HOD',             label: 'Head of Department' },
     DCI:            { key: 'DCI_TEAM',        label: 'DCI Team' },

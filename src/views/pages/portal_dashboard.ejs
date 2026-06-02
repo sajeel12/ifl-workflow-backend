@@ -1,406 +1,604 @@
 <%- include('../partials/header', { title: roleName + ' Portal — IFL' }) %>
 
-<div class="header">
-    <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
-    <div class="brand">IFL Workflow — <%= roleName %></div>
-</div>
-
 <style>
-    .pd-wrap { max-width: 1100px; margin: 28px auto; padding: 0 20px; }
+/* ── Full-height App Shell ──────────────────────────────── */
+html, body { height: 100%; margin: 0; }
 
-    /* ── Header bar ─────────────────────────────────────── */
-    .pd-hero {
-        background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
-        padding: 20px 24px; margin-bottom: 20px;
-        display: flex; flex-wrap: wrap; gap: 14px;
-        align-items: center; justify-content: space-between;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-        border-top: 4px solid var(--role-accent, #0078D4);
-    }
-    .pd-hero-left h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
-    .pd-hero-left .pd-role-desc {
-        font-size: 0.8rem; color: #64748b; margin: 0 0 4px; line-height: 1.4;
-    }
-    .pd-hero-left .pd-user-email { font-size: 0.78rem; color: #94a3b8; margin: 0; }
+.pd-app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    background: #f0f4f8;
+    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #1e293b;
+    -webkit-font-smoothing: antialiased;
+}
 
-    .pd-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .pd-badge {
-        font-size: 0.75rem; font-weight: 600; padding: 4px 11px;
-        border-radius: 20px; letter-spacing: 0.02em;
-    }
-    .pd-badge--primary      { background: #DBEAFE; color: #1D4ED8; }
-    .pd-badge--secondary    { background: #FEF3C7; color: #B45309; }
-    .pd-badge--parallel     { background: #D1FAE5; color: #065F46; }
-    .pd-badge--location     { background: #F1F5F9; color: #334155; border: 1px solid #e2e8f0; }
-    .pd-badge--delegated-out{ background: #FEE2E2; color: #991B1B; }
+/* ── Top Header Bar ─────────────────────────────────────── */
+.pd-topbar {
+    height: 66px;
+    background: linear-gradient(120deg, #0078D4 0%, #005fa8 60%, #004880 100%);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 14px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(0, 120, 212, 0.28);
+    z-index: 100;
+    position: relative;
+}
+.pd-topbar::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.12);
+}
+.pd-topbar-logo  { height: 38px; width: auto; border-radius: 6px; flex-shrink: 0; }
+.pd-topbar-brand { flex: 1; }
+.pd-topbar-title { font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.25; letter-spacing: -0.01em; }
+.pd-topbar-sub   { font-size: 0.72rem; color: rgba(255,255,255,0.72); margin-top: 1px; }
 
-    /* ── Delegator read-only banner ─────────────────────── */
-    .pd-delegator-banner {
-        background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px;
-        padding: 14px 18px; margin-bottom: 20px;
-        display: flex; align-items: flex-start; gap: 12px;
-        font-size: 0.875rem; color: #78350F; line-height: 1.55;
-    }
-    .pd-delegator-banner .pd-db-icon { font-size: 1.25rem; flex-shrink: 0; margin-top: 1px; }
-    .pd-delegator-banner strong { color: #92400E; }
+/* ── Body: Sidebar + Main ───────────────────────────────── */
+.pd-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
 
-    /* ── Stats row ──────────────────────────────────────── */
-    .pd-stats { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
-    .pd-stat {
-        flex: 1; min-width: 160px;
-        background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
-        padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-    .pd-stat .s-val  { font-size: 2rem; font-weight: 700; color: #0f172a; line-height: 1; }
-    .pd-stat .s-lbl  { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
-    .pd-stat.s-alert .s-val { color: #D97706; }
+/* ── Left Sidebar ───────────────────────────────────────── */
+.pd-sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+.pd-sidebar::-webkit-scrollbar { width: 5px; }
+.pd-sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 
-    /* ── Tabs ───────────────────────────────────────────── */
-    .pd-tabs { display: flex; gap: 4px; margin-bottom: 0; border-bottom: 2px solid #e2e8f0; }
-    .pd-tab  {
-        padding: 9px 20px; font-size: 0.9rem; font-weight: 600;
-        color: #64748b; text-decoration: none; border-bottom: 2px solid transparent;
-        margin-bottom: -2px; border-radius: 6px 6px 0 0;
-    }
-    .pd-tab.is-active { color: #0078D4; border-bottom-color: #0078D4; background: #EFF6FF; }
+/* Role identity block */
+.pd-side-id {
+    padding: 22px 20px 18px;
+    position: relative;
+    border-bottom: 1px solid #f1f5f9;
+    background: radial-gradient(ellipse at top right, rgba(0,120,212,0.05) 0%, transparent 65%), #fff;
+}
+.pd-side-id::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 3px;
+    background: var(--role-accent, #0078D4);
+}
+.pd-side-chip {
+    display: inline-block;
+    font-size: 0.63rem; font-weight: 700;
+    color: var(--role-accent, #0078D4);
+    text-transform: uppercase; letter-spacing: 0.09em;
+    background: rgba(0,120,212,0.1);
+    padding: 3px 10px; border-radius: 999px;
+    margin-bottom: 10px;
+}
+.pd-side-name {
+    font-size: 1.1rem; font-weight: 800; color: #0f172a;
+    margin: 0 0 4px; letter-spacing: -0.01em; line-height: 1.3;
+}
+.pd-side-desc  { font-size: 0.78rem; color: #64748b; margin: 0 0 3px; line-height: 1.45; }
+.pd-side-email { font-size: 0.72rem; color: #94a3b8; margin: 0 0 12px; }
 
-    /* ── Request cards (pending tab) ────────────────────── */
-    .pd-section { background: #fff; border: 1px solid #e2e8f0; border-radius: 0 10px 10px 10px; padding: 20px; }
+.pd-side-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.pd-badge {
+    font-size: 0.7rem; font-weight: 600; padding: 3px 9px;
+    border-radius: 20px; letter-spacing: 0.02em;
+}
+.pd-badge--primary      { background: #dbeafe; color: #1d4ed8; }
+.pd-badge--secondary    { background: #fef3c7; color: #b45309; }
+.pd-badge--parallel     { background: #d1fae5; color: #065f46; }
+.pd-badge--location     { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+.pd-badge--delegated    { background: #fee2e2; color: #991b1b; }
 
-    .pd-empty {
-        padding: 60px 20px; text-align: center; color: #94a3b8;
-    }
-    .pd-empty .em { font-size: 2rem; opacity: 0.5; margin-bottom: 8px; }
+/* KPI strip — lives in main content, not sidebar */
+.pd-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.pd-kpi-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.pd-kpi-val {
+    font-size: 2rem; font-weight: 800; color: #0f172a; line-height: 1;
+    letter-spacing: -0.02em;
+}
+.pd-kpi-lbl { font-size: 0.78rem; color: #64748b; font-weight: 500; }
+.pd-kpi-card.is-alert .pd-kpi-val { color: #d97706; }
 
-    .req-list { display: flex; flex-direction: column; gap: 12px; }
-    .req-card {
-        border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 18px;
-        display: flex; flex-wrap: wrap; gap: 12px;
-        align-items: flex-start; justify-content: space-between;
-        transition: box-shadow 0.12s;
-    }
-    .req-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
-    .req-card.can-act { border-left: 3px solid #0078D4; }
-    .req-card.read-only { opacity: 0.75; }
-    .req-card.is-expanded {
-        border: 2px solid #0078D4;
-        box-shadow: 0 0 0 4px rgba(0,120,212,0.12), 0 4px 16px rgba(0,0,0,0.08);
-        background: #f0f7ff;
-    }
-    .expanded-banner {
-        display: flex; align-items: center; gap: 8px;
-        background: #0078D4; color: #fff;
-        font-size: 0.78rem; font-weight: 600;
-        padding: 7px 14px; border-radius: 5px 5px 0 0;
-        margin: -16px -18px 14px;
-    }
-    .expanded-banner span { opacity: 0.85; }
+/* Navigation */
+.pd-side-nav {
+    padding: 10px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.pd-side-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition: background 0.12s, color 0.12s;
+    position: relative;
+    width: 100%;
+}
+.pd-side-nav-btn:hover { background: #f1f5f9; color: #0f172a; }
+.pd-side-nav-btn.is-active {
+    background: rgba(0,120,212,0.08);
+    color: var(--role-accent, #0078D4);
+    font-weight: 650;
+}
+.pd-side-nav-btn.is-active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 20px;
+    background: var(--role-accent, #0078D4);
+    border-radius: 0 3px 3px 0;
+}
+.pd-side-nav-count {
+    margin-left: auto;
+    font-size: 0.68rem; font-weight: 700;
+    padding: 2px 7px; border-radius: 999px;
+    background: #f1f5f9; color: #64748b;
+}
+.pd-side-nav-btn.is-active .pd-side-nav-count {
+    background: rgba(0,120,212,0.15);
+    color: var(--role-accent, #0078D4);
+}
 
-    .req-info { flex: 1; min-width: 200px; }
-    .req-name { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
-    .req-sub  { font-size: 0.82rem; color: #64748b; margin: 0 0 8px; }
-    .req-meta { display: flex; flex-wrap: wrap; gap: 8px; }
-    .req-pill {
-        font-size: 0.75rem; padding: 3px 9px; border-radius: 12px;
-        background: #f1f5f9; color: #475569;
-    }
-    .req-pill.status-pending { background: #FEF3C7; color: #92400E; }
-    .req-pill.status-ops     { background: #EDE9FE; color: #5B21B6; }
+/* Sidebar section (actions, other portals) */
+.pd-side-section {
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.pd-side-section-hd {
+    font-size: 0.67rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.09em;
+    margin-bottom: 8px; padding: 0 2px;
+}
+.pd-initiate-btn {
+    display: block; text-align: center;
+    padding: 9px 16px;
+    background: #16a34a; color: #fff;
+    border-radius: 8px; font-size: 0.875rem; font-weight: 600;
+    text-decoration: none; transition: background 0.14s;
+}
+.pd-initiate-btn:hover { background: #15803d; }
 
-    .req-timer {
-        font-size: 0.75rem; color: #94a3b8;
-        display: flex; align-items: center; gap: 4px; margin-top: 6px;
-    }
-    .req-timer.stale { color: #DC2626; font-weight: 600; }
+.pd-portal-link {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; margin-bottom: 5px;
+    border-radius: 7px; text-decoration: none;
+    font-size: 0.82rem; font-weight: 600;
+    border-left: 3px solid var(--link-accent, #0078D4);
+    background: #f8fafc;
+    transition: box-shadow 0.12s, background 0.12s;
+    color: var(--link-accent, #0078D4);
+}
+.pd-portal-link:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); background: #fff; }
 
-    .req-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-    .btn-handle {
-        padding: 8px 20px; background: #0078D4; color: #fff;
-        border: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600;
-        text-decoration: none; cursor: pointer;
-        transition: background 0.12s;
-    }
-    .btn-handle:hover { background: #005fa3; }
-    .btn-view {
-        padding: 7px 16px; background: transparent; color: #64748b;
-        border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.82rem;
-        text-decoration: none;
-    }
-    .btn-view:hover { border-color: #94a3b8; color: #334155; }
+/* ── Main Content Area ──────────────────────────────────── */
+.pd-main {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    background: #f0f4f8;
+}
+.pd-main-inner {
+    padding: 24px 28px 60px;
+}
 
-    .assignee-note {
-        font-size: 0.75rem; color: #94a3b8; margin-top: 4px; text-align: right;
-    }
-    .assignee-note.escalated { color: #D97706; }
+/* Delegator read-only banner */
+.pd-delegator-banner {
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 20px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 0.875rem; color: #78350f; line-height: 1.55;
+}
+.pd-delegator-banner .pd-db-icon { font-size: 1.25rem; flex-shrink: 0; margin-top: 1px; }
+.pd-delegator-banner strong { color: #92400e; }
 
-    /* ── History table ──────────────────────────────────── */
-    .hist-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-    .hist-table th {
-        text-align: left; padding: 9px 12px; font-size: 0.75rem; font-weight: 600;
-        color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
-        border-bottom: 1px solid #e2e8f0; background: #f8fafc;
-    }
-    .hist-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
-    .hist-table tr:last-child td { border-bottom: none; }
-    .hist-table tr:hover td { background: #f8fafc; }
+/* Tabs */
+.pd-tabs { display: flex; gap: 4px; margin-bottom: 0; border-bottom: 2px solid #e2e8f0; }
+.pd-tab  {
+    padding: 9px 20px; font-size: 0.9rem; font-weight: 600;
+    color: #64748b; text-decoration: none;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    border-radius: 6px 6px 0 0; transition: color 0.12s;
+}
+.pd-tab.is-active {
+    color: var(--role-accent, #0078D4);
+    border-bottom-color: var(--role-accent, #0078D4);
+    background: rgba(0,120,212,0.05);
+}
 
-    .status-pill {
-        display: inline-block; font-size: 0.72rem; padding: 3px 9px;
-        border-radius: 12px; font-weight: 600;
-    }
-    .sp-completed { background: #D1FAE5; color: #065F46; }
-    .sp-rejected  { background: #FEE2E2; color: #991B1B; }
-    .sp-pending   { background: #FEF3C7; color: #92400E; }
-    .sp-other     { background: #F1F5F9; color: #475569; }
+/* Request section */
+.pd-section {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 0 10px 10px 10px; padding: 20px;
+}
+.pd-empty { padding: 60px 20px; text-align: center; color: #94a3b8; }
+.pd-empty .em { font-size: 2rem; opacity: 0.5; margin-bottom: 8px; }
 
-    /* ── Multi-role notice ──────────────────────────────── */
-    .pd-multi-role {
-        background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px;
-        padding: 14px 18px; margin-bottom: 20px;
-        display: flex; align-items: flex-start; gap: 12px;
-        font-size: 0.855rem; color: #334155;
-    }
-    .pd-mr-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
-    .pd-mr-body strong { color: #0f172a; }
-    .pd-mr-body p { margin: 0 0 10px; line-height: 1.5; }
-    .pd-mr-links { display: flex; flex-wrap: wrap; gap: 8px; }
-    .pd-mr-link {
-        display: flex; flex-direction: column; gap: 3px;
-        padding: 9px 13px; border-radius: 7px;
-        background: #fff; border: 1px solid #e2e8f0;
-        border-left-width: 3px; text-decoration: none;
-        transition: box-shadow 0.12s;
-        min-width: 170px;
-    }
-    .pd-mr-link:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .pd-mr-label { font-size: 0.82rem; font-weight: 700; }
-    .pd-mr-url   { font-size: 0.7rem; color: #94a3b8; font-family: monospace; }
+/* Request cards */
+.req-list { display: flex; flex-direction: column; gap: 12px; }
+.req-card {
+    border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 18px;
+    display: flex; flex-wrap: wrap; gap: 12px;
+    align-items: flex-start; justify-content: space-between;
+    background: #fff;
+    transition: box-shadow 0.12s;
+}
+.req-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+.req-card.can-act { border-left: 3px solid var(--role-accent, #0078D4); }
+.req-card.read-only { opacity: 0.75; }
+.req-card.is-expanded {
+    border: 2px solid var(--role-accent, #0078D4);
+    box-shadow: 0 0 0 4px rgba(0,120,212,0.10), 0 4px 16px rgba(0,0,0,0.08);
+    background: #f0f7ff;
+}
+.expanded-banner {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--role-accent, #0078D4); color: #fff;
+    font-size: 0.78rem; font-weight: 600;
+    padding: 7px 14px; border-radius: 5px 5px 0 0;
+    margin: -16px -18px 14px;
+}
+.expanded-banner span { opacity: 0.85; }
+.req-info { flex: 1; min-width: 200px; }
+.req-name { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+.req-sub  { font-size: 0.82rem; color: #64748b; margin: 0 0 8px; }
+.req-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.req-pill {
+    font-size: 0.75rem; padding: 3px 9px; border-radius: 12px;
+    background: #f1f5f9; color: #475569;
+}
+.req-pill.status-pending { background: #fef3c7; color: #92400e; }
+.req-pill.status-ops     { background: #ede9fe; color: #5b21b6; }
+.req-timer {
+    font-size: 0.75rem; color: #94a3b8;
+    display: flex; align-items: center; gap: 4px; margin-top: 6px;
+}
+.req-timer.stale { color: #dc2626; font-weight: 600; }
+.req-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; flex-shrink: 0; }
+.btn-handle {
+    padding: 8px 20px; background: var(--role-accent, #0078D4); color: #fff;
+    border: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600;
+    text-decoration: none; cursor: pointer; transition: filter 0.12s; white-space: nowrap;
+}
+.btn-handle:hover { filter: brightness(0.88); }
+.btn-view {
+    padding: 7px 16px; background: transparent; color: #64748b;
+    border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.82rem;
+    text-decoration: none; white-space: nowrap;
+}
+.btn-view:hover { border-color: #94a3b8; color: #334155; }
+.assignee-note {
+    font-size: 0.75rem; color: #94a3b8; margin-top: 4px; text-align: right;
+}
+.assignee-note.escalated { color: #d97706; }
 
-    /* ── HR-specific: initiate banner ───────────────────── */
-    .hr-initiate {
-        background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px;
-        padding: 18px 22px; margin-bottom: 20px;
-        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+/* History table */
+.hist-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.hist-table th {
+    text-align: left; padding: 9px 12px; font-size: 0.75rem; font-weight: 600;
+    color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+}
+.hist-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+.hist-table tr:last-child td { border-bottom: none; }
+.hist-table tr:hover td { background: #f8fafc; }
+.status-pill {
+    display: inline-block; font-size: 0.72rem; padding: 3px 9px;
+    border-radius: 12px; font-weight: 600;
+}
+.sp-completed { background: #d1fae5; color: #065f46; }
+.sp-rejected  { background: #fee2e2; color: #991b1b; }
+.sp-pending   { background: #fef3c7; color: #92400e; }
+.sp-other     { background: #f1f5f9; color: #475569; }
+
+/* Responsive */
+@media (max-width: 960px) {
+    .pd-app { height: auto; overflow: visible; }
+    .pd-body { flex-direction: column; overflow: visible; }
+    .pd-main { overflow: visible; }
+    .pd-sidebar {
+        width: 100%; border-right: none;
+        border-bottom: 1px solid #e2e8f0; overflow: visible;
     }
-    .hr-initiate p { margin: 0; font-size: 0.92rem; color: #166534; }
-    .btn-initiate {
-        padding: 9px 22px; background: #16A34A; color: #fff;
-        border: none; border-radius: 7px; font-size: 0.9rem; font-weight: 600;
-        text-decoration: none; white-space: nowrap;
-    }
-    .btn-initiate:hover { background: #15803d; }
+    .pd-main-inner { padding: 16px 16px 40px; }
+}
 </style>
 
-<div class="pd-wrap" style="--role-accent: <%= roleAccentColor %>;">
+<div class="pd-app" style="--role-accent: <%= roleAccentColor %>;">
 
-    <!-- ── Hero ── -->
-    <div class="pd-hero">
-        <div class="pd-hero-left">
-            <h1><%= roleName %> Portal</h1>
-            <p class="pd-role-desc"><%= roleDescription %></p>
-            <p class="pd-user-email"><%= userEmail %></p>
+    <!-- ── Top header ── -->
+    <div class="pd-topbar">
+        <img src="/logo.png" alt="IFL" class="pd-topbar-logo" onerror="this.style.display='none'">
+        <div class="pd-topbar-brand">
+            <div class="pd-topbar-title">IFL Workflow</div>
+            <div class="pd-topbar-sub"><%= roleName %> Portal</div>
         </div>
-        <div class="pd-badges">
-            <% if (roleModel === 'parallel') { %>
-                <span class="pd-badge pd-badge--parallel">Parallel Seat</span>
-            <% } else if (isDelegator) { %>
-                <span class="pd-badge pd-badge--delegated-out">Delegated Out</span>
-            <% } else if (isPrimary) { %>
-                <span class="pd-badge pd-badge--primary">Primary</span>
-            <% } else { %>
-                <span class="pd-badge pd-badge--secondary">Secondary</span>
+    </div>
+
+    <!-- ── Two-pane body ── -->
+    <div class="pd-body">
+
+        <!-- ── Left Sidebar ── -->
+        <aside class="pd-sidebar">
+
+            <!-- Role identity -->
+            <div class="pd-side-id">
+                <div class="pd-side-chip"><%= roleKey.replace(/_/g, ' ') %></div>
+                <h2 class="pd-side-name"><%= roleName %> Portal</h2>
+                <p class="pd-side-desc"><%= roleDescription %></p>
+                <p class="pd-side-email"><%= userEmail %></p>
+                <div class="pd-side-badges">
+                    <% if (roleModel === 'parallel') { %>
+                        <span class="pd-badge pd-badge--parallel">Parallel Seat</span>
+                    <% } else if (isDelegator) { %>
+                        <span class="pd-badge pd-badge--delegated">Delegated Out</span>
+                    <% } else if (isPrimary) { %>
+                        <span class="pd-badge pd-badge--primary">Primary</span>
+                    <% } else { %>
+                        <span class="pd-badge pd-badge--secondary">Secondary</span>
+                    <% } %>
+                    <% locationLabels.forEach(loc => { %>
+                        <span class="pd-badge pd-badge--location"><%= loc %></span>
+                    <% }) %>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="pd-side-nav">
+                <button class="pd-side-nav-btn is-active" data-tab="pending"
+                    onclick="switchTab('pending')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                    Pending Queue
+                    <% if (pendingCount > 0) { %>
+                        <span class="pd-side-nav-count"><%= pendingCount %></span>
+                    <% } %>
+                </button>
+                <button class="pd-side-nav-btn" data-tab="history"
+                    onclick="switchTab('history')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                        <path d="M3 21v-5h5"/>
+                    </svg>
+                    History
+                    <% if (history.length > 0) { %>
+                        <span class="pd-side-nav-count"><%= history.length %></span>
+                    <% } %>
+                </button>
+            </div>
+
+            <!-- HR: new request -->
+            <% if (roleKey === 'HR_INITIATOR') { %>
+            <div class="pd-side-section">
+                <div class="pd-side-section-hd">Actions</div>
+                <a href="<%= appUrl %>/api/onboarding/initiate" class="pd-initiate-btn">
+                    + New Onboarding Request
+                </a>
+            </div>
             <% } %>
-            <% locationLabels.forEach(loc => { %>
-                <span class="pd-badge pd-badge--location"><%= loc %></span>
-            <% }) %>
-        </div>
-    </div>
 
-    <!-- ── Temporary delegation read-only banner ── -->
-    <% if (isDelegator) { %>
-    <div class="pd-delegator-banner">
-        <span class="pd-db-icon">&#9888;</span>
-        <div>
-            <strong>You have temporarily delegated this role.</strong>
-            <%= delegateName ? delegateName + ' (' + delegateEmail + ')' : delegateEmail %> is currently
-            covering all pending requests on your behalf. You can view the queue below but cannot take
-            any actions until the delegation is reverted. Contact an administrator to restore your access.
-        </div>
-    </div>
-    <% } %>
-
-    <!-- ── Multi-role notice: shown only when this account also holds other roles ── -->
-    <% if (myOtherPortals && myOtherPortals.length > 0) { %>
-    <div class="pd-multi-role">
-        <span class="pd-mr-icon">&#9888;</span>
-        <div class="pd-mr-body">
-            <p>
-                <strong>Your account has access to multiple portals.</strong>
-                You are currently in the <strong><%= roleName %></strong> portal — tasks here are specific to this role only.
-                Each role has its own URL and its own queue.
-            </p>
-            <div class="pd-mr-links">
+            <!-- Other portals this user can access -->
+            <% if (myOtherPortals && myOtherPortals.length > 0) { %>
+            <div class="pd-side-section">
+                <div class="pd-side-section-hd">Switch Portal</div>
                 <% myOtherPortals.forEach(p => { %>
                 <a href="/portal/<%= p.slug %>/enter"
-                   class="pd-mr-link"
-                   style="border-left-color: <%= p.accentColor %>;">
-                    <span class="pd-mr-label" style="color: <%= p.accentColor %>;"><%= p.label %></span>
-                    <span class="pd-mr-url">/portal/<%= p.slug %></span>
+                   class="pd-portal-link"
+                   style="--link-accent: <%= p.accentColor %>;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                        <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                    <%= p.label %>
                 </a>
                 <% }) %>
             </div>
-        </div>
-    </div>
-    <% } %>
+            <% } %>
 
-    <!-- ── HR: initiate banner ── -->
-    <% if (roleKey === 'HR_INITIATOR') { %>
-    <div class="hr-initiate">
-        <p>Submit a new onboarding request for an incoming employee.</p>
-        <a href="<%= appUrl %>/api/onboarding/initiate" class="btn-initiate">+ New Onboarding Request</a>
-    </div>
-    <% } %>
+        </aside>
 
-    <!-- ── Stats ── -->
-    <div class="pd-stats">
-        <div class="pd-stat">
-            <div class="s-val"><%= pendingCount %></div>
-            <div class="s-lbl">Total in queue</div>
-        </div>
-        <div class="pd-stat <%= actionCount > 0 ? 's-alert' : '' %>">
-            <div class="s-val"><%= actionCount %></div>
-            <div class="s-lbl">Awaiting your action</div>
-        </div>
-        <div class="pd-stat">
-            <div class="s-val"><%= history.length %></div>
-            <div class="s-lbl">Processed (history)</div>
-        </div>
-    </div>
+        <!-- ── Main content ── -->
+        <main class="pd-main">
+            <div class="pd-main-inner">
 
-    <!-- ── Tabs (JS-toggled) ── -->
-    <div class="pd-tabs">
-        <a class="pd-tab is-active" id="tab-pending" href="#" onclick="switchTab('pending'); return false;">
-            Pending Queue <% if (pendingCount > 0) { %>(<%= pendingCount %>)<% } %>
-        </a>
-        <a class="pd-tab" id="tab-history" href="#" onclick="switchTab('history'); return false;">
-            History <% if (history.length > 0) { %>(<%= history.length %>)<% } %>
-        </a>
-    </div>
-
-    <!-- ── Pending tab ── -->
-    <div class="pd-section" id="pane-pending">
-        <% if (pending.length === 0) { %>
-            <div class="pd-empty">
-                <div class="em">&#10003;</div>
-                <p>No pending requests in your queue.</p>
-            </div>
-        <% } else { %>
-        <div class="req-list">
-            <% pending.forEach(r => {
-                const stageAge = r.hrSubmittedAt ? Math.round((Date.now() - new Date(r.hrSubmittedAt).getTime()) / 3600000) : null;
-                const isStale  = stageAge !== null && stageAge > 48;
-                const isEscalated = !r.canAct && (r.status === r.status); // secondary sees but can't act yet
-            %>
-            <div class="req-card <%= r.canAct ? 'can-act' : 'read-only' %> <%= (expandId && r.id === expandId) ? 'is-expanded' : '' %>" id="req-<%= r.id %>">
-                <div class="req-info">
-                    <% if (expandId && r.id === expandId) { %>
-                    <div class="expanded-banner" style="background: <%= roleAccentColor %>;">
-                        &#128279; <span>You are acting as <strong><%= roleName %></strong> — this request is assigned to you</span>
+                <!-- ── KPI Cards ── -->
+                <div class="pd-kpi-row">
+                    <div class="pd-kpi-card">
+                        <div class="pd-kpi-val"><%= pendingCount %></div>
+                        <div class="pd-kpi-lbl">Total in queue</div>
                     </div>
-                    <% } %>
-                    <p class="req-name">#<%= r.id %> — <%= r.fullName || '—' %></p>
-                    <p class="req-sub">
-                        <%= [r.designation, r.department].filter(Boolean).join(' · ') || '—' %>
-                        <% if (r.location) { %> &middot; <%= r.location %><% } %>
-                    </p>
-                    <div class="req-meta">
-                        <span class="req-pill <%= r.status === 'PendingOPSAction' ? 'status-ops' : 'status-pending' %>">
-                            <%= r.status %>
-                        </span>
-                        <% if (r.joiningDate) { %>
-                            <span class="req-pill">Joining: <%= new Date(r.joiningDate).toLocaleDateString('en-GB') %></span>
-                        <% } %>
-                        <% if (r.hrSubmittedAt) { %>
-                            <span class="req-pill">Submitted: <%= new Date(r.hrSubmittedAt).toLocaleDateString('en-GB') %></span>
-                        <% } %>
+                    <div class="pd-kpi-card <%= actionCount > 0 ? 'is-alert' : '' %>">
+                        <div class="pd-kpi-val"><%= actionCount %></div>
+                        <div class="pd-kpi-lbl">Awaiting your action</div>
                     </div>
-                    <% if (stageAge !== null) { %>
-                        <div class="req-timer <%= isStale ? 'stale' : '' %>">
-                            <%= isStale ? '&#9888; ' : '&#9679; ' %>
-                            Stage open <%= stageAge %>h<%= isStale ? ' — PAST 48h' : '' %>
+                    <div class="pd-kpi-card">
+                        <div class="pd-kpi-val"><%= history.length %></div>
+                        <div class="pd-kpi-lbl">Processed (history)</div>
+                    </div>
+                </div>
+
+                <!-- Delegator read-only banner -->
+                <% if (isDelegator) { %>
+                <div class="pd-delegator-banner">
+                    <span class="pd-db-icon">&#9888;</span>
+                    <div>
+                        <strong>You have temporarily delegated this role.</strong>
+                        <%= delegateName ? delegateName + ' (' + delegateEmail + ')' : delegateEmail %> is currently
+                        covering all pending requests on your behalf. You can view the queue below but cannot take
+                        any actions until the delegation is reverted. Contact an administrator to restore your access.
+                    </div>
+                </div>
+                <% } %>
+
+                <!-- Tabs -->
+                <div class="pd-tabs">
+                    <a class="pd-tab is-active" id="tab-pending" href="#" onclick="switchTab('pending'); return false;">
+                        Pending Queue <% if (pendingCount > 0) { %>(<%= pendingCount %>)<% } %>
+                    </a>
+                    <a class="pd-tab" id="tab-history" href="#" onclick="switchTab('history'); return false;">
+                        History <% if (history.length > 0) { %>(<%= history.length %>)<% } %>
+                    </a>
+                </div>
+
+                <!-- Pending tab -->
+                <div class="pd-section" id="pane-pending">
+                    <% if (pending.length === 0) { %>
+                        <div class="pd-empty">
+                            <div class="em">&#10003;</div>
+                            <p>No pending requests in your queue.</p>
                         </div>
-                    <% } %>
-                </div>
-
-                <div class="req-actions">
-                    <% if (r.canAct && r.actionUrl) { %>
-                        <a href="<%= r.actionUrl %>" class="btn-handle">Handle &#8594;</a>
                     <% } else { %>
-                        <a href="/api/onboarding/history/<%= r.id %>" class="btn-view">View</a>
-                    <% } %>
+                    <div class="req-list">
+                        <% pending.forEach(r => {
+                            const stageAge = r.hrSubmittedAt ? Math.round((Date.now() - new Date(r.hrSubmittedAt).getTime()) / 3600000) : null;
+                            const isStale  = stageAge !== null && stageAge > 48;
+                        %>
+                        <div class="req-card <%= r.canAct ? 'can-act' : 'read-only' %> <%= (expandId && r.id === expandId) ? 'is-expanded' : '' %>" id="req-<%= r.id %>">
+                            <div class="req-info">
+                                <% if (expandId && r.id === expandId) { %>
+                                <div class="expanded-banner" style="background: <%= roleAccentColor %>;">
+                                    &#128279; <span>You are acting as <strong><%= roleName %></strong> — this request is assigned to you</span>
+                                </div>
+                                <% } %>
+                                <p class="req-name">#<%= r.id %> — <%= r.fullName || '—' %></p>
+                                <p class="req-sub">
+                                    <%= [r.designation, r.department].filter(Boolean).join(' · ') || '—' %>
+                                    <% if (r.location) { %> &middot; <%= r.location %><% } %>
+                                </p>
+                                <div class="req-meta">
+                                    <span class="req-pill <%= r.status === 'PendingOPSAction' ? 'status-ops' : 'status-pending' %>">
+                                        <%= r.status %>
+                                    </span>
+                                    <% if (r.joiningDate) { %>
+                                        <span class="req-pill">Joining: <%= new Date(r.joiningDate).toLocaleDateString('en-GB') %></span>
+                                    <% } %>
+                                    <% if (r.hrSubmittedAt) { %>
+                                        <span class="req-pill">Submitted: <%= new Date(r.hrSubmittedAt).toLocaleDateString('en-GB') %></span>
+                                    <% } %>
+                                </div>
+                                <% if (stageAge !== null) { %>
+                                    <div class="req-timer <%= isStale ? 'stale' : '' %>">
+                                        <%= isStale ? '&#9888; ' : '&#9679; ' %>
+                                        Stage open <%= stageAge %>h<%= isStale ? ' — PAST 48h' : '' %>
+                                    </div>
+                                <% } %>
+                            </div>
 
-                    <div class="assignee-note <%= r.currentStageAssigneeEmail && !r.canAct ? 'escalated' : '' %>">
-                        <% if (r.canAct) { %>
-                            Assigned to you
-                        <% } else if (r.currentStageAssigneeEmail) { %>
-                            Assigned to <%= r.currentStageAssigneeEmail.split('@')[0] %>
-                        <% } else { %>
-                            Unassigned
-                        <% } %>
+                            <div class="req-actions">
+                                <% if (r.canAct && r.actionUrl) { %>
+                                    <a href="<%= r.actionUrl %>" class="btn-handle">Handle &#8594;</a>
+                                <% } else { %>
+                                    <a href="/api/onboarding/history/<%= r.id %>" class="btn-view">View</a>
+                                <% } %>
+                                <div class="assignee-note <%= r.currentStageAssigneeEmail && !r.canAct ? 'escalated' : '' %>">
+                                    <% if (r.canAct) { %>
+                                        Assigned to you
+                                    <% } else if (r.currentStageAssigneeEmail) { %>
+                                        Assigned to <%= r.currentStageAssigneeEmail.split('@')[0] %>
+                                    <% } else { %>
+                                        Unassigned
+                                    <% } %>
+                                </div>
+                            </div>
+                        </div>
+                        <% }) %>
                     </div>
+                    <% } %>
                 </div>
-            </div>
-            <% }) %>
-        </div>
-        <% } %>
-    </div>
 
-    <!-- ── History tab ── -->
-    <div class="pd-section" id="pane-history" style="display:none;">
-        <% if (history.length === 0) { %>
-            <div class="pd-empty">
-                <div class="em">&#128203;</div>
-                <p>No processed requests yet.</p>
-            </div>
-        <% } else { %>
-        <table class="hist-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Employee</th>
-                    <th>Department</th>
-                    <% if (locationLabels[0] === 'All Locations') { %><th>Location</th><% } %>
-                    <th>Joining Date</th>
-                    <th>Status</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                <% history.forEach(r => {
-                    let spClass = 'sp-other';
-                    if (r.status === 'Completed') spClass = 'sp-completed';
-                    else if (r.status === 'Rejected') spClass = 'sp-rejected';
-                    else if (r.status && r.status.startsWith('Pending')) spClass = 'sp-pending';
-                %>
-                <tr>
-                    <td>#<%= r.id %></td>
-                    <td>
-                        <strong><%= r.fullName || '—' %></strong><br>
-                        <span style="font-size:0.78rem;color:#94a3b8;"><%= r.designation || '' %></span>
-                    </td>
-                    <td><%= r.department || '—' %></td>
-                    <% if (locationLabels[0] === 'All Locations') { %><td><%= r.location || '—' %></td><% } %>
-                    <td><%= r.joiningDate ? new Date(r.joiningDate).toLocaleDateString('en-GB') : '—' %></td>
-                    <td><span class="status-pill <%= spClass %>"><%= r.status %></span></td>
-                    <td><a href="/api/onboarding/history/<%= r.id %>" class="btn-view">View</a></td>
-                </tr>
-                <% }) %>
-            </tbody>
-        </table>
-        <% } %>
-    </div>
+                <!-- History tab -->
+                <div class="pd-section" id="pane-history" style="display:none;">
+                    <% if (history.length === 0) { %>
+                        <div class="pd-empty">
+                            <div class="em">&#128203;</div>
+                            <p>No processed requests yet.</p>
+                        </div>
+                    <% } else { %>
+                    <table class="hist-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Employee</th>
+                                <th>Department</th>
+                                <% if (locationLabels[0] === 'All Locations') { %><th>Location</th><% } %>
+                                <th>Joining Date</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% history.forEach(r => {
+                                let spClass = 'sp-other';
+                                if (r.status === 'Completed') spClass = 'sp-completed';
+                                else if (r.status === 'Rejected') spClass = 'sp-rejected';
+                                else if (r.status && r.status.startsWith('Pending')) spClass = 'sp-pending';
+                            %>
+                            <tr>
+                                <td>#<%= r.id %></td>
+                                <td>
+                                    <strong><%= r.fullName || '—' %></strong><br>
+                                    <span style="font-size:0.78rem;color:#94a3b8;"><%= r.designation || '' %></span>
+                                </td>
+                                <td><%= r.department || '—' %></td>
+                                <% if (locationLabels[0] === 'All Locations') { %><td><%= r.location || '—' %></td><% } %>
+                                <td><%= r.joiningDate ? new Date(r.joiningDate).toLocaleDateString('en-GB') : '—' %></td>
+                                <td><span class="status-pill <%= spClass %>"><%= r.status %></span></td>
+                                <td><a href="/api/onboarding/history/<%= r.id %>" class="btn-view">View</a></td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                    <% } %>
+                </div>
 
-</div>
+            </div>
+        </main>
+
+    </div><!-- /.pd-body -->
+
+</div><!-- /.pd-app -->
 
 <script>
 function switchTab(name) {
@@ -408,14 +606,16 @@ function switchTab(name) {
     document.querySelectorAll('[id^="pane-"]').forEach(p => p.style.display = 'none');
     document.getElementById('tab-' + name).classList.add('is-active');
     document.getElementById('pane-' + name).style.display = '';
+    document.querySelectorAll('.pd-side-nav-btn').forEach(b => b.classList.remove('is-active'));
+    const sideBtn = document.querySelector('.pd-side-nav-btn[data-tab="' + name + '"]');
+    if (sideBtn) sideBtn.classList.add('is-active');
 }
 
-// If arriving from an email link, scroll the highlighted card into view.
 const expandId = <%= expandId ? expandId : 'null' %>;
 if (expandId) {
     const card = document.getElementById('req-' + expandId);
     if (card) {
-        switchTab('pending'); // ensure pending tab is active
+        switchTab('pending');
         setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
     }
 }

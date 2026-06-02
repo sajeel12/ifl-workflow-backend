@@ -20,12 +20,13 @@
         }
 
         .header {
-            background-color: #0078D4;
-            padding: 16px 24px;
+            background: linear-gradient(120deg, #0078D4 0%, #005fa8 60%, #004880 100%);
+            padding: 0 24px;
+            height: 66px;
             display: flex;
             align-items: center;
             gap: 16px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 14px rgba(0, 120, 212, 0.28);
             position: sticky;
             top: 0;
             z-index: 1000;
@@ -408,6 +409,8 @@
             const attachToHeader = () => {
                 const host = document.querySelector('.a-header')
                     || document.querySelector('.app-header')
+                    || document.querySelector('.pd-topbar')
+                    || document.querySelector('.pm-topbar')
                     || document.querySelector('body > .header');
                 if (host) {
                     badge.style.position = 'static';

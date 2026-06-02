@@ -83,8 +83,24 @@
     %>
     <%- include('../partials/portal_shell') %>
 
+    <%
+    // Determine which section starts expanded based on the current role
+    const _activeSec = {
+        'HR':            'sec-employee',
+        'IT':            'sec-it',
+        'HOD':           'sec-hod',
+        'DCI':           'sec-dci',
+        'DCIManager':    'sec-dci',
+        'ITHOD':         'sec-ithod',
+        'DCIImplementer':'sec-dci-impl',
+        'OPS':           'sec-ops',
+    }[role] || 'sec-employee';
+    const _collapsed = (id) => _activeSec !== id ? 'is-collapsed' : '';
+    %>
+
     <div class="app-container">
 
+        <!-- ── Step Progress Bar (always visible) ── -->
         <div class="steps-container">
             <div class="steps" style="--step-progress: <%= stepProgress %>%">
                 <% steps.forEach((s, i) => { %>
@@ -98,467 +114,424 @@
             </div>
         </div>
 
-        <form method="POST" action="<%- formAction %>" <%- formEnctype %>>
+        <form class="onb-form" method="POST" action="<%- formAction %>" <%- formEnctype %>>
             <% if (locals.portalToken) { %><input type="hidden" name="pt" value="<%= locals.portalToken %>"><% } %>
-            <% if (role==='DCIImplementer' ) { %>
-                <input type="hidden" name="token" value="<%= token %>">
+            <% if (role === 'DCIImplementer') { %><input type="hidden" name="token" value="<%= token %>"><% } %>
+
+            <!-- ── Scrollable form body ── -->
+            <div class="form-scroll">
+                <div class="form-content">
+
+                    <!-- ════ SECTION: Employee Details ════ -->
+                    <div class="form-section <%= _collapsed('sec-employee') %>" id="sec-employee" style="--sec-accent:#2563eb">
+                        <div class="form-section-hd" onclick="iflToggleSection(this)">
+                            <span class="form-section-ttl">Employee Details</span>
+                            <span class="form-section-tag">HR</span>
+                            <% if (_activeSec !== 'sec-employee' && (val('fullName') || val('employeeId'))) { %>
+                                <span class="form-section-hint"><%= val('fullName') || val('employeeId') %></span>
+                            <% } %>
+                            <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div class="form-section-body">
+                            <!-- Requester info (auto-filled, read-only) -->
+                            <div class="grid-2" style="margin-bottom:10px;">
+                                <div class="form-group">
+                                    <label>Requester Name <span style="color:#9ca3af;font-weight:400;text-transform:none;">(auto-filled)</span></label>
+                                    <input type="text" name="requesterName" value="<%= val('requesterName') %>" readonly style="background:#f1f5f9;">
+                                </div>
+                                <div class="form-group">
+                                    <label>Requester Email</label>
+                                    <input type="text" name="requesterEmail" value="<%= val('requesterEmail') %>" readonly style="background:#f1f5f9;">
+                                </div>
+                            </div>
+
+                            <!-- Employee ID lookup -->
+                            <div style="background:#f8fafc;padding:12px 16px;border-radius:8px;border:1.5px solid #e2e4e9;margin-bottom:14px;">
+                                <div style="font-size:0.7rem;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.055em;margin-bottom:6px;">Employee ID</div>
+                                <div style="display:flex;gap:10px;align-items:center;">
+                                    <input type="text" id="employeeIdInput" name="employeeId"
+                                        value="<%= val('employeeId') %>" <%=hrDisabled %> required
+                                        style="font-size:1rem;font-weight:600;letter-spacing:0.02em;max-width:220px;flex:1 1 auto;">
+                                    <% if (role === 'HR') { %>
+                                        <button type="button" id="btnGetEmployee" class="btn btn-primary" style="flex-shrink:0;">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16">
+                                                <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                                            </svg>
+                                            Get Employee Data
+                                        </button>
+                                    <% } %>
+                                </div>
+                            </div>
+
+                            <!-- Main employee fields — compact 4-column + 3-column layout -->
+                            <div class="grid-4">
+                                <div class="form-group">
+                                    <label>Full Name</label>
+                                    <input type="text" name="fullName" value="<%= val('fullName') %>" <%=hrDisabled %> required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Request Mode</label>
+                                    <select name="requestMode" <%=hrDisabled %>>
+                                        <option value="New" <%=val('requestMode')==='New' ? 'selected' : '' %>>New Hiring</option>
+                                        <option value="Change" <%=val('requestMode')==='Change' ? 'selected' : '' %>>Change / Modification</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>HOD Name</label>
+                                    <input type="text" name="hod" value="<%= val('hod') %>" <%=hrDisabled %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>Joining Date</label>
+                                    <input type="date" name="joiningDate"
+                                        value="<%= (function(){ if(!val('joiningDate')) return ''; const d = new Date(val('joiningDate')); return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]; })() %>"
+                                        <%=hrDisabled %>>
+                                </div>
+                            </div>
+                            <div class="grid-4">
+                                <div class="form-group">
+                                    <label>Department</label>
+                                    <input type="text" name="department" value="<%= val('department') %>" <%=hrDisabled %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>Sub-Department</label>
+                                    <input type="text" name="subDepartment" value="<%= val('subDepartment') %>" <%=hrDisabled %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>Designation</label>
+                                    <input type="text" name="designation" value="<%= val('designation') %>" <%=hrDisabled %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>Location Group <span style="color:#9ca3af;font-weight:400;text-transform:none;">(auto)</span></label>
+                                    <%
+                                        let locDisplay = val('location') || '';
+                                        try {
+                                            const _locModule = locDisplay && typeof locationGroupLabels !== 'undefined'
+                                                ? locationGroupLabels[locDisplay] : null;
+                                            if (_locModule) locDisplay = _locModule;
+                                        } catch(_) {}
+                                    %>
+                                    <input type="text" value="<%= locDisplay %>" readonly style="background:#f1f5f9;" data-ifl-location="1">
+                                </div>
+                            </div>
+
+                            <!-- Request details note -->
+                            <div style="display:flex;align-items:flex-start;gap:8px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:6px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                <span style="font-size:0.8rem;color:#92400e;line-height:1.5;">Describe what needs to be configured — services required, access levels, email setup, printer assignments, and any special permissions.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ════ SECTION: IT Services (conditional) ════ -->
+                    <% if (role !== 'HR' || request.id) { %>
+                    <div class="form-section <%= _collapsed('sec-it') %>" id="sec-it" style="--sec-accent:#0078D4">
+                        <div class="form-section-hd" onclick="iflToggleSection(this)">
+                            <span class="form-section-ttl">IT Services Configuration</span>
+                            <span class="form-section-tag">IT Operations</span>
+                            <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div class="form-section-body">
+                            <!-- Access & Email -->
+                            <div class="grid-3" style="margin-bottom:10px;">
+                                <label class="checkbox-card" style="margin-bottom:0;">
+                                    <input type="checkbox" name="intranetAccess"
+                                        <%= (request.intranetAccess === false) ? '' : 'checked' %> <%= servicesDisabled %>>
+                                    <span>Intranet Access <small style="color:#64748b;">(default)</small></span>
+                                </label>
+                                <label class="checkbox-card" style="margin-bottom:0;">
+                                    <input type="checkbox" name="emailIncoming" <%=chk('emailIncoming') %> <%= servicesDisabled %>>
+                                    <span>Incoming Email</span>
+                                </label>
+                                <label class="checkbox-card" style="margin-bottom:0;">
+                                    <input type="checkbox" name="emailOutgoing" <%=chk('emailOutgoing') %> <%= servicesDisabled %>>
+                                    <span>Outgoing Email</span>
+                                </label>
+                            </div>
+                            <div class="form-group" style="margin-bottom:14px;">
+                                <label>Email Details</label>
+                                <textarea name="emailPurpose" rows="2"
+                                    placeholder="Specify what needs to be configured — recipients, limits, distribution lists, business justification."
+                                    <%=servicesDisabled %>><%= val('emailPurpose') %></textarea>
+                            </div>
+
+                            <!-- Printing -->
+                            <div class="grid-2" style="margin-bottom:12px;">
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <input type="checkbox" id="chk-laser" name="laserPrinter" <%=chk('laserPrinter') %>
+                                        <%= servicesDisabled %> style="width:16px;height:16px;flex-shrink:0;"
+                                        onchange="togglePrinterLocation('laser')">
+                                    <% if (printerLocations && printerLocations.length > 0 && !servicesDisabled) { %>
+                                        <select id="loc-laser" name="laserPrinterLocation" style="flex:1;">
+                                            <option value="">— Laser Printer —</option>
+                                            <% printerLocations.filter(p => p.name && p.name.toLowerCase().includes('laser')).forEach(p => { %>
+                                                <option value="<%= p.location %>" <%= val('laserPrinterLocation') === p.location ? 'selected' : '' %>><%= p.name %></option>
+                                            <% }) %>
+                                            <option value="<%= val('laserPrinterLocation') %>" selected><%= val('laserPrinterLocation') || 'Other' %></option>
+                                        </select>
+                                    <% } else { %>
+                                        <input type="text" id="loc-laser" name="laserPrinterLocation" placeholder="Laser Printer Location" value="<%= val('laserPrinterLocation') %>" <%=servicesDisabled %>>
+                                    <% } %>
+                                </div>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <input type="checkbox" id="chk-dotmatrix" name="dotMatrixPrinter" <%=chk('dotMatrixPrinter') %>
+                                        <%= servicesDisabled %> style="width:16px;height:16px;flex-shrink:0;"
+                                        onchange="togglePrinterLocation('dotmatrix')">
+                                    <% if (printerLocations && printerLocations.length > 0 && !servicesDisabled) { %>
+                                        <select id="loc-dotmatrix" name="dotMatrixPrinterLocation" style="flex:1;">
+                                            <option value="">— Dot Matrix —</option>
+                                            <% printerLocations.filter(p => p.name && p.name.toLowerCase().includes('matrix')).forEach(p => { %>
+                                                <option value="<%= p.location %>" <%= val('dotMatrixPrinterLocation') === p.location ? 'selected' : '' %>><%= p.name %></option>
+                                            <% }) %>
+                                            <option value="<%= val('dotMatrixPrinterLocation') %>"><%= val('dotMatrixPrinterLocation') || 'Other' %></option>
+                                        </select>
+                                    <% } else { %>
+                                        <input type="text" id="loc-dotmatrix" name="dotMatrixPrinterLocation" placeholder="Dot Matrix Location" value="<%= val('dotMatrixPrinterLocation') %>" <%=servicesDisabled %>>
+                                    <% } %>
+                                </div>
+                            </div>
+
+                            <!-- File Shares -->
+                            <div style="border-top:1px dashed #cbd5e1;padding-top:12px;">
+                                <div class="grid-4">
+                                    <div class="form-group">
+                                        <label>Dept Share (S:)</label>
+                                        <% if (fileSharePaths && fileSharePaths.length > 0 && !servicesDisabled) { %>
+                                            <select name="deptSharePath">
+                                                <option value="">— Select Share —</option>
+                                                <% fileSharePaths.forEach(p => { %><option value="<%= p.path %>" <%= val('deptSharePath') === p.path ? 'selected' : '' %>><%= p.name %></option><% }) %>
+                                            </select>
+                                        <% } else { %>
+                                            <input type="text" name="deptSharePath" value="<%= val('deptSharePath') %>" <%=servicesDisabled %>>
+                                        <% } %>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Home Folder (Z:)</label>
+                                        <% if (fileSharePaths && fileSharePaths.length > 0 && !servicesDisabled) { %>
+                                            <select name="homeFolderPath">
+                                                <option value="">— Select Home Folder —</option>
+                                                <% fileSharePaths.forEach(p => { %><option value="<%= p.path %>" <%= val('homeFolderPath') === p.path ? 'selected' : '' %>><%= p.name %></option><% }) %>
+                                            </select>
+                                        <% } else { %>
+                                            <input type="text" name="homeFolderPath" value="<%= val('homeFolderPath') %>" <%=servicesDisabled %>>
+                                        <% } %>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>SharePoint / IFL Portal</label>
+                                        <% if (sharepointPaths && sharepointPaths.length > 0 && !servicesDisabled) { %>
+                                            <select name="iflPortalLink">
+                                                <option value="">— Select Portal —</option>
+                                                <% sharepointPaths.forEach(p => { %><option value="<%= p.url %>" <%= val('iflPortalLink') === p.url ? 'selected' : '' %>><%= p.name %></option><% }) %>
+                                            </select>
+                                        <% } else { %>
+                                            <input type="text" name="iflPortalLink" value="<%= val('iflPortalLink') %>" <%=servicesDisabled %>>
+                                        <% } %>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>SharePoint Role <span style="color:#dc2626;">*</span></label>
+                                        <select name="sharepointRole" <%=servicesDisabled %>>
+                                            <option value="">— Select Role —</option>
+                                            <option value="Viewer" <%= val('sharepointRole') === 'Viewer' ? 'selected' : '' %>>Viewer</option>
+                                            <option value="Editor" <%= val('sharepointRole') === 'Editor' ? 'selected' : '' %>>Editor</option>
+                                            <option value="Contributor" <%= val('sharepointRole') === 'Contributor' ? 'selected' : '' %>>Contributor</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <!-- ════ SECTION: HOD Remarks (conditional) ════ -->
+                    <% if (role === 'HOD' || request.hodRemarks) { %>
+                    <div class="form-section <%= _collapsed('sec-hod') %>" id="sec-hod" style="--sec-accent:#16a34a">
+                        <div class="form-section-hd" onclick="iflToggleSection(this)">
+                            <span class="form-section-ttl">HOD Remarks</span>
+                            <span class="form-section-tag">HOD</span>
+                            <% if (_activeSec !== 'sec-hod' && request.hodRemarks) { %><span class="form-section-hint">Filled</span><% } %>
+                            <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div class="form-section-body">
+                            <div class="form-group">
+                                <textarea name="hodRemarks" rows="3" placeholder="Enter HOD comments here…" <%=hodRemarksDisabled %>><%= val('hodRemarks') %></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <!-- ════ SECTION: DCI Manager Change Request (read-only) ════ -->
+                    <% if (request.dciChangeRequestRemarks) { %>
+                    <div class="form-section <%= _collapsed('sec-dci-changes') %>" id="sec-dci-changes" style="--sec-accent:#f59e0b">
+                        <div class="form-section-hd" onclick="iflToggleSection(this)">
+                            <span class="form-section-ttl">Changes Requested by DCI Manager</span>
+                            <span class="form-section-tag" style="background:#fef3c7;color:#b45309;">Action Required</span>
+                            <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div class="form-section-body">
+                            <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px 14px;color:#9a3412;white-space:pre-wrap;font-size:0.875rem;">
+                                <%= request.dciChangeRequestRemarks %>
+                            </div>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <!-- ════ SECTION: DCI Configuration (conditional) ════ -->
+                    <% if (!['HR', 'IT', 'HOD'].includes(role) || request.ntUserName) { %>
+                    <div class="form-section <%= _collapsed('sec-dci') %>" id="sec-dci" style="--sec-accent:#7c3aed">
+                        <div class="form-section-hd" onclick="iflToggleSection(this)">
+                            <span class="form-section-ttl">DCI Configuration</span>
+                            <span class="form-section-tag">DCI Team</span>
+                            <% if (_activeSec !== 'sec-dci' && val('ntUserName')) { %><span class="form-section-hint"><%= val('ntUserName') %></span><% } %>
+                            <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div class="form-section-body">
+                            <div class="grid-3">
+                                <div class="form-group"><label>NT User Name</label><input type="text" name="ntUserName" value="<%= val('ntUserName') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>Exchange Name</label><input type="text" name="exchangeDisplayName" value="<%= val('exchangeDisplayName') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>SMTP Address</label><input type="text" name="smtpAddress" value="<%= val('smtpAddress') %>" <%=configDisabled %>></div>
+                            </div>
+                            <div class="grid-4">
+                                <div class="form-group"><label>Member Of</label><input type="text" name="memberOf" value="<%= val('memberOf') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>DG Members</label><input type="text" name="dgMembers" value="<%= val('dgMembers') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>Mail Size</label><input type="text" name="mailSizeLimit" value="<%= val('mailSizeLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>Recipient Limit</label><input type="text" name="recipientLimit" value="<%= val('recipientLimit') %>" <%=configDisabled %>></div>
+                            </div>
+                            <div class="grid-3">
+                                <div class="form-group"><label>Storage Limit</label><input type="text" name="mailboxStorageLimit" value="<%= val('mailboxStorageLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group">
+                                    <label>Group Policy Level</label>
+                                    <select name="groupPolicyLevel" <%=configDisabled %>>
+                                        <option value="">Select Level…</option>
+                                        <option value="Highly Managed" <%=val('groupPolicyLevel')==='Highly Managed' ? 'selected' : '' %>>Highly Managed</option>
+                                        <option value="Lightly Managed" <%=val('groupPolicyLevel')==='Lightly Managed' ? 'selected' : '' %>>Lightly Managed</option>
+                                        <option value="IT User" <%=val('groupPolicyLevel')==='IT User' ? 'selected' : '' %>>IT User</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label>Extra Facility</label><textarea name="extraFacility" rows="2" <%=configDisabled %>><%= val('extraFacility') %></textarea></div>
+                            </div>
+                            <div class="form-group">
+                                <label>DCI Remarks / Instructions</label>
+                                <textarea name="dciRemarks" rows="3" <%=dciRemarksDisabled %>><%= val('dciRemarks') %></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <!-- ════ SECTION: IT HOD Remarks (conditional) ════ -->
+                    <% if (role === 'ITHOD' || request.itHodRemarks) { %>
+                    <div class="form-section <%= _collapsed('sec-ithod') %>" id="sec-ithod" style="--sec-accent:#0284c7">
+                        <div class="form-section-hd" onclick="iflToggleSection(this)">
+                            <span class="form-section-ttl">IT HOD Remarks</span>
+                            <span class="form-section-tag">IT HOD</span>
+                            <% if (_activeSec !== 'sec-ithod' && request.itHodRemarks) { %><span class="form-section-hint">Filled</span><% } %>
+                            <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div class="form-section-body">
+                            <div class="form-group">
+                                <textarea name="itHodRemarks" rows="3" placeholder="Enter IT HOD remarks / notes…"
+                                    <%= role === 'ITHOD' ? '' : 'disabled' %>><%= val('itHodRemarks') %></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <!-- ════ SECTION: OPS Checklist (dynamic injection) ════ -->
+                    <% if (typeof opsChecklistHTML !== 'undefined' && opsChecklistHTML) { %>
+                    <div class="form-section <%= _collapsed('sec-ops') %>" id="sec-ops" style="--sec-accent:#d97706">
+                        <div class="form-section-hd" onclick="iflToggleSection(this)">
+                            <span class="form-section-ttl">OPS Checklist</span>
+                            <span class="form-section-tag">OPS</span>
+                            <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div class="form-section-body">
+                            <%- opsChecklistHTML %>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <!-- ════ SECTION: DCI Implementation (conditional) ════ -->
+                    <% if (role === 'DCIImplementer') { %>
+                    <div class="form-section <%= _collapsed('sec-dci-impl') %>" id="sec-dci-impl" style="--sec-accent:#7c3aed">
+                        <div class="form-section-hd" onclick="iflToggleSection(this)">
+                            <span class="form-section-ttl">Proof of Implementation</span>
+                            <span class="form-section-tag">DCI Implementer</span>
+                            <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div class="form-section-body">
+                            <div class="form-group">
+                                <label>Implementer Name <span style="color:#9ca3af;font-weight:400;text-transform:none;">(auto-filled)</span></label>
+                                <input type="text" name="implementerName" data-ifl-sso-name="1"
+                                    value="<%= (currentUser && (currentUser.displayName || currentUser.username)) || '' %>"
+                                    disabled style="background:#f1f5f9;color:#0f172a;max-width:320px;">
+                            </div>
+                            <div style="border:2px dashed #d1d5db;border-radius:10px;padding:24px;text-align:center;background:#f9fafb;transition:border-color 0.15s;" onmouseenter="this.style.borderColor='#2563eb'" onmouseleave="this.style.borderColor='#d1d5db'">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <div style="font-size:0.84rem;font-weight:600;color:#374151;margin-bottom:4px;">Upload Screenshots (AD / Exchange)</div>
+                                <div style="font-size:0.75rem;color:#9ca3af;margin-bottom:12px;">PNG, JPG — proof of implementation</div>
+                                <input type="file" name="dciProof" multiple accept="image/*" required>
+                            </div>
+                        </div>
+                    </div>
+                    <% } %>
+
+                </div><!-- /.form-content -->
+
+                <!-- Workflow History (inside scroll area, visible after scrolling) -->
+                <% if (typeof timeline !== 'undefined' && timeline && timeline.length) { %>
+                <style>
+                    .wf-history-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin:0 24px 24px;}
+                    .wf-history-title{font-size:0.78rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;}
+                    .wf-history-list{margin:0;padding-left:0;list-style:none;}
+                    .wf-step{position:relative;padding-left:34px;padding-bottom:14px;margin-left:11px;border-left:2px solid #e2e8f0;}
+                    .wf-step.is-last{border-left-color:transparent;padding-bottom:0;}
+                    .wf-step .wf-dot{position:absolute;left:-11px;top:0;width:22px;height:22px;border-radius:50%;background:#3b82f6;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;box-shadow:0 0 0 4px #f8fafc;}
+                    .wf-step .wf-role{font-size:0.9rem;color:#0f172a;font-weight:600;line-height:1.3;}
+                    .wf-step .wf-time{font-size:0.75rem;color:#94a3b8;margin-top:2px;}
+                </style>
+                <div class="wf-history-card">
+                    <div class="wf-history-title">Workflow Progress</div>
+                    <ol class="wf-history-list">
+                        <% timeline.forEach((ev, i) => { %>
+                            <li class="wf-step <%= i === timeline.length - 1 ? 'is-last' : '' %>">
+                                <span class="wf-dot"><%= i + 1 %></span>
+                                <div class="wf-role"><%= ev.actorRole || '—' %></div>
+                                <div class="wf-time"><%= new Date(ev.timestamp).toLocaleString() %></div>
+                            </li>
+                        <% }) %>
+                    </ol>
+                </div>
                 <% } %>
 
-                    <div class="form-content">
+            </div><!-- /.form-scroll -->
 
-                        <!-- Section 1: Requestor Information -->
-                        <div class="section-title">
-                            <span>Employee Details</span>
-                            <span class="section-tag">HR</span>
-                        </div>
-
-                        <!-- Requester block — auto-filled from logged-in initiator -->
-                        <div class="grid-2" style="margin-bottom:16px;">
-                            <div class="form-group">
-                                <label>Requester Name <span style="color:#64748b; font-weight:400; font-size:0.8rem;">(auto-filled)</span></label>
-                                <input type="text" name="requesterName" value="<%= val('requesterName') %>" readonly style="background:#f1f5f9;">
-                            </div>
-                            <div class="form-group">
-                                <label>Requester Email</label>
-                                <input type="text" name="requesterEmail" value="<%= val('requesterEmail') %>" readonly style="background:#f1f5f9;">
-                            </div>
-                        </div>
-
-                        <!-- Details / Purpose explainer -->
-                        <div class="form-group full-width" style="background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:12px 16px; margin-bottom:20px;">
-                            <label style="font-weight:600; color:#854d0e;">Request Details</label>
-                            <p style="margin:4px 0 0; color:#713f12; font-size:0.85rem;">
-                                Please clearly describe <strong>what needs to be configured</strong> for this employee —
-                                e.g. services required, access levels, email setup, printer assignments, and any special permissions.
-                            </p>
-                        </div>
-
-                        <div class="form-group full-width"
-                            style="background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 24px;">
-                            <label style="font-weight: 700; color: #0f172a; font-size: 1rem;">Employee ID</label>
-                            <div style="display: flex; gap: 12px; align-items: center;">
-                                <input type="text" id="employeeIdInput" name="employeeId"
-                                    value="<%= val('employeeId') %>" <%=hrDisabled %> required style="flex: 1;
-                                font-size: 1.1rem; padding: 12px; max-width: 300px;">
-                                <% if (role==='HR' ) { %>
-                                    <button type="button" id="btnGetEmployee" class="btn btn-primary"
-                                        style="height: 48px; display: flex; align-items: center; gap: 8px;">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                            fill="currentColor" viewBox="0 0 16 16">
-                                            <path
-                                                d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
-                                        </svg>
-                                        Get Employee Data
-                                    </button>
-                                    <% } %>
-                            </div>
-                        </div>
-
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label>Full Name</label>
-                                <input type="text" name="fullName" value="<%= val('fullName') %>" <%=hrDisabled %>
-                                required>
-                            </div>
-                            <div class="form-group">
-                                <label>Request Mode</label>
-                                <select name="requestMode" <%=hrDisabled %>>
-                                    <option value="New" <%=val('requestMode')==='New' ? 'selected' : '' %>>New Hiring
-                                    </option>
-                                    <option value="Change" <%=val('requestMode')==='Change' ? 'selected' : '' %>>Change
-                                        / Modification</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="grid-3">
-                            <div class="form-group"><label>Department</label><input type="text" name="department"
-                                    value="<%= val('department') %>" <%=hrDisabled %>></div>
-                            <div class="form-group"><label>Sub-Department</label><input type="text" name="subDepartment"
-                                    value="<%= val('subDepartment') %>" <%=hrDisabled %>></div>
-                            <div class="form-group"><label>Designation</label><input type="text" name="designation"
-                                    value="<%= val('designation') %>" <%=hrDisabled %>></div>
-                        </div>
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label>Location Group
-                                    <span style="color:#64748b; font-weight:400; font-size:0.8rem;">
-                                        (derived from your HR assignment)
-                                    </span>
-                                </label>
-                                <%
-                                    // For HR initiate: location is server-derived from the HR's
-                                    // configured group at submit time, so we render it readonly with
-                                    // a friendly label here. For all later stages the request already
-                                    // carries `request.location` (a group key) — display its label.
-                                    let locDisplay = val('location') || '';
-                                    try {
-                                        const _locModule = locDisplay && typeof locationGroupLabels !== 'undefined'
-                                            ? locationGroupLabels[locDisplay] : null;
-                                        if (_locModule) locDisplay = _locModule;
-                                    } catch(_) {}
-                                %>
-                                <input type="text" value="<%= locDisplay %>"
-                                       readonly style="background:#f1f5f9;" data-ifl-location="1">
-                            </div>
-                        </div>
-                        <div class="grid-2">
-                            <div class="form-group"><label>HOD Name</label><input type="text" name="hod"
-                                    value="<%= val('hod') %>" <%=hrDisabled %>></div>
-                            <div class="form-group">
-                                <label>Joining Date</label>
-                                <input type="date" name="joiningDate"
-                                    value="<%= (function(){ if(!val('joiningDate')) return ''; const d = new Date(val('joiningDate')); return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]; })() %>"
-                                    <%=hrDisabled %>>
-                            </div>
-                        </div>
-
-                        <% if (role !=='HR' || request.id) { %>
-                            <!-- Section 2: IT Services -->
-                            <div class="it-services-box">
-                                <div class="section-title">
-                                    <span>IT Services Configuration</span>
-                                    <span class="section-tag">IT Operations</span>
-                                </div>
-
-                                <div class="checkbox-card-group">
-                                    <label class="checkbox-card">
-                                        <input type="checkbox" name="intranetAccess"
-                                            <%= (request.intranetAccess === false) ? '' : 'checked' %>
-                                            <%= servicesDisabled %>>
-                                            <span>Intranet Access <small style="color:#64748b;">(default)</small></span>
-                                    </label>
-                                </div>
-
-                                <div style="margin-top: 20px;">
-                                    <label style="margin-bottom: 8px; display:block; font-weight:600;">Email
-                                        Services</label>
-                                    <div class="checkbox-card-group">
-                                        <label class="checkbox-card">
-                                            <input type="checkbox" name="emailIncoming" <%=chk('emailIncoming') %>
-                                            <%= servicesDisabled %>>
-                                                <span>Incoming Email</span>
-                                        </label>
-                                        <label class="checkbox-card">
-                                            <input type="checkbox" name="emailOutgoing" <%=chk('emailOutgoing') %>
-                                            <%= servicesDisabled %>>
-                                                <span>Outgoing Email</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class="form-group full-width" style="margin-top: 10px;">
-                                    <label style="font-weight:600; font-size:0.85rem;">Email Details — specify what needs to be configured (recipients, limits, distribution lists, business justification):</label>
-                                    <textarea name="emailPurpose" rows="2"
-                                        placeholder="E.g. External email required for vendor communication; CC list: procurement@...; incoming only."
-                                        <%=servicesDisabled %>><%= val('emailPurpose') %></textarea>
-                                </div>
-
-                                <div style="margin-top: 20px;">
-                                    <label style="margin-bottom: 8px; display:block; font-weight:600;">Printing
-                                        Services</label>
-                                    <div class="grid-2">
-                                        <div style="display:flex; gap:10px; align-items:center;">
-                                            <input type="checkbox" id="chk-laser" name="laserPrinter" <%=chk('laserPrinter') %>
-                                            <%= servicesDisabled %> style="width:20px; height:20px;"
-                                            onchange="togglePrinterLocation('laser')">
-                                            <% if (printerLocations && printerLocations.length > 0 && !servicesDisabled) { %>
-                                                <select id="loc-laser" name="laserPrinterLocation" style="flex:1;">
-                                                    <option value="">— Select Laser Printer —</option>
-                                                    <% printerLocations.filter(p => p.name && p.name.toLowerCase().includes('laser')).forEach(p => { %>
-                                                        <option value="<%= p.location %>" <%= val('laserPrinterLocation') === p.location ? 'selected' : '' %>><%= p.name %></option>
-                                                    <% }) %>
-                                                    <option value="<%= val('laserPrinterLocation') %>" selected><%= val('laserPrinterLocation') || 'Other' %></option>
-                                                </select>
-                                            <% } else { %>
-                                                <input type="text" id="loc-laser" name="laserPrinterLocation"
-                                                    placeholder="Laser Printer Location"
-                                                    value="<%= val('laserPrinterLocation') %>" <%=servicesDisabled %>>
-                                            <% } %>
-                                        </div>
-                                        <div style="display:flex; gap:10px; align-items:center;">
-                                            <input type="checkbox" id="chk-dotmatrix" name="dotMatrixPrinter" <%=chk('dotMatrixPrinter') %>
-                                            <%= servicesDisabled %> style="width:20px; height:20px;"
-                                            onchange="togglePrinterLocation('dotmatrix')">
-                                            <% if (printerLocations && printerLocations.length > 0 && !servicesDisabled) { %>
-                                                <select id="loc-dotmatrix" name="dotMatrixPrinterLocation" style="flex:1;">
-                                                    <option value="">— Select Dot Matrix —</option>
-                                                    <% printerLocations.filter(p => p.name && p.name.toLowerCase().includes('matrix')).forEach(p => { %>
-                                                        <option value="<%= p.location %>" <%= val('dotMatrixPrinterLocation') === p.location ? 'selected' : '' %>><%= p.name %></option>
-                                                    <% }) %>
-                                                    <option value="<%= val('dotMatrixPrinterLocation') %>"><%= val('dotMatrixPrinterLocation') || 'Other' %></option>
-                                                </select>
-                                            <% } else { %>
-                                                <input type="text" id="loc-dotmatrix" name="dotMatrixPrinterLocation"
-                                                    placeholder="Dot Matrix Location"
-                                                    value="<%= val('dotMatrixPrinterLocation') %>" <%=servicesDisabled %>>
-                                            <% } %>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div style="margin-top: 20px; padding-top:20px; border-top:1px dashed #cbd5e1;">
-                                    <label style="margin-bottom: 8px; display:block; font-weight:600;">File Share
-                                        Services</label>
-                                    <div class="grid-2">
-                                        <div class="form-group">
-                                            <label>Dept Share (S:)</label>
-                                            <% if (fileSharePaths && fileSharePaths.length > 0 && !servicesDisabled) { %>
-                                                <select name="deptSharePath">
-                                                    <option value="">— Select Share —</option>
-                                                    <% fileSharePaths.forEach(p => { %>
-                                                        <option value="<%= p.path %>" <%= val('deptSharePath') === p.path ? 'selected' : '' %>><%= p.name %> (<%= p.path %>)</option>
-                                                    <% }) %>
-                                                </select>
-                                            <% } else { %>
-                                                <input type="text" name="deptSharePath" value="<%= val('deptSharePath') %>" <%=servicesDisabled %>>
-                                            <% } %>
-                                        </div>
-                                        <div class="form-group">
-                                            <label>Home Folder (Z:)</label>
-                                            <% if (fileSharePaths && fileSharePaths.length > 0 && !servicesDisabled) { %>
-                                                <select name="homeFolderPath">
-                                                    <option value="">— Select Home Folder —</option>
-                                                    <% fileSharePaths.forEach(p => { %>
-                                                        <option value="<%= p.path %>" <%= val('homeFolderPath') === p.path ? 'selected' : '' %>><%= p.name %> (<%= p.path %>)</option>
-                                                    <% }) %>
-                                                </select>
-                                            <% } else { %>
-                                                <input type="text" name="homeFolderPath" value="<%= val('homeFolderPath') %>" <%=servicesDisabled %>>
-                                            <% } %>
-                                        </div>
-                                    </div>
-                                    <div class="grid-2">
-                                        <div class="form-group">
-                                            <label>SharePoint / IFL Portal Link</label>
-                                            <% if (sharepointPaths && sharepointPaths.length > 0 && !servicesDisabled) { %>
-                                                <select name="iflPortalLink">
-                                                    <option value="">— Select Portal —</option>
-                                                    <% sharepointPaths.forEach(p => { %>
-                                                        <option value="<%= p.url %>" <%= val('iflPortalLink') === p.url ? 'selected' : '' %>><%= p.name %></option>
-                                                    <% }) %>
-                                                </select>
-                                            <% } else { %>
-                                                <input type="text" name="iflPortalLink" value="<%= val('iflPortalLink') %>" <%=servicesDisabled %>>
-                                            <% } %>
-                                        </div>
-                                        <div class="form-group">
-                                            <label>SharePoint Role <span style="color:#dc2626;">*</span></label>
-                                            <select name="sharepointRole" <%=servicesDisabled %>>
-                                                <option value="">— Select Role —</option>
-                                                <option value="Viewer" <%= val('sharepointRole') === 'Viewer' ? 'selected' : '' %>>Viewer</option>
-                                                <option value="Editor" <%= val('sharepointRole') === 'Editor' ? 'selected' : '' %>>Editor</option>
-                                                <option value="Contributor" <%= val('sharepointRole') === 'Contributor' ? 'selected' : '' %>>Contributor</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <% } %>
-
-                                <% if (role==='HOD' || request.hodRemarks) { %>
-                                    <div class="section-title"><span>HOD Remarks</span></div>
-                                    <div class="form-group full-width">
-                                        <textarea name="hodRemarks" rows="3" placeholder="Enter HOD comments here..."
-                                            <%=hodRemarksDisabled %>><%= val('hodRemarks') %></textarea>
-                                    </div>
-                                    <% } %>
-
-                                    <!-- Change-request remarks from DCI Manager, shown to DCI team -->
-                                    <% if (request.dciChangeRequestRemarks) { %>
-                                        <div class="section-title"><span>Changes Requested by DCI Manager</span></div>
-                                        <div class="form-group full-width">
-                                            <div style="background:#fff7ed; border:1px solid #fdba74; border-radius:8px; padding:12px 14px; color:#9a3412; white-space:pre-wrap;">
-                                                <%= request.dciChangeRequestRemarks %>
-                                            </div>
-                                        </div>
-                                    <% } %>
-
-                                        <% if (!['HR', 'IT' , 'HOD' ].includes(role) || request.ntUserName) { %>
-                                            <!-- Section 3: DCI Configuration -->
-                                            <div class="dci-box">
-                                                <div class="section-title">
-                                                    <span>DCI Configuration</span>
-                                                    <span class="section-tag">DCI Team</span>
-                                                </div>
-                                                <div class="grid-3">
-                                                    <div class="form-group"><label>NT User Name</label><input
-                                                            type="text" name="ntUserName"
-                                                            value="<%= val('ntUserName') %>" <%=configDisabled %>></div>
-                                                    <div class="form-group"><label>Exchange Name</label><input
-                                                            type="text" name="exchangeDisplayName"
-                                                            value="<%= val('exchangeDisplayName') %>" <%=configDisabled
-                                                            %>></div>
-                                                    <div class="form-group"><label>SMTP Address</label><input
-                                                            type="text" name="smtpAddress"
-                                                            value="<%= val('smtpAddress') %>" <%=configDisabled %>>
-                                                    </div>
-                                                </div>
-                                                <div class="grid-2">
-                                                    <div class="form-group"><label>Member Of</label><input type="text"
-                                                            name="memberOf" value="<%= val('memberOf') %>"
-                                                            <%=configDisabled %>></div>
-                                                    <div class="form-group"><label>DG Members</label><input type="text"
-                                                            name="dgMembers" value="<%= val('dgMembers') %>"
-                                                            <%=configDisabled %>></div>
-                                                </div>
-                                                <div class="grid-3">
-                                                    <div class="form-group"><label>Mail Size</label><input type="text"
-                                                            name="mailSizeLimit" value="<%= val('mailSizeLimit') %>"
-                                                            <%=configDisabled %>></div>
-                                                    <div class="form-group"><label>Recipient Limit</label><input
-                                                            type="text" name="recipientLimit"
-                                                            value="<%= val('recipientLimit') %>" <%=configDisabled %>>
-                                                    </div>
-                                                    <div class="form-group"><label>Storage Limit</label><input
-                                                            type="text" name="mailboxStorageLimit"
-                                                            value="<%= val('mailboxStorageLimit') %>" <%=configDisabled
-                                                            %>></div>
-                                                </div>
-                                                <div class="form-group"><label>Group Policy Level</label>
-                                                    <select name="groupPolicyLevel" <%=configDisabled %>>
-                                                        <option value="">Select Level...</option>
-                                                        <option value="Highly Managed"
-                                                            <%=val('groupPolicyLevel')==='Highly Managed' ? 'selected'
-                                                            : '' %>>Highly Managed</option>
-                                                        <option value="Lightly Managed"
-                                                            <%=val('groupPolicyLevel')==='Lightly Managed' ? 'selected'
-                                                            : '' %>>Lightly Managed</option>
-                                                        <option value="IT User" <%=val('groupPolicyLevel')==='IT User'
-                                                            ? 'selected' : '' %>>IT User</option>
-                                                    </select>
-                                                </div>
-                                                <div class="form-group"><label>Extra Facility</label><textarea
-                                                        name="extraFacility" rows="2" <%=configDisabled
-                                                        %>><%= val('extraFacility') %></textarea></div>
-                                                <div class="form-group full-width">
-                                                    <label>DCI Remarks / Instructions</label>
-                                                    <textarea name="dciRemarks" rows="3" <%=dciRemarksDisabled
-                                                        %>><%= val('dciRemarks') %></textarea>
-                                                </div>
-                                            </div>
-                                            <% } %>
-
-                                                <!-- IT HOD Remarks — placed after the DCI Manager / DCI Configuration
-                                                     section so the approval chain reads top-to-bottom:
-                                                     HOD → DCI Manager → IT HOD. -->
-                                                <% if (role==='ITHOD' || request.itHodRemarks) { %>
-                                                    <div class="section-title"><span>IT HOD Remarks</span></div>
-                                                    <div class="form-group full-width">
-                                                        <textarea name="itHodRemarks" rows="3" placeholder="Enter IT HOD remarks / notes..."
-                                                            <%= role === 'ITHOD' ? '' : 'disabled' %>><%= val('itHodRemarks') %></textarea>
-                                                    </div>
-                                                <% } %>
-
-                                                <!-- OPS Checklist Dynamic -->
-                                                <%- typeof opsChecklistHTML !=='undefined' ? opsChecklistHTML : '' %>
-
-                                                    <!-- DCI Implementation -->
-                                                    <% if (role==='DCIImplementer' ) { %>
-                                                        <div class="dci-box" style="border-color: var(--primary);">
-                                                            <div class="section-title"><span>Proof of
-                                                                    Implementation</span></div>
-                                                            <div class="form-group">
-                                                                <label>Implementer Name
-                                                                    <span style="color:#64748b; font-weight:400; font-size:0.8rem;">
-                                                                        (auto-filled from Windows login)
-                                                                    </span>
-                                                                </label>
-                                                                <input type="text" name="implementerName"
-                                                                    data-ifl-sso-name="1"
-                                                                    value="<%= (currentUser && (currentUser.displayName || currentUser.username)) || '' %>"
-                                                                    disabled
-                                                                    style="background:#f1f5f9; color:#0f172a;">
-                                                            </div>
-                                                            <div class="form-group"
-                                                                style="padding: 20px; border: 2px dashed #cbd5e1; text-align: center; border-radius: 8px;">
-                                                                <label
-                                                                    style="cursor: pointer; color: var(--primary); font-weight: 600;">Click
-                                                                    to Upload Screenshots (AD/Exchange)</label>
-                                                                <input type="file" name="dciProof" multiple
-                                                                    accept="image/*" required style="margin-top: 10px;">
-                                                            </div>
-                                                        </div>
-                                                        <% } %>
-
-                    </div>
-
-                    <div class="action-bar">
-                        <% if (role==='HR' ) { %><button type="submit" class="btn btn-primary">Submit Request</button>
-                            <% } %>
-                                <% if (role==='IT' ) { %><button type="submit" class="btn btn-primary">Save & Forward to
-                                        HOD</button>
-                                    <% } %>
-
-                                        <% if (role==='HOD' ) { %>
-                                            <button type="submit" name="action" value="Reject"
-                                                class="btn btn-danger">Reject</button>
-                                            <button type="submit" name="action" value="Approve"
-                                                class="btn btn-success">Approve</button>
-                                            <% } %>
-
-                                                <% if (role==='DCI' ) { %><button type="submit"
-                                                        class="btn btn-primary">Save & Forward to Manager</button>
-                                                    <% } %>
-
-                                                        <% if (role==='DCIManager') { %>
-                                                            <button type="submit" name="action" value="Reject"
-                                                                class="btn btn-danger">Reject Request</button>
-                                                            <button type="submit" name="action" value="RequestChanges"
-                                                                class="btn btn-secondary"
-                                                                data-ifl-confirm="Send this request back to the DCI Team for changes?"
-                                                                data-ifl-confirm-title="Request changes"
-                                                                data-ifl-confirm-ok="Send back">
-                                                                Request Changes
-                                                            </button>
-                                                            <button type="submit" name="action" value="Approve"
-                                                                class="btn btn-success">Approve Request</button>
-                                                            <% } %>
-                                                        <% if (role==='ITHOD') { %>
-                                                            <button type="submit" name="action" value="Reject"
-                                                                class="btn btn-danger">Reject Request</button>
-                                                            <button type="submit" name="action" value="Approve"
-                                                                class="btn btn-success">Approve Request</button>
-                                                            <% } %>
-
-                                                                <% if (role==='DCIImplementer' ) { %><button
-                                                                        type="submit" class="btn btn-primary">Upload
-                                                                        Proofs & Complete</button>
-                                                                    <% } %>
-                                                                        <% if (role==='OPS' ) { %><button type="submit"
-                                                                                class="btn btn-success">Verify & Close
-                                                                                Request</button>
-                                                                            <% } %>
-                    </div>
-        </form>
-
-        <%
-        // Workflow Progress — placed at the bottom of the form so it doesn't
-        // crowd the action area. Minimal: each entry shows only the role that
-        // acted and when, nothing else. Hidden when the timeline is empty.
-        %>
-        <% if (typeof timeline !== 'undefined' && timeline && timeline.length) { %>
-            <style>
-                .wf-history-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px 20px; margin-top:24px; }
-                .wf-history-title { font-size:0.8rem; font-weight:600; color:#475569; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px; }
-                .wf-history-list { margin:0; padding-left:0; list-style:none; }
-                .wf-step { position:relative; padding-left:34px; padding-bottom:14px; margin-left:11px; border-left:2px solid #e2e8f0; }
-                .wf-step.is-last { border-left-color: transparent; padding-bottom:0; }
-                .wf-step .wf-dot { position:absolute; left:-11px; top:0; width:22px; height:22px; border-radius:50%; background:#3b82f6; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; box-shadow:0 0 0 4px #f8fafc; }
-                .wf-step .wf-role { font-size:0.95rem; color:#0f172a; font-weight:600; line-height:1.3; }
-                .wf-step .wf-time { font-size:0.78rem; color:#94a3b8; margin-top:2px; }
-            </style>
-            <div class="wf-history-card">
-                <div class="wf-history-title">Workflow Progress</div>
-                <ol class="wf-history-list">
-                    <% timeline.forEach((ev, i) => { %>
-                        <li class="wf-step <%= i === timeline.length - 1 ? 'is-last' : '' %>">
-                            <span class="wf-dot"><%= i + 1 %></span>
-                            <div class="wf-role"><%= ev.actorRole || '—' %></div>
-                            <div class="wf-time"><%= new Date(ev.timestamp).toLocaleString() %></div>
-                        </li>
-                    <% }) %>
-                </ol>
+            <!-- ── Action Bar (always visible at bottom) ── -->
+            <div class="action-bar">
+                <% if (request.id) { %>
+                    <span style="margin-right:auto;font-size:0.78rem;color:#94a3b8;">Request #<%= request.id %> · <%= role %></span>
+                <% } %>
+                <% if (role === 'HR') { %><button type="submit" class="btn btn-primary">Submit Request</button><% } %>
+                <% if (role === 'IT') { %><button type="submit" class="btn btn-primary">Save &amp; Forward to HOD</button><% } %>
+                <% if (role === 'HOD') { %>
+                    <button type="submit" name="action" value="Reject" class="btn btn-danger">Reject</button>
+                    <button type="submit" name="action" value="Approve" class="btn btn-success">Approve</button>
+                <% } %>
+                <% if (role === 'DCI') { %><button type="submit" class="btn btn-primary">Save &amp; Forward to Manager</button><% } %>
+                <% if (role === 'DCIManager') { %>
+                    <button type="submit" name="action" value="Reject" class="btn btn-danger">Reject Request</button>
+                    <button type="submit" name="action" value="RequestChanges" class="btn btn-secondary"
+                        data-ifl-confirm="Send this request back to the DCI Team for changes?"
+                        data-ifl-confirm-title="Request changes"
+                        data-ifl-confirm-ok="Send back">Request Changes</button>
+                    <button type="submit" name="action" value="Approve" class="btn btn-success">Approve Request</button>
+                <% } %>
+                <% if (role === 'ITHOD') { %>
+                    <button type="submit" name="action" value="Reject" class="btn btn-danger">Reject Request</button>
+                    <button type="submit" name="action" value="Approve" class="btn btn-success">Approve Request</button>
+                <% } %>
+                <% if (role === 'DCIImplementer') { %><button type="submit" class="btn btn-primary">Upload Proofs &amp; Complete</button><% } %>
+                <% if (role === 'OPS') { %><button type="submit" class="btn btn-success">Verify &amp; Close Request</button><% } %>
             </div>
-        <% } %>
+
+        </form>
     </div>
 
     <%- include('../partials/portal_close') %>
@@ -566,6 +539,14 @@
     <style>
         /* Loading spinner animation for submit buttons */
         @keyframes ifl-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    </style>
+    <script>
+        /* Toggle collapsible form sections */
+        function iflToggleSection(hd) {
+            hd.closest('.form-section').classList.toggle('is-collapsed');
+        }
+    </script>
+    <style>
         .ifl-spinner { animation: ifl-spin 0.7s linear infinite; vertical-align: -3px; margin-right: 6px; }
         button.is-loading { opacity: 0.75; cursor: wait; pointer-events: none; }
         button.is-loading > .ifl-btn-original { display: none; }
