@@ -1,0 +1,14 @@
+import { Sequelize } from 'sequelize';
+const db = new Sequelize({ dialect: 'sqlite', storage: './database.sqlite', logging: false });
+await db.authenticate();
+const [r1] = await db.query("PRAGMA table_info(WorkflowApproverConfigs)");
+const [r2] = await db.query("PRAGMA table_info(WorkflowApproverLocationOverrides)");
+const [r3] = await db.query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+const [r4] = await db.query("SELECT COUNT(*) as n FROM OnboardingRequests");
+const [r5] = await db.query("SELECT COUNT(*) as n FROM TimelineEvents");
+console.log("WAC:", r1.map(c=>c.name).join(", "));
+console.log("WALO:", r2.map(c=>c.name).join(", "));
+console.log("Tables:", r3.map(t=>t.name).join(", "));
+console.log("Requests:", r4[0].n);
+console.log("Events:", r5[0].n);
+await db.close();
