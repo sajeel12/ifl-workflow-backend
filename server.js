@@ -246,6 +246,23 @@ async function startServer() {
         // never has to remember a one-off migration step.
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeUsername', 'STRING');
+
+        // WorkflowApproverConfig — six columns added with the delegation /
+        // AD-username feature. The sequelize-cli migration covers four of
+        // them, but migrations aren't auto-run on startup and the AD-username
+        // pair was never written into a migration at all. Missing any one of
+        // these causes the workflow-approvers admin page to 500 on findAll().
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'approverUsername',          'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'secondaryUsername',         'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'isDelegatedTemporarily',    'BOOLEAN');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverEmail',     'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverName',      'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverUsername',  'STRING');
+
+        // WorkflowApproverLocationOverride — same AD-username pair as above.
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverLocationOverrides', 'approverUsername',  'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverLocationOverrides', 'secondaryUsername', 'STRING');
+
         // Add future columns here as the model evolves.
 
         // ── Employee Journey Tracking Enhancements (Phase 3) ──────────────
