@@ -246,6 +246,7 @@ async function startServer() {
         // never has to remember a one-off migration step.
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeUsername', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'workOrderPdfPath', 'STRING');
         // Add future columns here as the model evolves.
 
         // ── Employee Journey Tracking Enhancements (Phase 3) ──────────────

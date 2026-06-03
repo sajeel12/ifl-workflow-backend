@@ -236,7 +236,7 @@ const handleSubmission = async (req, res, token) => {
                 const existing = await OnboardingRequest.findOne({
                     where: {
                         employeeId: data.employeeId,
-                        status: { [Op.notIn]: ['Rejected', 'Completed'] }
+                        status: { [Op.notIn]: ['Rejected', 'Completed', 'AdminDeleted'] }
                     },
                     attributes: ['id']
                 });
@@ -247,6 +247,25 @@ const handleSubmission = async (req, res, token) => {
                         titleClass: 'error',
                         message: `An onboarding request for employee #${data.employeeId} is already moving through the workflow. You cannot submit a duplicate. Please wait for the existing request to complete (or be rejected) before initiating a new one.`
                     });
+                }
+
+                // Guard: block "New Hiring" for an employee who already has a
+                // completed onboarding record, regardless of which HR location
+                // is submitting. The form should have locked the dropdown to
+                // "Change / Modification" — this is the server-side safety net.
+                if (data.requestMode !== 'Change') {
+                    const completedRecord = await OnboardingRequest.findOne({
+                        where: { employeeId: data.employeeId, status: 'Completed' },
+                        attributes: ['id']
+                    });
+                    if (completedRecord) {
+                        return res.status(409).render('pages/message', {
+                            title: 'Employee already onboarded',
+                            heading: 'This employee has already been onboarded',
+                            titleClass: 'error',
+                            message: `Employee #${data.employeeId} has an existing completed onboarding record. Please submit a "Change / Modification" request — not a new hiring request.`
+                        });
+                    }
                 }
             }
 
@@ -458,6 +477,32 @@ export const handleProofUpload = async (req, res) => {
     }
 };
 
+// Serve the Work Order PDF for the DCI Implementer — validated via stage token.
+// The file path is stored in request.workOrderPdfPath at PDF generation time.
+export const serveWorkOrderPDF = async (req, res) => {
+    try {
+        const token = req.params.token || req.query.token;
+        if (!token) return res.status(400).send('Token required');
+        const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
+        if (!request || request.status !== 'PendingDCIImplementation') {
+            return res.status(404).send('PDF not available or token invalid.');
+        }
+        if (!request.workOrderPdfPath) {
+            return res.status(404).send('Work Order PDF not yet generated for this request.');
+        }
+        const { createReadStream, existsSync } = await import('fs');
+        if (!existsSync(request.workOrderPdfPath)) {
+            return res.status(404).send('PDF file not found on server.');
+        }
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="WorkOrder_${request.id}.pdf"`);
+        createReadStream(request.workOrderPdfPath).pipe(res);
+    } catch (err) {
+        logger.error(`[PDF Serve] ${err.message}`);
+        res.status(500).send('Error serving PDF.');
+    }
+};
+
 const renderForm = async (req, res, token) => {
     let request = {};
     let role = 'HR';
@@ -574,7 +619,7 @@ const renderForm = async (req, res, token) => {
             const existing = await OnboardingRequest.findOne({
                 where: {
                     employeeId: req.query.employeeId,
-                    status: { [Op.notIn]: ['Rejected', 'Completed'] }
+                    status: { [Op.notIn]: ['Rejected', 'Completed', 'AdminDeleted'] }
                 },
                 attributes: ['id']
             });
@@ -693,12 +738,34 @@ const renderForm = async (req, res, token) => {
         if (request.iflPortalLink) items.push('Add IFL Portal Shortcut');
         items.push('Verify Domain Login');
 
+        // Build proof images section for OPS desk setup
+        const proofPaths = Array.isArray(request.dciProofAttachments) ? request.dciProofAttachments : [];
+        const proofImagesHTML = proofPaths.length > 0
+            ? `<div style="margin-bottom:20px;">
+                <div class="section-title" style="margin-bottom:10px;">
+                    <span>DCI Implementation Proof</span>
+                    <span class="section-tag" style="background:#7c3aed20;color:#7c3aed;">Uploaded by Implementer</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                    ${proofPaths.map((fp, idx) => {
+                        const urlPath = fp.replace(/\\/g, '/').replace(/^uploads\/proofs\//, '/uploads/proofs/');
+                        const src = urlPath.startsWith('/uploads/proofs/') ? urlPath : `/uploads/proofs/${urlPath.split('/').pop()}`;
+                        return `<a href="${src}" target="_blank" rel="noopener" title="Open proof ${idx + 1} in new tab">
+                            <img src="${src}" alt="Implementation proof ${idx + 1}"
+                                 style="height:120px;width:auto;border-radius:6px;border:1px solid #e2e8f0;object-fit:cover;cursor:pointer;">
+                        </a>`;
+                    }).join('')}
+                </div>
+               </div>`
+            : '';
+
         opsChecklistHTML = `
             <div class="ops-box">
                 <div class="section-title">
                     <span>OPS Verification Checklist</span>
                     <span class="section-tag">Required</span>
                 </div>
+                ${proofImagesHTML}
                 <div class="grid-2">
                     <div class="form-group">
                         <label>Verifier Name
@@ -1182,7 +1249,7 @@ export const lookupExistingRequest = async (req, res) => {
 
         // Check active (in-flight) request first — highest priority block.
         const active = await OnboardingRequest.findOne({
-            where: { employeeId, status: { [Op.notIn]: ['Rejected', 'Completed'] } },
+            where: { employeeId, status: { [Op.notIn]: ['Rejected', 'Completed', 'AdminDeleted'] } },
             attributes: ['id']
         });
         if (active) return res.json({ existingRequestId: active.id, state: 'active' });

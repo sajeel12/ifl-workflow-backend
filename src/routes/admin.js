@@ -51,6 +51,7 @@ router.get('/ej/employees/:employeeNumber/ad-profile',   ...guard, ejController.
 router.get('/ej/requests/:requestId/timeline',           ...guard, ejController.getRequestTimeline);
 router.post('/system-config/update',            ...guard, adminController.updateSystemConfig);
 router.post('/onboarding/:id/resend-email',     ...guard, adminController.resendStageEmail);
+router.delete('/onboarding/:id',               ...guard, adminController.adminDeleteRequest);
 
 // Search AD users by name/sAMAccountName/email — powers the approver search box.
 // Also accepts ?employeeId=X for a reliable exact-match lookup by employeeID attribute.

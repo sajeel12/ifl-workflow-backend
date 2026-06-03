@@ -79,6 +79,12 @@ router.post('/onboarding/handle', ssoMiddleware, onboardingController.handleRequ
 // causing a 401 → IIS Windows-auth login-prompt loop.
 router.post('/onboarding/upload-proof', upload.array('dciProof', 5), ssoMiddleware, onboardingController.handleProofUpload);
 
+// Serve the Work Order PDF for the DCI Implementer. Open at Node (no ssoMiddleware)
+// for the same reason as GET /handle — the page loads before the sidecar token is
+// attached. The token itself acts as the gate: we only serve if the token is valid
+// and the request is in PendingDCIImplementation status.
+router.get('/onboarding/pdf/:token', onboardingController.serveWorkOrderPDF);
+
 // Lookup active onboarding request by employeeId (used by HR form JS)
 router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
 

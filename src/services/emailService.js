@@ -508,6 +508,71 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
     return sendApprovalEmail(toEmail, subject, body, actionLink, request.requesterName || 'HR', request.requesterEmail || '');
 };
 
+export const sendDeletionNotification = async (toEmail, request, { deletedBy, reason, priorStatus }) => {
+    const reqNo = `#${request.id}`;
+    const userInfo = `${request.fullName || '—'}${request.designation ? ' (' + request.designation + ')' : ''}`;
+    const dept = [request.department, request.subDepartment].filter(Boolean).join(' / ') || '—';
+    const subject = `Onboarding ${reqNo} — Request Deleted by Administrator`;
+
+    const htmlBody = `
+    <!DOCTYPE html>
+    <html xmlns="http://www.w3.org/1999/xhtml">
+    <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background-color:#f3f2f1;font-family:Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f2f1;">
+            <tr><td align="center" style="padding:20px 10px;">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border:1px solid #e1dfdd;">
+                    <!-- Header — red to signal termination -->
+                    <tr><td bgcolor="#b91c1c" style="background-color:#b91c1c;padding:20px;text-align:center;">
+                        <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:600;font-family:Arial,sans-serif;">Ibrahim Fibres Limited</h1>
+                        <p style="color:#fecaca;margin:4px 0 0;font-size:13px;font-family:Arial,sans-serif;">Onboarding Workflow — Administrative Deletion</p>
+                    </td></tr>
+                    <!-- Content -->
+                    <tr><td style="padding:30px;color:#323130;font-family:Arial,sans-serif;">
+                        <h2 style="color:#b91c1c;margin-top:0;margin-bottom:16px;font-family:Arial,sans-serif;font-size:18px;">Onboarding Request ${reqNo} Has Been Deleted</h2>
+                        <p style="font-size:14px;color:#323130;margin:0 0 20px;line-height:1.5;">
+                            This is to inform you that the above onboarding request has been <strong>permanently removed</strong> from the workflow by a system administrator. No further action is required or possible on this request.
+                        </p>
+                        <!-- Details box -->
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#fef2f2;border-left:4px solid #b91c1c;margin-bottom:20px;">
+                            <tr><td style="padding:16px;">
+                                <table width="100%" cellpadding="4" cellspacing="0" border="0" style="font-size:13px;color:#323130;font-family:Arial,sans-serif;">
+                                    <tr><td style="font-weight:600;width:140px;color:#6b7280;">Employee:</td><td>${userInfo}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;">Department:</td><td>${dept}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;">Request ID:</td><td>${reqNo}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;">Stage at deletion:</td><td>${priorStatus}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;">Deleted by:</td><td>${deletedBy}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;vertical-align:top;">Reason:</td><td style="font-style:italic;">${reason}</td></tr>
+                                </table>
+                            </td></tr>
+                        </table>
+                        <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">If you have questions about this action, please contact your system administrator. Any action links you received for this request are now invalid.</p>
+                    </td></tr>
+                    <!-- Footer -->
+                    <tr><td bgcolor="#f3f2f1" style="background-color:#f3f2f1;padding:15px;text-align:center;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;">
+                        <p style="margin:0;">This is an automated notification from the IFL Workflow System.</p>
+                    </td></tr>
+                </table>
+            </td></tr>
+        </table>
+    </body>
+    </html>`;
+
+    try {
+        const info = await transporter.sendMail({
+            from: process.env.SMTP_FROM,
+            to:   toEmail,
+            subject,
+            html: htmlBody
+        });
+        logger.info(`[Email] Deletion notice sent to ${toEmail} for request #${request.id}: ${info.messageId}`);
+        return info;
+    } catch (err) {
+        logger.error(`[Email] Failed to send deletion notice to ${toEmail}: ${err.message}`);
+        throw err;
+    }
+};
+
 export const sendPortalAccessLink = async (toEmail, roleName, portalUrl) => {
     logger.info(`[Email] Sending portal access link to ${toEmail} for ${roleName}`);
     const subject = `Your ${roleName} Portal Access Link`;

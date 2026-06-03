@@ -28,6 +28,7 @@
             <option value="Pending">Pending</option>
             <option value="Completed">Completed</option>
             <option value="Rejected">Rejected</option>
+            <option value="AdminDeleted">Admin Deleted</option>
           </select>
         </div>
       </div>
@@ -67,6 +68,17 @@
         <input type="email" id="resendOverrideEmail" class="a-input" placeholder="Override email (optional)" style="max-width:240px;">
         <button id="btnResendEmail" class="a-btn" style="background:#0078D4; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:600;" onclick="resendStageEmail()">
           ✉ Resend Action Email
+        </button>
+      </div>
+      <!-- Admin Delete Bar — always visible for non-deleted requests -->
+      <div id="adminDeleteBar" style="display:none; padding:12px 24px; border-bottom:1px solid #fecaca; background:#fff5f5; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+        <div style="flex:1; min-width:240px;">
+          <div style="font-size:.8rem; font-weight:600; color:#991b1b; margin-bottom:2px;">Delete Request</div>
+          <div style="font-size:.75rem; color:#b91c1c; margin-bottom:6px;">Permanently removes this request from the workflow and notifies all involved parties.</div>
+          <input type="text" id="deleteReasonInput" class="a-input" placeholder="Reason for deletion (required)" style="max-width:420px; border-color:#fca5a5;">
+        </div>
+        <button id="btnDeleteRequest" class="a-btn" style="background:#b91c1c; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:600; flex-shrink:0;" onclick="promptDeleteRequest()">
+          🗑 Delete Request
         </button>
       </div>
 
@@ -144,6 +156,11 @@
 .request-badge.rejected {
   background:var(--a-red-bg);
   color:var(--a-red);
+}
+.request-badge.admindeleted {
+  background:#fee2e2;
+  color:#7f1d1d;
+  text-decoration:line-through;
 }
 
 /* Timeline styles — matched to the user-facing /history page */
@@ -300,7 +317,7 @@ async function loadTimeline(id, name, empId) {
     document.getElementById('modalSubtitle').textContent = `Employee ID: ${request.employeeId} · Department: ${request.department} · Status: ${request.status}`;
 
     // Show recovery bar only when the request is still in an active (token-bearing) stage
-    const closedStates = ['Completed', 'Rejected', 'Draft'];
+    const closedStates = ['Completed', 'Rejected', 'Draft', 'AdminDeleted'];
     const bar = document.getElementById('adminActionsBar');
     if (bar) {
       const canResend = !closedStates.includes(request.status);
@@ -313,11 +330,62 @@ async function loadTimeline(id, name, empId) {
       }
     }
 
+    // Show delete bar for any request that hasn't already been deleted
+    const deleteBar = document.getElementById('adminDeleteBar');
+    if (deleteBar) {
+      deleteBar.style.display = (request.status === 'AdminDeleted') ? 'none' : 'flex';
+    }
+
     renderTimeline(timeline, request);
     openModal();
   } catch (e) {
     console.error(e);
     IflDialog.error('Could not load the timeline for this request.');
+  }
+}
+
+async function promptDeleteRequest() {
+  if (!currentModalRequestId) return;
+
+  const reasonInput = document.getElementById('deleteReasonInput');
+  const reason = reasonInput ? reasonInput.value.trim() : '';
+  if (!reason) {
+    IflDialog.error('Please enter a reason for deletion before proceeding.');
+    if (reasonInput) reasonInput.focus();
+    return;
+  }
+
+  const confirmed = await IflDialog.confirm(
+    `This will permanently remove Request #${currentModalRequestId} from the workflow and notify all involved parties. This cannot be undone.`,
+    { title: 'Confirm Deletion', okText: 'Yes, Delete It', danger: true }
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById('btnDeleteRequest');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Deleting…'; }
+
+  try {
+    const res = await window.iflFetch(`/admin/onboarding/${currentModalRequestId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      IflDialog.error(json.error || 'Failed to delete the request.');
+      return;
+    }
+    IflDialog.success(json.message || 'Request deleted successfully.');
+    if (reasonInput) reasonInput.value = '';
+    closeModal();
+    // Reload the list so the deleted row shows AdminDeleted status
+    loadRequests(currentPage);
+  } catch (e) {
+    console.error(e);
+    IflDialog.error('Network error while deleting request.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = original; }
   }
 }
 

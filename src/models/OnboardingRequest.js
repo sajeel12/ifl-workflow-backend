@@ -168,6 +168,10 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     },
 
     // --- Phase 4: Implementation & OPS ---
+    workOrderPdfPath: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     dciImplementer: {
         type: DataTypes.STRING,
         allowNull: true

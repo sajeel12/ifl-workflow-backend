@@ -64,6 +64,57 @@ async function sendDelegationNotification(inflightReq, recipientEmail) {
     }
 }
 
+// Resolve all email addresses that should be notified when a request is deleted.
+// Includes: the HR initiator, any role that has logged an action in the timeline,
+// and the current stage assignee (whoever currently holds the request).
+// Uses current configured emails — not historical snapshots.
+const ACTOR_ROLE_TO_ROLE_KEY = {
+    IT:             'IT_OPS',
+    HOD:            'HOD',
+    DCI:            'DCI_TEAM',
+    DCIManager:     'DCI_MANAGER',
+    ITHOD:          'IT_HOD',
+    DCIImplementer: 'DCI_IMPLEMENTER',
+    OPS:            'IT_OPS',
+};
+
+async function collectNotifyEmails(request) {
+    const emails = new Set();
+
+    if (request.requesterEmail) emails.add(request.requesterEmail.toLowerCase().trim());
+    if (request.currentStageAssigneeEmail) emails.add(request.currentStageAssigneeEmail.toLowerCase().trim());
+
+    let actorRoles = [];
+    try {
+        const events = await TimelineEvent.findAll({
+            where: { requestId: request.id },
+            attributes: ['actorRole']
+        });
+        actorRoles = [...new Set(events.map(e => e.actorRole).filter(r => r && r !== 'System' && r !== 'Admin' && r !== 'HR'))];
+    } catch (err) {
+        console.error('[Admin Delete] Could not load timeline actors:', err.message);
+    }
+
+    for (const actorRole of actorRoles) {
+        const roleKey = ACTOR_ROLE_TO_ROLE_KEY[actorRole];
+        if (!roleKey) continue;
+        try {
+            let cfg = null;
+            if (LOCATION_AWARE_ROLES.has(roleKey) && request.location) {
+                cfg = await WorkflowApproverLocationOverride.findOne({
+                    where: { roleKey, location: request.location, isActive: true }
+                });
+            }
+            if (!cfg) cfg = await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
+            if (cfg && cfg.approverEmail) emails.add(cfg.approverEmail.toLowerCase().trim());
+        } catch (err) {
+            console.error(`[Admin Delete] Could not resolve email for ${roleKey}:`, err.message);
+        }
+    }
+
+    return [...emails].filter(Boolean);
+}
+
 // Per client policy, only the IT Operations role is split by location.
 // All other roles use the global default everywhere. The admin UI hides
 // non-location-aware roles from the per-location editor.
@@ -1048,6 +1099,76 @@ class AdminController {
 
     renderEmployeeJourneyPanel(req, res) {
         res.render('pages/admin_employee_journey');
+    }
+
+    /**
+     * API: Admin-only hard termination of an onboarding request.
+     * Soft-deletes the record (status → AdminDeleted), voids the live token so
+     * all outstanding action links go dead immediately, records an audit event,
+     * and sends a deletion notice to every party that has been involved.
+     */
+    async adminDeleteRequest(req, res) {
+        try {
+            const { id } = req.params;
+            const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : '';
+
+            if (!reason) {
+                return res.status(400).json({ success: false, error: 'A deletion reason is required.' });
+            }
+
+            const request = await OnboardingRequest.findByPk(id);
+            if (!request) {
+                return res.status(404).json({ success: false, error: 'Onboarding request not found.' });
+            }
+            if (request.status === 'AdminDeleted') {
+                return res.status(409).json({ success: false, error: 'This request has already been deleted.' });
+            }
+
+            const deletedBy = req.user && (req.user.displayName || req.user.username || 'Admin');
+            const priorStatus = request.status;
+
+            // Collect involved emails BEFORE marking deleted (while assignee fields are still set)
+            const notifyEmails = await collectNotifyEmails(request);
+
+            // Soft-delete: invalidate all active links + mark status
+            await request.update({
+                status:                       'AdminDeleted',
+                currentStageToken:            null,
+                currentStageAssigneeEmail:    null,
+                currentStageAssigneeUsername: null,
+            });
+
+            await TimelineEvent.create({
+                requestId: request.id,
+                action:    'Admin Deleted',
+                actorRole: 'Admin',
+                details:   JSON.stringify({ deletedBy, priorStatus, reason, notifiedEmails: notifyEmails }),
+                timestamp: new Date()
+            });
+
+            // Notify all involved parties — non-blocking; log failures but don't abort
+            const emailsSent = [];
+            const emailsFailed = [];
+            for (const email of notifyEmails) {
+                try {
+                    await emailService.sendDeletionNotification(email, request, { deletedBy, reason, priorStatus });
+                    emailsSent.push(email);
+                } catch (err) {
+                    console.error(`[Admin Delete] Notification failed for ${email}:`, err.message);
+                    emailsFailed.push(email);
+                }
+            }
+
+            return res.json({
+                success: true,
+                message: `Request #${id} has been deleted. ${emailsSent.length} notification(s) sent.`,
+                emailsSent,
+                emailsFailed,
+            });
+        } catch (err) {
+            console.error('[Admin Delete] Error:', err.message);
+            return res.status(500).json({ success: false, error: err.message });
+        }
     }
 
 }
