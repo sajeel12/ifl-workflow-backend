@@ -93,11 +93,15 @@ export const adminApiGuard = (req, res, next) => {
         if (age > 300) return deny('expired sidecar token');
         if (!verifySidecarToken(token)) return deny('invalid sidecar token signature');
 
-        const username = toUsername(token.username);
-        if (!isAdmin(username)) return deny(`"${username}" not in admin list (sidecar)`);
+        const username   = toUsername(token.username);
+        const emailLocal = toUsername(token.email || '');   // local-part of AD email as fallback
+        if (!isAdmin(username) && !isAdmin(emailLocal)) {
+            return deny(`"${username}" not in admin list (sidecar)`);
+        }
 
-        req.user = { username, email: token.email || '', displayName: token.displayName || username, raw: { source: 'sidecar-token' } };
-        logger.info(`[Admin] API granted — ${username} (sidecar) for ${req.method} ${req.originalUrl}`);
+        const resolvedName = isAdmin(username) ? username : emailLocal;
+        req.user = { username: resolvedName, email: token.email || '', displayName: token.displayName || resolvedName, raw: { source: 'sidecar-token' } };
+        logger.info(`[Admin] API granted — ${resolvedName} (sidecar) for ${req.method} ${req.originalUrl}`);
         return next();
     }
 
