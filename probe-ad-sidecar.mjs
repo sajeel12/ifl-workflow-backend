@@ -12,8 +12,8 @@
 
 import 'dotenv/config';
 
-const ADSEARCH_URL = process.env.ADSEARCH_URL || 'http://127.0.0.1:3333/adsearch.aspx';
-const q          = process.argv[2] || 'ISRARULHAQ';
+const ADSEARCH_URL = process.env.ADSEARCH_URL || 'http://127.0.0.1:3000/adsearch.aspx';
+const q = process.argv[2] || 'ISRARULHAQ';
 const employeeId = process.argv[3] || '';
 
 async function hit(label, paramKey, paramVal) {
@@ -23,7 +23,7 @@ async function hit(label, paramKey, paramVal) {
     console.log(`${label}: ${url.toString()}`);
     console.log(`══════════════════════════════════════════════════════════`);
     try {
-        const res  = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
         console.log(`HTTP ${res.status}`);
         const text = await res.text();
         let data;
