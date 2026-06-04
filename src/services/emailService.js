@@ -508,6 +508,59 @@ export const sendOnboardingNotification = async (toEmail, request, actionLink, t
     return sendApprovalEmail(toEmail, subject, body, actionLink, request.requesterName || 'HR', request.requesterEmail || '');
 };
 
+// Offboarding stage notification — same bullet shape as
+// sendOnboardingNotification but with offboarding-specific subjects/bodies.
+export const sendOffboardingNotification = async (toEmail, request, actionLink, type) => {
+    const userInfo = `${request.fullName || '—'}${request.designation ? ' (' + request.designation + ')' : ''}`;
+    const dept = request.department || '—';
+    const reqNo = `#${request.id}`;
+
+    const buildBullets = (action, next) => {
+        const lines = ['::BULLETS::', `Employee: ${userInfo}`, `Department: ${dept}`, `Action: ${action}`];
+        if (next) lines.push(`Next: ${next}`);
+        return lines.join('\n');
+    };
+
+    let subject, body;
+    switch (type) {
+        case 'DCI_MANAGER_APPROVAL':
+            subject = `Offboarding ${reqNo} — Manager Approval`;
+            body = buildBullets(
+                'Review the user\'s granted privileges and approve or reject the revocation.',
+                'Approved → DCI Implementer for AD deletion.'
+            );
+            break;
+        case 'DCI_IMPLEMENTER':
+            subject = `Offboarding ${reqNo} — Account Revocation`;
+            body = buildBullets(
+                'Delete AD account, confirm SmartX and door-access revocation.',
+                'Final notification will go to HOD and IT HOD on completion.'
+            );
+            break;
+        default:
+            subject = `Offboarding ${reqNo} — Action Required`;
+            body = buildBullets('Your input is required.', 'Workflow will continue.');
+    }
+    return sendApprovalEmail(toEmail, subject, body, actionLink, 'Offboarding Workflow', '');
+};
+
+// Final offboarding-completed notification (no action link — informational only).
+// Sent to the employee's HOD and IT HOD when the DCI Implementer finishes.
+export const sendOffboardingCompletedNotification = async (toEmailList, request) => {
+    const userInfo = `${request.fullName || request.employeeId} (${request.designation || '—'}, ${request.department || '—'})`;
+    const subject  = `Offboarding Completed: ${userInfo}`;
+    const body =
+        `Offboarding has been completed for ${userInfo}.\n\n` +
+        `AD account, SmartX access, and door-access have all been revoked. ` +
+        `This is a courtesy notice — no further action is required from you.`;
+    return sendRequesterNotification(toEmailList, subject, body, {
+        requestId:   request.id,
+        requestType: 'Offboarding',
+        status:      'Completed',
+        currentStage: 'Completed'
+    });
+};
+
 export const sendPortalAccessLink = async (toEmail, roleName, portalUrl) => {
     logger.info(`[Email] Sending portal access link to ${toEmail} for ${roleName}`);
     const subject = `Your ${roleName} Portal Access Link`;

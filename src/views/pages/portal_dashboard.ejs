@@ -277,11 +277,22 @@
         </div>
     </div>
 
+    <%
+        // DCI Manager and DCI Implementer also see an "Offboarding" tab — the
+        // contents are fetched client-side via /api/offboarding/queue so we
+        // don't change the existing server-rendered onboarding pipeline.
+        const showOffboardingTab = (roleKey === 'DCI_MANAGER' || roleKey === 'DCI_IMPLEMENTER');
+    %>
     <!-- ── Tabs (JS-toggled) ── -->
     <div class="pd-tabs">
         <a class="pd-tab is-active" id="tab-pending" href="#" onclick="switchTab('pending'); return false;">
             Pending Queue <% if (pendingCount > 0) { %>(<%= pendingCount %>)<% } %>
         </a>
+        <% if (showOffboardingTab) { %>
+        <a class="pd-tab" id="tab-offboarding" href="#" onclick="switchTab('offboarding'); return false;">
+            Offboarding <span id="off-tab-count"></span>
+        </a>
+        <% } %>
         <a class="pd-tab" id="tab-history" href="#" onclick="switchTab('history'); return false;">
             History <% if (history.length > 0) { %>(<%= history.length %>)<% } %>
         </a>
@@ -400,6 +411,18 @@
         <% } %>
     </div>
 
+    <!-- ── Offboarding tab (DCI Manager + DCI Implementer only) ── -->
+    <% if (showOffboardingTab) { %>
+    <div class="pd-section" id="pane-offboarding" style="display:none;">
+        <div id="off-list" class="req-list">
+            <div class="pd-empty" id="off-loading">
+                <div class="em" style="font-size: 1.5rem; opacity: 0.5;">⏳</div>
+                <p>Loading offboarding queue…</p>
+            </div>
+        </div>
+    </div>
+    <% } %>
+
 </div>
 
 <script>
@@ -408,6 +431,46 @@ function switchTab(name) {
     document.querySelectorAll('[id^="pane-"]').forEach(p => p.style.display = 'none');
     document.getElementById('tab-' + name).classList.add('is-active');
     document.getElementById('pane-' + name).style.display = '';
+    if (name === 'offboarding') loadOffboardingOnce();
+}
+
+// ── Offboarding queue loader ────────────────────────────────────
+// Fetched once on first tab switch and cached.
+const PORTAL_ROLE_KEY = <%- JSON.stringify(roleKey) %>;
+let _offLoaded = false;
+async function loadOffboardingOnce() {
+    if (_offLoaded) return;
+    _offLoaded = true;
+    const listEl = document.getElementById('off-list');
+    if (!listEl) return;
+    try {
+        const fetcher = (typeof window.iflFetch === 'function') ? window.iflFetch : (u, o) => fetch(u, o);
+        const r = await fetcher('/api/offboarding/queue?role=' + encodeURIComponent(PORTAL_ROLE_KEY) + '&type=pending');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const rows = (j.success && Array.isArray(j.data)) ? j.data : [];
+        const countEl = document.getElementById('off-tab-count');
+        if (countEl) countEl.textContent = rows.length ? '(' + rows.length + ')' : '';
+        if (!rows.length) {
+            listEl.innerHTML = '<div class="pd-empty"><div class="em">&#10003;</div><p>No pending offboarding requests for your role.</p></div>';
+            return;
+        }
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        listEl.innerHTML = rows.map(row => {
+            const subBits = [row.designation, row.department].filter(Boolean).map(esc).join(' · ');
+            return '<div class="req-card can-act">' +
+                       '<div class="req-info">' +
+                           '<p class="req-name">#' + row.requestId + ' — ' + esc(row.fullName || '—') + '</p>' +
+                           '<p class="req-sub">' + (subBits || '—') + '</p>' +
+                       '</div>' +
+                       '<div class="req-action">' +
+                           '<a href="' + esc(row.url) + '" class="btn-view">Review &amp; Act</a>' +
+                       '</div>' +
+                   '</div>';
+        }).join('');
+    } catch (e) {
+        listEl.innerHTML = '<div class="pd-empty" style="color:#dc2626;"><p>Could not load offboarding queue: ' + (e.message || '') + '</p></div>';
+    }
 }
 
 // If arriving from an email link, scroll the highlighted card into view.

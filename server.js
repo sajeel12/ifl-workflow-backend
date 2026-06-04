@@ -263,6 +263,43 @@ async function startServer() {
         await ensureColumn(sequelize, isSqlite, 'WorkflowApproverLocationOverrides', 'approverUsername',  'STRING');
         await ensureColumn(sequelize, isSqlite, 'WorkflowApproverLocationOverrides', 'secondaryUsername', 'STRING');
 
+        // Delegation in-flight snapshot — populated when an admin temporarily
+        // delegates a role and the stage email is re-emitted to the delegate.
+        // Stored as TEXT (JSON-serialized by Sequelize). Used by the auto-
+        // revert pass in src/services/escalationService.js.
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests',  'delegationEvent', 'TEXT');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'delegationEvent', 'TEXT');
+
+        // Offboarding rebuild (plan §1) — new fields on OffboardingRequests.
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'currentStageAssigneeEmail',    'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'currentStageAssigneeUsername', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'location',                    'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'smartXRevoked',               'BOOLEAN');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'doorAccessRevoked',           'BOOLEAN');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciImplementerName',          'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciImplementerCompletedAt',   'DATETIME');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciProofAttachments',         'TEXT');
+
+        // One-time status migration. Legacy offboarding rows used the
+        // SystemManager/SystemTeam role names; rename to the new DCI Manager /
+        // DCI Implementer chain in place. Idempotent — the UPDATE only touches
+        // rows still on the old strings.
+        try {
+            const [, meta1] = await sequelize.query(
+                "UPDATE OffboardingRequests SET status = 'PendingDCIManager' WHERE status = 'PendingManagerApproval'"
+            );
+            const [, meta2] = await sequelize.query(
+                "UPDATE OffboardingRequests SET status = 'PendingDCIImplementation' WHERE status = 'PendingSystemTeam'"
+            );
+            const c1 = (meta1 && meta1.changes) || 0;
+            const c2 = (meta2 && meta2.changes) || 0;
+            if (c1 || c2) {
+                logger.info(`[Schema] Offboarding status migrated: PendingManagerApproval→PendingDCIManager (${c1}), PendingSystemTeam→PendingDCIImplementation (${c2}).`);
+            }
+        } catch (err) {
+            logger.warn(`[Schema] Offboarding status migration failed (non-fatal): ${err.message}`);
+        }
+
         // Add future columns here as the model evolves.
 
         // ── Employee Journey Tracking Enhancements (Phase 3) ──────────────

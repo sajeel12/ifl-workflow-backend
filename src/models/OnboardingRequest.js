@@ -31,6 +31,16 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         type: DataTypes.STRING,
         allowNull: true
     },
+    // Delegation snapshot — populated when an admin temporarily delegates the
+    // DCI Manager or IT HOD role and the in-flight email is re-emitted to the
+    // new delegate. Shape:
+    //   { delegatedAt, delegatedFromEmail, delegatedToEmail, originalAssigneeEmail }
+    // Cleared on any stage transition or on the auto-revert timeout in
+    // src/services/escalationService.js.
+    delegationEvent: {
+        type: DataTypes.JSON,
+        allowNull: true
+    },
 
     // Section 1: Requestor Information (HR)
     requesterName: { type: DataTypes.STRING }, // Auto-filled from logged-in initiator

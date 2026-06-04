@@ -1,224 +1,376 @@
 <%- include('../partials/header', { title: 'Offboarding Status' }) %>
-    <link rel="stylesheet" href="/css/modern.css">
+<link rel="stylesheet" href="/css/modern.css">
 
-    <header class="app-header">
-        <div class="brand-section">
-            <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
-            <div class="app-title">
-                <h1>Offboarding Status</h1>
-                <p>Ibrahim Fibers Limited</p>
+<header class="app-header">
+    <div class="brand-section">
+        <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+        <div class="app-title">
+            <h1>Offboarding Workflow</h1>
+            <p>Ibrahim Fibres Limited</p>
+        </div>
+    </div>
+    <div class="status-section">
+        <% if (token && request && request.id) { %>
+            <div class="status-badge">REQ #<%= request.id %> | <%= request.status %></div>
+        <% } %>
+    </div>
+</header>
+
+<%- include('../partials/portal_shell') %>
+
+<style>
+    .off-card {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 6px 18px -10px rgba(15,23,42,0.18);
+        padding: 28px;
+        margin-bottom: 24px;
+        border: 1px solid #e2e8f0;
+    }
+    .off-card h2 {
+        margin: 0 0 16px;
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #0f172a;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 10px;
+    }
+    .off-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 18px;
+        margin-bottom: 4px;
+    }
+    .off-info-grid .field-label {
+        font-size: 0.7rem; font-weight: 700; color: #64748b;
+        letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px;
+    }
+    .off-info-grid .field-value {
+        font-size: 0.95rem; color: #0f172a; font-weight: 500;
+    }
+
+    /* Privileges Summary — read-only list of services that will be revoked */
+    .priv-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 10px 18px;
+        margin-top: 8px;
+    }
+    .priv-item {
+        display: flex; align-items: center; gap: 10px;
+        font-size: 0.92rem; color: #0f172a;
+    }
+    .priv-item .priv-dot {
+        flex: 0 0 18px;
+        width: 18px; height: 18px; border-radius: 50%;
+        background: #fef3c7; color: #b45309;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700;
+    }
+    .priv-empty {
+        padding: 18px; background: #fef9c3; border-radius: 8px;
+        color: #854d0e; font-size: 0.9rem;
+    }
+
+    /* Action panel */
+    .action-panel {
+        margin-top: 12px;
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 22px;
+    }
+    .check-row {
+        display: flex; align-items: flex-start; gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px dashed #e2e8f0;
+    }
+    .check-row:last-child { border-bottom: none; }
+    .check-row input[type=checkbox] {
+        width: 18px; height: 18px; margin-top: 2px; accent-color: #0078D4;
+    }
+    .check-row label { font-size: 0.95rem; color: #0f172a; }
+    .check-row small { display: block; color: #64748b; font-size: 0.78rem; margin-top: 2px; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+    .btn {
+        padding: 10px 22px; border-radius: 6px; border: none;
+        font-weight: 600; font-size: 0.92rem; cursor: pointer; font-family: inherit;
+    }
+    .btn-success { background: #10b981; color: #fff; }
+    .btn-success:hover { background: #059669; }
+    .btn-danger  { background: #ef4444; color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-primary { background: #0284c7; color: #fff; }
+    .btn-primary:hover { background: #0369a1; }
+</style>
+
+<div class="app-container" style="max-width: 1000px; margin: 30px auto; padding: 0 20px;">
+
+    <!-- Stepper -->
+    <div class="steps-container" style="margin-bottom: 28px;">
+        <div class="steps">
+            <% steps.forEach((s, i) => { %>
+                <div class="step-item <%= s.status %>">
+                    <div class="step-circle"><%= i + 1 %></div>
+                    <div class="step-label"><%= s.label %></div>
+                </div>
+            <% }); %>
+        </div>
+    </div>
+
+    <!-- Employee Header -->
+    <div class="off-card">
+        <h2>Employee Being Offboarded</h2>
+        <div class="off-info-grid">
+            <div>
+                <div class="field-label">Employee ID</div>
+                <div class="field-value"><%= request.employeeId || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Full Name</div>
+                <div class="field-value"><%= request.fullName || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Department</div>
+                <div class="field-value"><%= request.department || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Designation</div>
+                <div class="field-value"><%= request.designation || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Location Group</div>
+                <div class="field-value">
+                    <%
+                        const locKey  = request.location || '';
+                        const locShow = locKey && typeof locationGroupLabels !== 'undefined' && locationGroupLabels[locKey]
+                                        ? locationGroupLabels[locKey] : (locKey || '—');
+                    %>
+                    <%= locShow %>
+                </div>
+            </div>
+            <div>
+                <div class="field-label">Initiated By</div>
+                <div class="field-value"><%= request.initiatedBy || '—' %></div>
             </div>
         </div>
-        <div class="status-section">
-            <div class="status-badge">Tracking Request</div>
-        </div>
-    </header>
+    </div>
 
-    <div class="app-container" style="padding: 40px;">
-    <style>
-        .timeline-card {
-            background: var(--bg-card);
-            border-radius: 12px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            padding: 32px;
-            margin-bottom: 24px;
-        }
+    <%
+        // Helper: build a list of "granted" services from the matched
+        // OnboardingRequest row. Each entry has a label and an optional detail
+        // string. Rendered as a read-only checklist on the DCI Manager view.
+        const builtPriv = (function buildPrivileges(p) {
+            if (!p) return [];
+            const items = [];
+            const yes = (label, detail) => items.push({ label, detail: detail || '' });
+            if (p.intranetAccess)    yes('Intranet Access');
+            if (p.internetAccess)    yes('Internet (General Browsing)');
+            if (p.specificWebsites)  yes('Specific Websites Access');
+            if (p.emailIncoming)     yes('Incoming Email');
+            if (p.emailOutgoing)     yes('Outgoing (External) Email');
+            if (p.laserPrinter)      yes('Laser Printer', p.laserPrinterLocation);
+            if (p.dotMatrixPrinter)  yes('Dot Matrix Printer', p.dotMatrixPrinterLocation);
+            if (p.deptSharePath)     yes('Department Share (S:)', p.deptSharePath);
+            if (p.homeFolderPath)    yes('Home Folder (Z:)', p.homeFolderPath);
+            if (p.iflPortalLink)     yes('IFL Portal Shortcut', p.iflPortalLink);
+            if (p.sharepointRole)    yes('SharePoint Role', p.sharepointRole);
+            if (p.ntUserName)        yes('NT User Name', p.ntUserName);
+            if (p.exchangeDisplayName) yes('Exchange Display Name', p.exchangeDisplayName);
+            if (p.smtpAddress)       yes('SMTP Address', p.smtpAddress);
+            if (p.memberOf)          yes('AD Groups', p.memberOf);
+            if (p.dgMembers)         yes('Distribution Groups', p.dgMembers);
+            if (p.mailSizeLimit)     yes('Mailbox Size Limit', p.mailSizeLimit);
+            if (p.recipientLimit)    yes('Recipient Limit', p.recipientLimit);
+            if (p.mailboxStorageLimit) yes('Mailbox Storage Limit', p.mailboxStorageLimit);
+            if (p.groupPolicyLevel)  yes('Group Policy Level', p.groupPolicyLevel);
+            if (p.extraFacility)     yes('Extra Facility', p.extraFacility);
+            return items;
+        })(typeof privileges !== 'undefined' ? privileges : null);
+    %>
 
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px;
-        }
-
-        .field-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 4px;
-        }
-
-        .field-value {
-            font-size: 16px;
-            font-weight: 500;
-            color: #0f172a;
-        }
-
-        .checklist-container {
-            margin-top: 32px;
-            border-top: 1px solid #e2e8f0;
-            padding-top: 24px;
-        }
-
-        .check-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 12px;
-            font-size: 1.1rem;
-        }
-
-        .check-icon {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-        }
-
-        .check-icon.done {
-            background-color: #10b981;
-        }
-
-        .check-icon.pending {
-            background-color: #cbd5e1;
-        }
-    </style>
-
-    <header class="app-header" style="background: #0078D4; color: white; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(0,0,0,0.1);">
-        <div class="brand-section" style="display: flex; align-items: center; gap: 16px;">
-            <img src="/logo.png" alt="IFL Logo" style="height: 48px; border-radius: 4px;">
-            <div class="app-title">
-                <h1 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: white;">Employee Offboarding Portal</h1>
-                <p style="margin: 0; font-size: 0.875rem; color: rgba(255,255,255,0.9);">Status Tracking</p>
-            </div>
-        </div>
-        <div class="status-section">
-            <div class="status-badge" style="background: rgba(255,255,255,0.2); color: white; padding: 6px 16px; border: 1px solid rgba(255,255,255,0.3); border-radius: 99px; font-weight: 600;">
-                REQ #<%= request.id %> | <%= request.status %>
-            </div>
-        </div>
-    </header>
-
-    <div class="app-container" style="max-width: 1000px; margin: 40px auto; padding: 0 20px;">
-        
-        <!-- Timeline Steps -->
-        <div class="steps-container" style="margin-bottom: 40px;">
-            <div class="steps">
-                <% steps.forEach((s, i) => { %>
-                    <div class="step-item <%= s.status %>">
-                        <div class="step-circle"><%= i + 1 %></div>
-                        <div class="step-label"><%= s.label %></div>
-                    </div>
-                <% }); %>
-            </div>
+    <!-- DCI Manager Approval — privileges card + decision form -->
+    <% if (role === 'DCIManager') { %>
+        <div class="off-card">
+            <h2>Privileges That Will Be Revoked</h2>
+            <p style="font-size: 0.88rem; color: #475569; margin: 0 0 14px;">
+                Below is a snapshot of the services granted at onboarding. Approval below
+                <strong>acknowledges</strong> that these will be revoked when the DCI Implementer deletes the AD account.
+            </p>
+            <% if (!privileges) { %>
+                <div class="priv-empty">
+                    <strong>No matching onboarding record found</strong> for employee <%= request.employeeId %>.
+                    Proceeding without a privilege summary. Confirm with HR before approving.
+                </div>
+            <% } else if (!builtPriv.length) { %>
+                <div class="priv-empty">
+                    Onboarding record found, but no granted services are recorded on it.
+                </div>
+            <% } else { %>
+                <div class="priv-list">
+                    <% builtPriv.forEach(function(p) { %>
+                        <div class="priv-item">
+                            <span class="priv-dot">!</span>
+                            <div>
+                                <div><%= p.label %></div>
+                                <% if (p.detail) { %>
+                                    <small style="color:#64748b; font-size:0.78rem;"><%= p.detail %></small>
+                                <% } %>
+                            </div>
+                        </div>
+                    <% }); %>
+                </div>
+            <% } %>
         </div>
 
-            <div class="timeline-card">
-                <h2 style="margin-top: 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; color: #0f172a;">Offboarding Details</h2>
-                
-                <div class="info-grid">
-                    <div>
-                        <div class="field-label">Employee ID</div>
-                        <div class="field-value"><%= request.employeeId %></div>
+        <div class="off-card">
+            <h2>Your Decision</h2>
+            <form action="/api/offboarding/handle?token=<%= token %>" method="POST" id="offMgrForm">
+                <div style="margin-bottom: 14px;">
+                    <label class="field-label" style="display:block; margin-bottom:4px;">Manager Remarks (optional)</label>
+                    <textarea name="managerRemarks" rows="3" style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem;"></textarea>
+                </div>
+                <div class="btn-row">
+                    <button type="submit" name="action" value="Reject"
+                            class="btn btn-danger"
+                            data-ifl-confirm="Reject this offboarding request? The workflow will be closed."
+                            data-ifl-confirm-title="Reject offboarding"
+                            data-ifl-confirm-ok="Reject">Reject</button>
+                    <button type="submit" name="action" value="Approve" class="btn btn-success">Approve &amp; Forward to DCI Implementer</button>
+                </div>
+            </form>
+        </div>
+    <% } %>
+
+    <!-- DCI Implementer — AD delete confirm + SmartX + door access checkboxes -->
+    <% if (role === 'DCIImplementer') { %>
+        <div class="off-card">
+            <h2>Revocation Checklist</h2>
+            <p style="font-size: 0.88rem; color: #475569; margin: 0 0 14px;">
+                Confirm each item. Deleting the AD account automatically revokes email, printers,
+                Windows login, IGC Portal, the shared file server, and intranet/internet browsing
+                rights. SmartX and door-access systems are physical and must be confirmed separately.
+            </p>
+
+            <form action="/api/offboarding/handle?token=<%= token %>" method="POST" enctype="multipart/form-data">
+                <div class="action-panel">
+                    <div style="margin-bottom: 14px;">
+                        <label class="field-label" style="display:block;">Implementer Name
+                            <span style="color:#64748b; font-weight:400; font-size:0.78rem;">(auto-filled from Windows login)</span>
+                        </label>
+                        <input type="text" name="implementerName"
+                               data-ifl-sso-name="1"
+                               value="<%= (currentUser && (currentUser.displayName || currentUser.username)) || '' %>"
+                               disabled
+                               style="width:100%; padding:8px 10px; border-radius:6px; border:1px solid #cbd5e1; background:#f1f5f9; color:#0f172a; font-size:0.95rem;">
                     </div>
-                    <div>
-                        <div class="field-label">Full Name</div>
-                        <div class="field-value"><%= request.fullName %></div>
+
+                    <div class="check-row">
+                        <input type="checkbox" name="adRevoked" value="on" id="cb-ad" required>
+                        <label for="cb-ad">
+                            AD Account Deleted
+                            <small>Email, printers, Windows login, IGC Portal, file server, intranet &amp; internet — all automatic.</small>
+                        </label>
                     </div>
-                    <div>
-                        <div class="field-label">Department</div>
-                        <div class="field-value"><%= request.department || 'N/A' %></div>
+                    <div class="check-row">
+                        <input type="checkbox" name="smartXRevoked" value="on" id="cb-smartx" required>
+                        <label for="cb-smartx">
+                            SmartX Access Revoked
+                            <small>Building access via the SmartX system has been disabled.</small>
+                        </label>
                     </div>
-                    <div>
-                        <div class="field-label">Initiated By</div>
-                        <div class="field-value"><%= request.initiatedBy %></div>
+                    <div class="check-row">
+                        <input type="checkbox" name="doorAccessRevoked" value="on" id="cb-door" required>
+                        <label for="cb-door">
+                            Door Access Control Revoked
+                            <small>Door / physical access controllers have been removed for this user.</small>
+                        </label>
+                    </div>
+
+                    <div style="margin-top: 14px;">
+                        <label class="field-label" style="display:block; margin-bottom: 4px;">Notes (optional)</label>
+                        <textarea name="checklistNotes" rows="2" style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem;"></textarea>
+                    </div>
+
+                    <div style="margin-top: 14px; padding: 14px; border: 2px dashed #cbd5e1; border-radius: 8px; text-align:center;">
+                        <label style="cursor:pointer; color: #0078D4; font-weight: 600;">Optional — upload proof screenshots</label>
+                        <input type="file" name="dciProof" multiple accept="image/*,application/pdf" style="display:block; margin: 8px auto 0;">
                     </div>
                 </div>
 
-                <!-- Form Section based on Role -->
-                <% if (role === 'SystemManager') { %>
-                    <div class="checklist-container" style="background:#f0f9ff; padding:24px; border-radius:8px; border:1px solid #bae6fd;">
-                        <h3 style="margin-top:0; color:#0369a1;">Manager Approval Task</h3>
-                        <p style="color:#0ea5e9;">Please select an IT agent to assign this offboarding task to.</p>
-                        <form action="/api/offboarding/handle?token=<%= token %>" method="POST">
-                            <div class="form-group" style="margin-bottom: 16px;">
-                                <label class="field-label">Assign to System Team Agent</label>
-                                <select name="assignedSystemAgentId" required style="width:100%; padding:8px; border-radius:4px; border:1px solid #cbd5e1; font-size:1rem;">
-                                    <option value="">-- Select Agent --</option>
-                                    <option value="IT_AGENT_1">John Doe (IT Agent 1)</option>
-                                    <option value="IT_AGENT_2">Jane Smith (IT Agent 2)</option>
-                                </select>
-                            </div>
-                            <div class="form-group" style="margin-bottom: 24px;">
-                                <label class="field-label">Manager Remarks (Optional)</label>
-                                <textarea name="managerRemarks" rows="3" style="width:100%; padding:8px; border-radius:4px; border:1px solid #cbd5e1; font-size:1rem;"></textarea>
-                            </div>
-                            <button type="submit" name="action" value="Reject" class="btn btn-primary" style="background:#ef4444; color:white; border:none; padding:10px 20px; border-radius:4px; cursor:pointer; font-weight:600; margin-right: 12px;">Reject</button>
-                            <button type="submit" name="action" value="Approve" class="btn btn-primary" style="background:#0284c7; color:white; border:none; padding:10px 20px; border-radius:4px; cursor:pointer; font-weight:600;">Approve & Assign Agent</button>
-                        </form>
+                <div class="btn-row">
+                    <button type="submit" class="btn btn-success">Confirm All Revocations &amp; Complete</button>
+                </div>
+            </form>
+        </div>
+    <% } %>
+
+    <!-- Read-only summary for Completed / Rejected / other read-only views -->
+    <% if (role === 'ReadOnly') { %>
+        <div class="off-card">
+            <h2>Status</h2>
+            <% if (request.status === 'Completed') { %>
+                <div style="padding: 16px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px;">
+                    <h3 style="color: #065f46; margin: 0 0 6px;">Offboarding Completed</h3>
+                    <p style="color: #047857; margin: 0; font-size: 0.92rem;">
+                        Completed on <%= request.completedAt ? new Date(request.completedAt).toLocaleString() : 'N/A' %>
+                        <% if (request.dciImplementerName) { %> · by <%= request.dciImplementerName %><% } %>
+                    </p>
+                </div>
+            <% } else if (request.status === 'Rejected') { %>
+                <div style="padding: 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;">
+                    <h3 style="color: #991b1b; margin: 0 0 6px;">Offboarding Rejected</h3>
+                    <% if (request.managerRemarks) { %>
+                        <p style="color: #7f1d1d; margin: 0; font-size: 0.92rem;"><%= request.managerRemarks %></p>
+                    <% } %>
+                </div>
+            <% } else { %>
+                <p style="color:#64748b;">Status: <strong><%= request.status || 'Unknown' %></strong></p>
+            <% } %>
+
+            <% if (request.status === 'Completed') { %>
+                <div style="margin-top: 18px;">
+                    <h3 style="font-size: 0.92rem; color:#475569; margin: 0 0 8px;">Revocation summary</h3>
+                    <div class="check-row">
+                        <input type="checkbox" disabled <%= request.adRevoked ? 'checked' : '' %>>
+                        <label>AD Account Deleted</label>
                     </div>
-
-                <% } else if (role === 'SystemTeam' || request.status === 'Completed') { %>
-                    <div class="checklist-container">
-                        <h3 style="margin-top: 0; color: #334155;">System Team Checklist</h3>
-                        <p style="color: #64748b; margin-bottom: 24px;">The following privileges must be revoked to finalize the offboarding process.</p>
-                        
-                        <% if (role === 'SystemTeam') { %>
-                            <form action="/api/offboarding/handle?token=<%= token %>" method="POST">
-                                <div class="check-item">
-                                    <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-size:1.1rem;">
-                                        <input type="checkbox" name="adRevoked" value="on" <%= request.adRevoked ? 'checked' : '' %> style="width:20px; height:20px;">
-                                        <span>Active Directory Account Revoked (Email, Portals, Windows, Printers)</span>
-                                    </label>
-                                </div>
-                                <div class="check-item">
-                                    <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-size:1.1rem;">
-                                        <input type="checkbox" name="physicalAccessRevoked" value="on" <%= request.physicalAccessRevoked ? 'checked' : '' %> style="width:20px; height:20px;">
-                                        <span>Physical Access Revoked (SmartXS Machine, Control Doors)</span>
-                                    </label>
-                                </div>
-                                <div class="form-group" style="margin-top: 24px;">
-                                    <label class="field-label">System Team Notes (Optional)</label>
-                                    <textarea name="checklistNotes" rows="2" style="width:100%; padding:8px; border-radius:4px; border:1px solid #cbd5e1; font-size:1rem;"><%= request.checklistNotes || '' %></textarea>
-                                </div>
-                                <div style="margin-top:24px;">
-                                    <button type="submit" name="action" value="completeTask" class="btn btn-primary" style="background:#10b981; color:white; border:none; padding:10px 20px; border-radius:4px; cursor:pointer; font-weight:600;">Save Progress & Complete Checklist</button>
-                                </div>
-                            </form>
-                        <% } else { %>
-                            <!-- Readonly display for history -->
-                            <div class="check-item">
-                                <div class="check-icon <%= request.adRevoked ? 'done' : 'pending' %>">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                </div>
-                                <span>Active Directory Account Revoked (Email, Portals, Windows, Printers)</span>
-                            </div>
-
-                            <div class="check-item">
-                                <div class="check-icon <%= request.physicalAccessRevoked ? 'done' : 'pending' %>">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                </div>
-                                <span>Physical Access Revoked (SmartXS Machine, Control Doors)</span>
-                            </div>
-                            
-                            <% if (request.checklistNotes) { %>
-                                <div style="margin-top: 24px; padding: 16px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;">
-                                    <div class="field-label" style="color: #d97706;">System Team Notes</div>
-                                    <div class="field-value" style="font-size: 0.95rem;"><%= request.checklistNotes %></div>
-                                </div>
-                            <% } %>
-                        <% } %>
+                    <div class="check-row">
+                        <input type="checkbox" disabled <%= request.smartXRevoked ? 'checked' : '' %>>
+                        <label>SmartX Access Revoked</label>
                     </div>
-                <% } %>
-
-                <% if (request.status === 'Completed') { %>
-                    <div style="margin-top: 32px; padding: 16px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; text-align: center;">
-                        <h3 style="color: #065f46; margin: 0 0 8px 0;">🎉 Offboarding Completed Successfully</h3>
-                        <p style="color: #047857; margin: 0;">Completed on <%= request.completedAt ? new Date(request.completedAt).toLocaleString() : 'N/A' %></p>
+                    <div class="check-row">
+                        <input type="checkbox" disabled <%= request.doorAccessRevoked ? 'checked' : '' %>>
+                        <label>Door Access Control Revoked</label>
                     </div>
-                <% } %>
-            </div>
+                    <% if (request.checklistNotes) { %>
+                        <div style="margin-top: 12px; padding: 12px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;">
+                            <div class="field-label" style="color: #d97706;">Implementer Notes</div>
+                            <div class="field-value" style="font-size: 0.92rem;"><%= request.checklistNotes %></div>
+                        </div>
+                    <% } %>
+                </div>
+            <% } %>
+        </div>
+    <% } %>
 
-    </div>
-</body>
-</html>
+</div>
+
+<%- include('../partials/portal_close') %>
+<%- include('../partials/portal_scripts') %>
+
+<script>
+    // Auto-fill implementer name from SSO — mirrors the onboarding form pattern.
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            if (typeof window.iflGetUser !== 'function') return;
+            const u = await window.iflGetUser();
+            if (!u) return;
+            const v = u.displayName || u.username || '';
+            document.querySelectorAll('input[data-ifl-sso-name="1"]').forEach(el => {
+                if (!el.value) el.value = v;
+            });
+        } catch (_) {}
+    });
+</script>

@@ -2,34 +2,19 @@ import crypto from 'crypto';
 import OffboardingRequest from '../models/OffboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
 import * as emailService from './emailService.js';
+import RecipientService from './recipientService.js';
+import HRMSService from './hrmsService.js';
 import logger from '../utils/logger.js';
-import Employee from '../models/Employee.js';
 
-// Setup basic Recipient abstractions here since RecipientService didn't have all of them.
-const getRecipientEmail = async (roleKey, context = {}) => {
-    // Basic mapping matching the pattern
-    const roleMap = {
-        'SYSTEM_MANAGER': process.env.EMAIL_SYSTEM_MANAGER || 'system.manager@ifl.com',
-        'SYSTEM_AGENT': process.env.EMAIL_IT_AGENT || 'it.agent@ifl.com',
-        'IT_HOD': process.env.EMAIL_IT_HOD || 'it.hod@ifl.com',
-        'HR_HOD': process.env.EMAIL_HR_HOD || 'hr.hod@ifl.com'
-    };
-    return roleMap[roleKey] || 'default@ifl.com';
-};
-
+// Generic stage-email helper — wraps emailService and logs success/failure.
 const sendStageEmail = async (email, request, token, type) => {
+    if (!email) {
+        logger.warn(`[Offboarding] No recipient resolved for ${type} (request #${request.id}); skipping email.`);
+        return;
+    }
     try {
-        const actionLink = `http://localhost:3000/api/offboarding/handle?token=${token}`;
-        
-        // Mocking the emailService implementation for offboarding
-        console.log(`\n==============================================`);
-        console.log(`[EmailService] DEPARTURE NOTIFICATION (${type})`);
-        console.log(`To: ${email}`);
-        console.log(`Subject: Offboarding Action Required - ${request.fullName}`);
-        console.log(`Body: A new offboarding action requires your attention / review.`);
-        console.log(`Action Link: ${actionLink}`);
-        console.log(`==============================================\n`);
-        
+        const actionLink = `${process.env.APP_URL || 'http://localhost:3000'}/api/offboarding/handle?token=${token}`;
+        await emailService.sendOffboardingNotification(email, request, actionLink, type);
         logger.info(`[Offboarding] Sent ${type} email to ${email}`);
     } catch (err) {
         logger.error(`[Offboarding] Failed to send ${type} email: ${err.message}`);
@@ -51,128 +36,181 @@ const logTimelineEvent = async (requestId, action, actorRole, details = null) =>
     }
 };
 
+// Map status → portal role label. Read by getFormContext + the renderForm
+// branching in offboardingController.
 export const getFormContext = async (token) => {
     if (!token) return null;
     const request = await OffboardingRequest.findOne({ where: { currentStageToken: token } });
     if (!request) return null;
 
     let role = 'ReadOnly';
-    if (request.status === 'PendingManagerApproval') role = 'SystemManager';
-    if (request.status === 'PendingSystemTeam') role = 'SystemTeam';
+    if (request.status === 'PendingDCIManager') role = 'DCIManager';
+    if (request.status === 'PendingDCIImplementation') role = 'DCIImplementer';
 
     return { request, role };
 };
 
-export const createRequest = async (data, initiatedBy) => {
+// HR or IT Ops initiates an offboarding. The caller (offboardingController)
+// has already validated the SSO user is in either the HR_INITIATOR or IT_OPS
+// list for the location. The router (DCI Manager) is resolved via the
+// standard RecipientService.getWithFallback path so delegation + 2-day
+// fallback are honoured automatically.
+export const createRequest = async (data, initiator) => {
     logger.info('[Offboarding] Creating new request');
-    try {
-        const { employeeId } = data;
-        if (!employeeId) throw new Error('Employee ID is required.');
+    if (!data.employeeId) throw new Error('Employee ID is required.');
 
-        const employee = await Employee.findByPk(employeeId);
-        if (!employee) throw new Error('Employee not found.');
+    // Guard: refuse if an active offboarding already exists for this employee.
+    const existing = await OffboardingRequest.findOne({
+        where: { employeeId: data.employeeId, status: ['Draft', 'PendingDCIManager', 'PendingDCIImplementation'] }
+    });
+    if (existing) throw new Error('An active offboarding request already exists for this employee.');
 
-        const existing = await OffboardingRequest.findOne({
-            where: { employeeId: employee.employeeId, status: ['Draft', 'PendingManagerApproval', 'PendingSystemTeam'] }
-        });
+    const token = crypto.randomBytes(20).toString('hex');
 
-        if (existing) throw new Error('An active offboarding request already exists for this employee.');
+    // Resolve DCI Manager (honours delegation via getWithFallback).
+    const recipient = await RecipientService.getWithFallback('DCI_MANAGER', {
+        location: data.location,
+        employeeId: data.employeeId,
+        requestId: null   // request not created yet — stamped after create
+    });
 
-        const token = crypto.randomBytes(20).toString('hex');
+    const request = await OffboardingRequest.create({
+        employeeId:   data.employeeId,
+        fullName:     data.fullName     || null,
+        department:   data.department   || null,
+        designation:  data.designation  || null,
+        location:     data.location     || null,
+        initiatedBy:  initiator && (initiator.email || initiator.username),
+        initiatedAt:  new Date(),
+        status:       'PendingDCIManager',
+        currentStageToken:            token,
+        currentStageAssigneeEmail:    recipient.email    || null,
+        currentStageAssigneeUsername: recipient.username || null
+    });
 
-        const request = await OffboardingRequest.create({
-            employeeId: employee.employeeId,
-            fullName: employee.name,
-            department: employee.mainDept,
-            designation: employee.designation,
-            initiatedBy,
-            initiatedAt: new Date(),
-            status: 'PendingManagerApproval',
-            currentStageToken: token
-        });
+    const initiatorLabel = initiator
+        ? `Initiated by ${initiator.displayName || initiator.username}${initiator.email ? ' <' + initiator.email + '>' : ''}`
+        : 'Initial submission';
+    await logTimelineEvent(request.id, 'Offboarding Initiated', 'HR', initiatorLabel);
 
-        await logTimelineEvent(request.id, 'Request Initiated', 'HR', `Offboarding initiated for ${employee.name}`);
-        
-        const managerEmail = await getRecipientEmail('SYSTEM_MANAGER');
-        await sendStageEmail(managerEmail, request, token, 'SYSTEM_MANAGER_APPROVAL');
-
-        return request;
-    } catch (err) {
-        logger.error(`[Offboarding] Create Error: ${err.message}`);
-        throw err;
-    }
+    await sendStageEmail(recipient.email, request, token, 'DCI_MANAGER_APPROVAL');
+    return request;
 };
 
-export const handleManagerApproval = async (token, action, assignAgentId, remarks) => {
-    logger.info(`[Offboarding] Manager Approval Phase`);
-    try {
-        const request = await OffboardingRequest.findOne({ where: { currentStageToken: token } });
-        if (!request || request.status !== 'PendingManagerApproval') throw new Error('Invalid Token');
+// DCI Manager either approves (→ DCI Implementer) or rejects.
+export const handleManagerApproval = async (token, action, remarks) => {
+    logger.info('[Offboarding] DCI Manager decision');
+    const request = await OffboardingRequest.findOne({ where: { currentStageToken: token } });
+    if (!request || request.status !== 'PendingDCIManager') throw new Error('Invalid Token');
 
-        if (action === 'Reject') {
-            await request.update({ status: 'Rejected', managerRemarks: remarks, currentStageToken: null });
-            await logTimelineEvent(request.id, 'Manager Rejected', 'SystemManager', remarks);
-            return request;
-        }
-
-        const newToken = crypto.randomBytes(20).toString('hex');
+    if (action === 'Reject') {
         await request.update({
-            status: 'PendingSystemTeam',
-            assignedSystemAgentId: assignAgentId,
+            status: 'Rejected',
             managerRemarks: remarks,
             managerApprovedAt: new Date(),
-            currentStageToken: newToken
+            currentStageToken: null,
+            currentStageAssigneeEmail: null,
+            currentStageAssigneeUsername: null,
+            delegationEvent: null
         });
-
-        await logTimelineEvent(request.id, 'Manager Assigned Agent', 'SystemManager', `Assigned to ${assignAgentId}`);
-        
-        const agentEmail = await getRecipientEmail('SYSTEM_AGENT');
-        await sendStageEmail(agentEmail, request, newToken, 'SYSTEM_TASKS_REQUIRED');
-
+        await logTimelineEvent(request.id, 'Offboarding Rejected', 'DCIManager', remarks);
         return request;
-    } catch (err) {
-        logger.error(`[Offboarding] Manager Error: ${err.message}`);
-        throw err;
     }
+
+    // Approve → forward to DCI Implementer.
+    const newToken  = crypto.randomBytes(20).toString('hex');
+    const recipient = await RecipientService.getWithFallback('DCI_IMPLEMENTER', {
+        location: request.location,
+        employeeId: request.employeeId,
+        requestId: request.id
+    });
+
+    await request.update({
+        status:                       'PendingDCIImplementation',
+        managerRemarks:               remarks,
+        managerApprovedAt:            new Date(),
+        currentStageToken:            newToken,
+        currentStageAssigneeEmail:    recipient.email    || null,
+        currentStageAssigneeUsername: recipient.username || null,
+        delegationEvent:              null   // any pending delegation cleared by acting
+    });
+    await logTimelineEvent(request.id, 'DCI Manager Approved (Offboarding)', 'DCIManager', remarks);
+    await sendStageEmail(recipient.email, request, newToken, 'DCI_IMPLEMENTER');
+    return request;
 };
 
-export const handleSystemTasks = async (token, action, checklistData, notes) => {
-    logger.info(`[Offboarding] System Tasks Phase`);
+// DCI Implementer submits the single revocation form. All three booleans
+// (adRevoked, smartXRevoked, doorAccessRevoked) must be true. Optional
+// notes + proof attachments are persisted. On submit the request flips to
+// Completed and the completion notification fires.
+export const handleImplementerCompletion = async (token, data, implementerName, proofPaths) => {
+    logger.info('[Offboarding] DCI Implementer revocation');
+    const request = await OffboardingRequest.findOne({ where: { currentStageToken: token } });
+    if (!request || request.status !== 'PendingDCIImplementation') throw new Error('Invalid Token');
+
+    const adRevoked         = !!data.adRevoked;
+    const smartXRevoked     = !!data.smartXRevoked;
+    const doorAccessRevoked = !!data.doorAccessRevoked;
+    if (!adRevoked || !smartXRevoked || !doorAccessRevoked) {
+        throw new Error('All three revocations must be confirmed before submitting.');
+    }
+
+    await request.update({
+        adRevoked,
+        smartXRevoked,
+        doorAccessRevoked,
+        physicalAccessRevoked: doorAccessRevoked,   // legacy mirror
+        checklistNotes:        data.checklistNotes || null,
+        dciImplementerName:    implementerName,
+        dciImplementerCompletedAt: new Date(),
+        dciProofAttachments:   Array.isArray(proofPaths) && proofPaths.length ? proofPaths : null,
+        status:                'Completed',
+        completedAt:           new Date(),
+        currentStageToken:            null,
+        currentStageAssigneeEmail:    null,
+        currentStageAssigneeUsername: null,
+        delegationEvent:              null
+    });
+    await logTimelineEvent(
+        request.id,
+        'AD/SmartX/Door Revoked',
+        'DCIImplementer',
+        `By ${implementerName}. AD: true, SmartX: true, Door: true.`
+    );
+    await logTimelineEvent(request.id, 'Offboarding Completed', 'System', 'All revocations confirmed.');
+
+    await sendCompletionNotification(request).catch(err => {
+        logger.error(`[Offboarding] Completion notification failed (non-fatal): ${err.message}`);
+    });
+
+    return request;
+};
+
+// Final notification to: employee's HOD (resolved from HRMS) + IT HOD.
+// No HR HOD per requirements (email 2 supersedes email 1 on that point).
+const sendCompletionNotification = async (request) => {
+    const recipients = [];
+
     try {
-        const request = await OffboardingRequest.findOne({ where: { currentStageToken: token } });
-        if (!request || request.status !== 'PendingSystemTeam') throw new Error('Invalid Token');
+        const manager = await HRMSService.getManager(request.employeeId);
+        if (manager && manager.email) recipients.push(manager.email);
+    } catch (e) {
+        logger.warn(`[Offboarding] Could not resolve HOD for ${request.employeeId}: ${e.message}`);
+    }
 
-        const adRevoked = checklistData.adRevoked;
-        const physicalRevoked = checklistData.physicalAccessRevoked;
+    const itHodEmail = await RecipientService.get('IT_HOD', { location: request.location });
+    if (itHodEmail) recipients.push(itHodEmail);
 
-        await request.update({
-            adRevoked,
-            physicalAccessRevoked: physicalRevoked,
-            checklistNotes: notes
-        });
+    const toList = [...new Set(recipients.filter(Boolean))];
+    if (!toList.length) {
+        logger.warn(`[Offboarding] No completion recipients resolved for request #${request.id}; skipping.`);
+        return;
+    }
 
-        if (adRevoked && physicalRevoked) {
-            await request.update({
-                status: 'Completed',
-                completedAt: new Date(),
-                currentStageToken: null
-            });
-            await logTimelineEvent(request.id, 'System Tasks Completed', 'SystemTeam', 'All access has been revoked successfully.');
-            
-            // Final completion notifications
-            const itHodEmail = await getRecipientEmail('IT_HOD');
-            const hrHodEmail = await getRecipientEmail('HR_HOD');
-            await sendStageEmail(itHodEmail, request, 'NO_TOKEN', 'FINAL_NOTIFICATION_IT');
-            await sendStageEmail(hrHodEmail, request, 'NO_TOKEN', 'FINAL_NOTIFICATION_HR');
-            
-            logger.info(`[Offboarding] Request ${request.id} COMPLETED.`);
-        } else {
-            await logTimelineEvent(request.id, 'System Tasks Progress Updated', 'SystemTeam', `AD: ${adRevoked}, Physical: ${physicalRevoked}`);
-        }
-
-        return request;
+    try {
+        await emailService.sendOffboardingCompletedNotification(toList.join(','), request);
+        logger.info(`[Offboarding] Completion notification sent to ${toList.join(', ')}`);
     } catch (err) {
-        logger.error(`[Offboarding] System Tasks Error: ${err.message}`);
-        throw err;
+        logger.error(`[Offboarding] Completion notification error: ${err.message}`);
     }
 };

@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import OnboardingRequest from '../models/OnboardingRequest.js';
+import OffboardingRequest from '../models/OffboardingRequest.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import TimelineEvent from '../models/TimelineEvent.js';
@@ -161,5 +162,112 @@ export async function runEscalationCheck() {
     }
 
     logger.info(`[Escalation] Done — checked ${checked}, escalated ${escalated}.`);
-    return { checked, escalated };
+
+    // Second pass: delegation auto-revert. Independent of the 48h
+    // primary→secondary timer above. Operates on both Onboarding and
+    // Offboarding requests where the delegationEvent JSON has been set by
+    // admin's delegation rebind in adminController.js.
+    try {
+        const revertResult = await runDelegationRevertCheck();
+        return { checked, escalated, delegationReverts: revertResult };
+    } catch (err) {
+        logger.error(`[Escalation] Delegation revert pass failed: ${err.message}`);
+        return { checked, escalated, delegationReverts: { checked: 0, reverted: 0 } };
+    }
+}
+
+// Default delegation timeout window. After this many hours of inactivity by
+// the delegate, any remaining stage emails the delegate hasn't acted on
+// auto-route back to the originalAssigneeEmail captured at delegation time.
+// Per the plan: half the 48h primary-to-secondary window.
+const DELEGATE_TIMEOUT_HOURS = parseInt(process.env.DELEGATE_TIMEOUT_HOURS || '24', 10);
+const DELEGATE_TIMEOUT_MS    = DELEGATE_TIMEOUT_HOURS * 60 * 60 * 1000;
+
+// In-flight pending statuses that participate in delegation revert. Mirrors
+// DELEGATION_ROLE_TO_STATUS in adminController.js.
+const DELEGATION_REVERT_STATUSES = ['PendingDCIManager', 'PendingITHOD', 'PendingDCIImplementation'];
+
+async function runDelegationRevertCheck() {
+    logger.info(`[DelegationRevert] Starting ${DELEGATE_TIMEOUT_HOURS}h check`);
+
+    let checked = 0;
+    let reverted = 0;
+
+    const MODELS = [
+        { model: OnboardingRequest,  kind: 'onboarding'  },
+        { model: OffboardingRequest, kind: 'offboarding' }
+    ];
+
+    for (const { model, kind } of MODELS) {
+        const rows = await model.findAll({
+            where: {
+                status:          { [Op.in]: DELEGATION_REVERT_STATUSES },
+                delegationEvent: { [Op.ne]: null }
+            }
+        });
+
+        for (const r of rows) {
+            try {
+                checked++;
+                const ev = r.delegationEvent;
+                if (!ev || !ev.delegatedAt || !ev.originalAssigneeEmail) continue;
+                if (emailsMatch(r.currentStageAssigneeEmail, ev.originalAssigneeEmail)) {
+                    // Already reverted (or never re-stamped); clear the snapshot.
+                    await r.update({ delegationEvent: null });
+                    continue;
+                }
+                const ageMs = Date.now() - new Date(ev.delegatedAt).getTime();
+                if (ageMs < DELEGATE_TIMEOUT_MS) continue;
+                if (!r.currentStageToken) {
+                    // Stage closed between delegation and now — clear snapshot, nothing to do.
+                    await r.update({ delegationEvent: null });
+                    continue;
+                }
+
+                logger.info(`[DelegationRevert] ${kind} #${r.id} reverting: ${r.currentStageAssigneeEmail} → ${ev.originalAssigneeEmail}`);
+
+                await r.update({
+                    currentStageAssigneeEmail:    ev.originalAssigneeEmail,
+                    currentStageAssigneeUsername: null,
+                    delegationEvent:              null
+                });
+
+                // Re-emit the stage email to the original holder via the same
+                // /api/<kind>/handle?token=… link the original email had.
+                const actionLink = `${process.env.APP_URL}/api/${kind}/handle?token=${r.currentStageToken}`;
+                try {
+                    if (kind === 'offboarding') {
+                        const type = r.status === 'PendingDCIManager' ? 'DCI_MANAGER_APPROVAL'
+                                   : r.status === 'PendingDCIImplementation' ? 'DCI_IMPLEMENTER'
+                                   : null;
+                        if (type) await emailService.sendOffboardingNotification(ev.originalAssigneeEmail, r, actionLink, type);
+                    } else {
+                        const type = r.status === 'PendingDCIManager' ? 'DCI_MANAGER_APPROVAL'
+                                   : r.status === 'PendingITHOD'      ? 'IT_HOD_APPROVAL'
+                                   : null;
+                        if (type) await emailService.sendOnboardingNotification(ev.originalAssigneeEmail, r, actionLink, type);
+                    }
+                } catch (mailErr) {
+                    logger.warn(`[DelegationRevert] Email re-emit failed for ${kind} #${r.id}: ${mailErr.message}`);
+                }
+
+                await TimelineEvent.create({
+                    requestId: r.id,
+                    action:    'Delegation Reverted (Timeout)',
+                    actorRole: 'System',
+                    details:   `Delegate (${ev.delegatedToEmail || 'unknown'}) did not act within ` +
+                               `${DELEGATE_TIMEOUT_HOURS}h. Stage automatically reverted to original ` +
+                               `holder (${ev.originalAssigneeEmail}).`,
+                    timestamp: new Date()
+                });
+
+                reverted++;
+            } catch (err) {
+                logger.error(`[DelegationRevert] Error on ${kind} #${r.id}: ${err.message}`);
+            }
+        }
+    }
+
+    logger.info(`[DelegationRevert] Done — checked ${checked}, reverted ${reverted}.`);
+    return { checked, reverted };
 }

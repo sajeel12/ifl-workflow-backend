@@ -151,14 +151,29 @@ router.get('/ad-debug/:username', async (req, res) => {
 });
 
 // --- Offboarding Routes ---
-router.get('/offboarding/initiate', ssoMiddleware, offboardingController.initiate);
+// GET /initiate stays OPEN at Node — gating the page-load route with
+// ssoMiddleware re-introduces the IIS Windows-auth prompt loop (rewrite
+// happens before auth, so req.user is absent on fresh navigation). The page
+// renders open; the page's client JS hydrates SSO. POST /initiate is the
+// hard gate — ssoMiddleware reads the sidecar token from the body, the
+// controller then verifies the submitter is on the HR or IT Ops list.
+router.get('/offboarding/initiate', offboardingController.initiate);
 router.post('/offboarding/initiate', ssoMiddleware, offboardingController.initiate);
 router.get('/offboarding/pending-manager', offboardingController.getPendingManager);
 router.get('/offboarding/pending-system', offboardingController.getPendingSystem);
 router.get('/offboarding/all', offboardingController.getAll);
 
-// Token-based Handle Routes
+// Role-scoped portal queue for offboarding — mirrors /onboarding/queue.
+// SSO-gated so a malicious caller can't enumerate every role's queue.
+router.get('/offboarding/queue', ssoMiddleware, offboardingController.getRoleQueue);
+
+// Token-based Handle Routes.
+// GET stays open (email-link click pattern). POST is SSO-gated for the
+// forwarded-email guard inside the controller.
+// IMPORTANT: multer runs BEFORE ssoMiddleware on POST so multipart bodies
+// (DCI Implementer's optional proof upload) are parsed and the sidecar
+// token in the body becomes visible — same gotcha as onboarding upload-proof.
 router.get('/offboarding/handle', (req, res) => offboardingController.handleRequest(req, res));
-router.post('/offboarding/handle', (req, res) => offboardingController.handleRequest(req, res));
+router.post('/offboarding/handle', upload.array('dciProof', 5), ssoMiddleware, (req, res) => offboardingController.handleRequest(req, res));
 
 export default router;

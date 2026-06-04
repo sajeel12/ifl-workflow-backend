@@ -4,6 +4,7 @@ import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import SystemConfig from '../models/SystemConfig.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
+import OffboardingRequest from '../models/OffboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
 import oracleSyncService from '../services/oracleSyncService.js';
 import { Op } from 'sequelize';
@@ -50,10 +51,24 @@ const DELEGATION_ROLE_TO_STATUS = {
 // person gets notified immediately without admin having to resend manually.
 // Failures are logged but do NOT abort the rebind — a missed email is better
 // than a failed save.
-async function sendDelegationNotification(inflightReq, recipientEmail) {
+//
+// `kind` is 'onboarding' (default, preserves legacy behaviour) or
+// 'offboarding'. The two flows use different action-link bases and different
+// email-type maps.
+async function sendDelegationNotification(inflightReq, recipientEmail, kind = 'onboarding') {
     try {
+        if (!inflightReq.currentStageToken) return;
+        if (kind === 'offboarding') {
+            const type = inflightReq.status === 'PendingDCIManager' ? 'DCI_MANAGER_APPROVAL'
+                       : inflightReq.status === 'PendingDCIImplementation' ? 'DCI_IMPLEMENTER'
+                       : null;
+            if (!type) return;
+            const actionLink = `${process.env.APP_URL}/api/offboarding/handle?token=${inflightReq.currentStageToken}`;
+            await emailService.sendOffboardingNotification(recipientEmail, inflightReq, actionLink, type);
+            return;
+        }
         const map = STATUS_TO_RESEND[inflightReq.status];
-        if (!map || !inflightReq.currentStageToken) return;
+        if (!map) return;
         const portalSlug = EMAIL_TYPE_TO_PORTAL_SLUG[map.type];
         const actionLink = portalSlug
             ? `${process.env.APP_URL}/portal/${portalSlug}/enter?action=${inflightReq.currentStageToken}`
@@ -62,6 +77,57 @@ async function sendDelegationNotification(inflightReq, recipientEmail) {
     } catch (err) {
         console.error(`[Delegation] Failed to send notification for request #${inflightReq.id} to ${recipientEmail}:`, err.message);
     }
+}
+
+// Walk both OnboardingRequests and OffboardingRequests at a given pending
+// status; rebind currentStageAssignee* to the new holder, snapshot a
+// delegationEvent JSON so escalationService can auto-revert if the delegate
+// doesn't act in time, log a TimelineEvent, and re-emit the stage email.
+//
+// Returns the count of requests rebound across both tables.
+async function rebindInFlightToDelegate({
+    pendingStatus, prevEmail, newEmail, newUsername, roleLabel, isTemporary, isRevert
+}) {
+    if (!pendingStatus || !newEmail) return 0;
+    let count = 0;
+
+    const ONBOARDING  = { model: OnboardingRequest,  kind: 'onboarding'  };
+    const OFFBOARDING = { model: OffboardingRequest, kind: 'offboarding' };
+
+    for (const { model, kind } of [ONBOARDING, OFFBOARDING]) {
+        const inFlight = await model.findAll({ where: { status: pendingStatus } });
+        for (const r of inFlight) {
+            const originalEmail = (r.delegationEvent && r.delegationEvent.originalAssigneeEmail)
+                || r.currentStageAssigneeEmail
+                || prevEmail
+                || null;
+            const delegationEvent = isRevert ? null : {
+                delegatedAt:           new Date().toISOString(),
+                delegatedFromEmail:    r.currentStageAssigneeEmail || prevEmail || null,
+                delegatedToEmail:      newEmail,
+                originalAssigneeEmail: originalEmail
+            };
+            await r.update({
+                currentStageAssigneeEmail:    newEmail,
+                currentStageAssigneeUsername: newUsername || null,
+                delegationEvent
+            });
+            const action = isRevert ? 'Admin Delegation Reverted' : 'Admin Delegation Update';
+            const details = isRevert
+                ? `${roleLabel} restored to original holder ${newEmail}. Temporary delegation ended.`
+                : `${roleLabel} reassigned to ${newEmail} (${isTemporary ? 'Temporary Delegation' : 'Permanent Role Change'}). Portal access and action gate updated immediately.`;
+            await TimelineEvent.create({
+                requestId: r.id,
+                action,
+                actorRole: 'Admin',
+                details,
+                timestamp: new Date()
+            });
+            await sendDelegationNotification(r, newEmail, kind);
+            count++;
+        }
+    }
+    return count;
 }
 
 // Per client policy, only the IT Operations role is split by location.
@@ -721,31 +787,22 @@ class AdminController {
                 previousApproverUsername: prevUser,
             });
 
-            // Immediately rebind every in-flight request at the corresponding stage
-            // so the new delegate's portal canAct flag is correct and the old
-            // delegate's action gate is updated (read-only portal access is handled
-            // separately via the previousApprover* columns).
+            // Immediately rebind every in-flight request (both onboarding AND
+            // offboarding) at the corresponding stage so the new delegate's
+            // portal canAct flag is correct and the old delegate's action
+            // gate is updated. Snapshots delegationEvent for auto-revert
+            // (escalationService) so emails the delegate hasn't acted on
+            // within DELEGATE_TIMEOUT_HOURS re-route back to the original.
             const pendingStatus = DELEGATION_ROLE_TO_STATUS[config.roleKey];
-            let rebound = 0;
-            if (pendingStatus && pEmail) {
-                const inFlight = await OnboardingRequest.findAll({ where: { status: pendingStatus } });
-                for (const inflightReq of inFlight) {
-                    await inflightReq.update({
-                        currentStageAssigneeEmail:    pEmail,
-                        currentStageAssigneeUsername: pUser || null
-                    });
-                    const delegationKind = isTemporary ? 'Temporary Delegation' : 'Permanent Role Change';
-                    await TimelineEvent.create({
-                        requestId: inflightReq.id,
-                        action:    'Admin Delegation Update',
-                        actorRole: 'Admin',
-                        details:   `${config.label} reassigned to ${pEmail} (${delegationKind}). Portal access and action gate updated immediately.`,
-                        timestamp: new Date()
-                    });
-                    await sendDelegationNotification(inflightReq, pEmail);
-                    rebound++;
-                }
-            }
+            const rebound = await rebindInFlightToDelegate({
+                pendingStatus,
+                prevEmail:   prevEmail,
+                newEmail:    pEmail,
+                newUsername: pUser,
+                roleLabel:   config.label,
+                isTemporary,
+                isRevert:    false
+            });
 
             const msg = rebound > 0
                 ? `Approver "${config.label}" updated. ${rebound} in-flight request(s) rebound to new delegate.`
@@ -795,25 +852,15 @@ class AdminController {
             });
 
             const pendingStatus = DELEGATION_ROLE_TO_STATUS[config.roleKey];
-            let rebound = 0;
-            if (pendingStatus && restoredEmail) {
-                const inFlight = await OnboardingRequest.findAll({ where: { status: pendingStatus } });
-                for (const inflightReq of inFlight) {
-                    await inflightReq.update({
-                        currentStageAssigneeEmail:    restoredEmail,
-                        currentStageAssigneeUsername: restoredUser || null
-                    });
-                    await TimelineEvent.create({
-                        requestId: inflightReq.id,
-                        action:    'Admin Delegation Reverted',
-                        actorRole: 'Admin',
-                        details:   `${config.label} restored to original holder ${restoredEmail}. Temporary delegation ended.`,
-                        timestamp: new Date()
-                    });
-                    await sendDelegationNotification(inflightReq, restoredEmail);
-                    rebound++;
-                }
-            }
+            const rebound = await rebindInFlightToDelegate({
+                pendingStatus,
+                prevEmail:   null,
+                newEmail:    restoredEmail,
+                newUsername: restoredUser,
+                roleLabel:   config.label,
+                isTemporary: false,
+                isRevert:    true
+            });
 
             const msg = rebound > 0
                 ? `Delegation reverted. ${config.label} restored to ${restoredEmail}. ${rebound} in-flight request(s) rebound.`
