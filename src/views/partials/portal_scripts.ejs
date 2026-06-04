@@ -20,6 +20,12 @@
     (function () {
         const ROLE_KEY      = <%- JSON.stringify(locals.roleKey) %>;
         const CURRENT_REQ_ID = <%- JSON.stringify(locals.portalCurrentRequestId || null) %>;
+        // 'onboarding' | 'offboarding' — picks the queue endpoint below.
+        // Defaults to onboarding for back-compat with pages that don't set it.
+        const REQUEST_TYPE  = <%- JSON.stringify(locals.portalRequestType || 'onboarding') %>;
+        const QUEUE_URL_BASE = REQUEST_TYPE === 'offboarding'
+            ? '/api/offboarding/queue'
+            : '/api/onboarding/queue';
         const listEl  = document.getElementById('portalList');
         const tabBtns = document.querySelectorAll('.portal-tab');
         const counts  = { pending: document.getElementById('ps-count-pending'),
@@ -159,7 +165,7 @@
             }
             try {
                 const fetcher = (typeof window.iflFetch === 'function') ? window.iflFetch : (u, o) => fetch(u, o);
-                const r = await fetcher('/api/onboarding/queue?role=' + encodeURIComponent(ROLE_KEY) + '&type=' + tab);
+                const r = await fetcher(QUEUE_URL_BASE + '?role=' + encodeURIComponent(ROLE_KEY) + '&type=' + tab);
                 if (!r.ok) throw new Error('queue ' + r.status);
                 const j = await r.json();
                 if (!j.success) throw new Error(j.error || 'failed');
