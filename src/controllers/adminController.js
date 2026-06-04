@@ -13,6 +13,7 @@ import cronService from '../services/cronService.js';
 import * as emailService from '../services/emailService.js';
 import RecipientService from '../services/recipientService.js';
 import { humanizeAction, humanizeDetails, humanizeDetailsHTML } from '../utils/historyFormatter.js';
+import { findUserByEmployeeIdViaSidecar } from '../services/adService.js';
 
 // Map workflow status -> the role currently responsible
 const STATUS_TO_RESEND = {
@@ -177,14 +178,23 @@ class AdminController {
                 return res.status(404).json({ success: false, error: 'Employee not found' });
             }
 
-            let hodName = null;
+            let hodName  = null;
+            let hodEmail = null;
             if (employee.hodId) {
-                const hod = await Employee.findByPk(employee.hodId, { attributes: ['name'] });
-                if (hod) hodName = hod.name;
+                const hod = await Employee.findByPk(employee.hodId, { attributes: ['name', 'employeeId', 'email'] });
+                if (hod) {
+                    hodName = hod.name;
+                    // Resolve real email from AD sidecar — DB emails are often stale
+                    try {
+                        const adHod = await findUserByEmployeeIdViaSidecar(hod.employeeId || employee.hodId);
+                        if (adHod && adHod.mail) hodEmail = adHod.mail;
+                    } catch (_) {}
+                    if (!hodEmail) hodEmail = hod.email || null; // fallback to DB
+                }
             }
 
             // Return full data
-            res.json({ success: true, data: { ...employee.toJSON(), hodName } });
+            res.json({ success: true, data: { ...employee.toJSON(), hodName, hodEmail } });
         } catch (error) {
             console.error('Error fetching employee details:', error);
             res.status(500).json({ success: false, error: 'Failed to fetch employee details' });

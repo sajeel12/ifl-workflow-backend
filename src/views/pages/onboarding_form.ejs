@@ -383,20 +383,63 @@
                             <% if (_activeSec !== 'sec-dci' && val('ntUserName')) { %><span class="form-section-hint"><%= val('ntUserName') %></span><% } %>
                             <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
+                        <%
+                            const SMTP_DOMAINS = ['@igc.com.pk', '@ifl.net', '@pp.ifl.net', '@lhr.ifl.net', '@igcpk.com'];
+                            const dciEditable = (role === 'DCI');
+                        %>
                         <div class="form-section-body">
+                            <!-- NT login name with AD availability check -->
                             <div class="grid-3">
-                                <div class="form-group"><label>NT User Name</label><input type="text" name="ntUserName" value="<%= val('ntUserName') %>" <%=configDisabled %>></div>
-                                <div class="form-group"><label>Exchange Name</label><input type="text" name="exchangeDisplayName" value="<%= val('exchangeDisplayName') %>" <%=configDisabled %>></div>
-                                <div class="form-group"><label>SMTP Address</label><input type="text" name="smtpAddress" value="<%= val('smtpAddress') %>" <%=configDisabled %>></div>
+                                <div class="form-group">
+                                    <label>NT User Name (Login)</label>
+                                    <div style="display:flex;gap:8px;align-items:center;">
+                                        <input type="text" id="dciNtName" name="ntUserName" value="<%= val('ntUserName') %>" <%=configDisabled %> style="flex:1 1 auto;">
+                                        <% if (dciEditable) { %>
+                                            <button type="button" id="dciCheckNtBtn" class="btn btn-secondary" style="flex-shrink:0;white-space:nowrap;">Check</button>
+                                        <% } %>
+                                    </div>
+                                    <div id="dciNtStatus" style="font-size:0.78rem;margin-top:5px;min-height:16px;"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Exchange Display Name</label>
+                                    <input type="text" id="dciDisplayName" name="exchangeDisplayName" value="<%= val('exchangeDisplayName') %>" <%=configDisabled %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>Title <span style="color:#9ca3af;font-weight:400;text-transform:none;">(auto)</span></label>
+                                    <input type="text" id="dciTitle" name="adTitle" value="<%= val('adTitle') || val('designation') %>" <%=configDisabled %>>
+                                </div>
                             </div>
+
+                            <!-- Alias + SMTP domain compose the SMTP address -->
                             <div class="grid-4">
-                                <div class="form-group"><label>Member Of</label><input type="text" name="memberOf" value="<%= val('memberOf') %>" <%=configDisabled %>></div>
-                                <div class="form-group"><label>DG Members</label><input type="text" name="dgMembers" value="<%= val('dgMembers') %>" <%=configDisabled %>></div>
-                                <div class="form-group"><label>Mail Size</label><input type="text" name="mailSizeLimit" value="<%= val('mailSizeLimit') %>" <%=configDisabled %>></div>
-                                <div class="form-group"><label>Recipient Limit</label><input type="text" name="recipientLimit" value="<%= val('recipientLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group">
+                                    <label>Alias Name</label>
+                                    <input type="text" id="dciAlias" name="aliasName" value="<%= val('aliasName') %>" <%=configDisabled %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>Email Domain</label>
+                                    <select id="dciSmtpDomain" <%=configDisabled %>>
+                                        <% SMTP_DOMAINS.forEach(d => { %>
+                                            <option value="<%= d %>"><%= d %></option>
+                                        <% }) %>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="grid-column:span 2;">
+                                    <label>SMTP Address</label>
+                                    <input type="text" id="dciSmtp" name="smtpAddress" value="<%= val('smtpAddress') %>" <%=configDisabled %>>
+                                </div>
                             </div>
+
+                            <!-- Department + MG Level -->
                             <div class="grid-3">
-                                <div class="form-group"><label>Storage Limit</label><input type="text" name="mailboxStorageLimit" value="<%= val('mailboxStorageLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group">
+                                    <label>Department <span style="color:#9ca3af;font-weight:400;text-transform:none;">(auto)</span></label>
+                                    <input type="text" id="dciDept" name="adDepartment" value="<%= val('adDepartment') || val('department') %>" <%=configDisabled %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>MG Level</label>
+                                    <input type="text" name="mgLevel" value="<%= val('mgLevel') %>" <%=configDisabled %>>
+                                </div>
                                 <div class="form-group">
                                     <label>Group Policy Level</label>
                                     <select name="groupPolicyLevel" <%=configDisabled %>>
@@ -406,13 +449,61 @@
                                         <option value="IT User" <%=val('groupPolicyLevel')==='IT User' ? 'selected' : '' %>>IT User</option>
                                     </select>
                                 </div>
-                                <div class="form-group"><label>Extra Facility</label><textarea name="extraFacility" rows="2" <%=configDisabled %>><%= val('extraFacility') %></textarea></div>
                             </div>
+
+                            <!-- Member Of — AD group multi-select (load-once dropdown) -->
+                            <div class="form-group">
+                                <label>Member Of <span style="color:#9ca3af;font-weight:400;text-transform:none;">(AD groups — select one or more)</span></label>
+                                <input type="hidden" id="dciMemberOf" name="memberOf" value="<%= val('memberOf') %>">
+                                <% if (dciEditable) { %>
+                                    <div style="position:relative;">
+                                        <button type="button" id="dciGroupToggle" style="width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-size:0.9rem;color:#0f172a;">
+                                            <span id="dciGroupToggleLabel" style="color:#64748b;">Select groups…</span>
+                                            <span style="flex-shrink:0;color:#94a3b8;">▾</span>
+                                        </button>
+                                        <div id="dciGroupPanel" style="display:none;background:#fff;border:1px solid #cbd5e1;border-radius:8px;margin-top:4px;box-shadow:0 8px 24px -8px rgba(15,23,42,0.2);">
+                                            <div style="padding:8px;border-bottom:1px solid #eef2f7;">
+                                                <input type="text" id="dciGroupFilter" placeholder="Filter groups…" autocomplete="off" style="width:100%;box-sizing:border-box;">
+                                            </div>
+                                            <div id="dciGroupList" style="max-height:240px;overflow-y:auto;padding:4px 0;">
+                                                <div style="padding:10px 12px;color:#94a3b8;font-size:0.82rem;">Loading groups…</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <% } %>
+                                <div id="dciGroupChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+                            </div>
+
+                            <!-- Mailbox limits -->
+                            <div class="grid-3">
+                                <div class="form-group"><label>Mail Size</label><input type="text" name="mailSizeLimit" value="<%= val('mailSizeLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>Recipient Limit</label><input type="text" name="recipientLimit" value="<%= val('recipientLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>Storage Limit</label><input type="text" name="mailboxStorageLimit" value="<%= val('mailboxStorageLimit') %>" <%=configDisabled %>></div>
+                            </div>
+
+                            <div class="form-group"><label>Extra Facility</label><textarea name="extraFacility" rows="2" <%=configDisabled %>><%= val('extraFacility') %></textarea></div>
+
                             <div class="form-group">
                                 <label>DCI Remarks / Instructions</label>
                                 <textarea name="dciRemarks" rows="3" <%=dciRemarksDisabled %>><%= val('dciRemarks') %></textarea>
                             </div>
                         </div>
+                        <script>
+                            window.IFL_DCI = {
+                                role:        <%- JSON.stringify(role) %>,
+                                editable:    <%- JSON.stringify(dciEditable) %>,
+                                fullName:    <%- JSON.stringify(request.fullName    || '') %>,
+                                designation: <%- JSON.stringify(request.designation || '') %>,
+                                department:  <%- JSON.stringify(request.department  || '') %>,
+                                existing: {
+                                    ntUserName:          <%- JSON.stringify(val('ntUserName')) %>,
+                                    exchangeDisplayName: <%- JSON.stringify(val('exchangeDisplayName')) %>,
+                                    aliasName:           <%- JSON.stringify(val('aliasName')) %>,
+                                    smtpAddress:         <%- JSON.stringify(val('smtpAddress')) %>,
+                                    memberOf:            <%- JSON.stringify(val('memberOf')) %>
+                                }
+                            };
+                        </script>
                     </div>
                     <% } %>
 
@@ -981,6 +1072,237 @@
             if (btn)        btn.addEventListener('click', lookupAndFill);
             if (empIdInput) empIdInput.addEventListener('blur', () => { if (empIdInput.value.trim()) lookupAndFill(); });
         });
+    </script>
+
+    <script>
+        /* ─── DCI Configuration: NT-name auto-derive + AD check + group multi-select ───
+           Runs only when the DCI section is present. Auto-fills NT login, alias,
+           Exchange display name, SMTP, title and department from the HR-entered
+           employee data; lets the DCI member verify the NT name against AD and
+           pick AD groups for "Member Of". */
+        (function dciFormSetup() {
+            const CFG = window.IFL_DCI;
+            if (!CFG) return; // DCI section not rendered on this page
+
+            // Derivations from the employee full name
+            const stripSpaces = (s) => (s || '').replace(/\s+/g, '');
+            const toDots      = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, '.');
+            const normName    = (s) => (s || '').trim().replace(/\s+/g, ' ');
+
+            const $ = (id) => document.getElementById(id);
+            const ntEl      = $('dciNtName');
+            const dispEl    = $('dciDisplayName');
+            const aliasEl   = $('dciAlias');
+            const domainEl  = $('dciSmtpDomain');
+            const smtpEl    = $('dciSmtp');
+            const titleEl   = $('dciTitle');
+            const deptEl    = $('dciDept');
+            const memberHidden = $('dciMemberOf');
+            const chipsEl   = $('dciGroupChips');
+
+            // ── Member Of: chip state (works read-only too) ───────────────────────
+            let selectedGroups = (CFG.existing.memberOf || '')
+                .split(',').map(s => s.trim()).filter(Boolean);
+
+            const syncMemberHidden = () => {
+                if (memberHidden) memberHidden.value = selectedGroups.join(', ');
+            };
+            const renderChips = () => {
+                if (!chipsEl) return;
+                if (!selectedGroups.length) {
+                    chipsEl.innerHTML = CFG.editable
+                        ? '<span style="font-size:0.8rem;color:#94a3b8;">No groups selected yet.</span>'
+                        : '<span style="font-size:0.8rem;color:#94a3b8;">—</span>';
+                    return;
+                }
+                chipsEl.innerHTML = selectedGroups.map((g, i) => `
+                    <span style="display:inline-flex;align-items:center;gap:6px;background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;border-radius:14px;padding:3px 10px;font-size:0.8rem;font-weight:500;">
+                        ${g.replace(/</g, '&lt;')}
+                        ${CFG.editable ? `<span data-rm="${i}" style="cursor:pointer;font-weight:700;line-height:1;">×</span>` : ''}
+                    </span>`).join('');
+                if (CFG.editable) {
+                    chipsEl.querySelectorAll('[data-rm]').forEach(x => {
+                        x.addEventListener('click', () => {
+                            selectedGroups.splice(parseInt(x.dataset.rm, 10), 1);
+                            onGroupSelectionChanged();
+                        });
+                    });
+                }
+            };
+            renderChips();
+
+            // Preselect the domain matching an existing stored SMTP (runs for all
+            // roles so reviewers see the right domain), else default to first.
+            if (domainEl) {
+                const existingSmtp = CFG.existing.smtpAddress || '';
+                const at = existingSmtp.indexOf('@');
+                if (at >= 0) {
+                    const dom = existingSmtp.slice(at);
+                    const opt = [...domainEl.options].find(o => o.value.toLowerCase() === dom.toLowerCase());
+                    if (opt) domainEl.value = opt.value;
+                }
+            }
+
+            // Non-editable roles only display the stored values — stop here.
+            if (!CFG.editable) return;
+
+            // ── SMTP composition (alias + domain) ─────────────────────────────────
+            const composeSmtp = () => {
+                const local = (aliasEl.value || '').trim();
+                if (!local) { smtpEl.value = ''; return; }
+                smtpEl.value = local + (domainEl.value || '');
+            };
+
+            // ── Prefill on first arrival at DCI stage (empty fields only) ─────────
+            if (!ntEl.value)    ntEl.value    = stripSpaces(CFG.fullName);
+            if (!aliasEl.value) aliasEl.value = toDots(CFG.fullName);
+            if (!dispEl.value)  dispEl.value  = normName(CFG.fullName);
+            if (!titleEl.value) titleEl.value = CFG.designation || '';
+            if (!deptEl.value)  deptEl.value  = CFG.department || '';
+            if (!smtpEl.value)  composeSmtp();
+
+            aliasEl.addEventListener('input', composeSmtp);
+            domainEl.addEventListener('change', composeSmtp);
+
+            // ── NT name AD availability check ─────────────────────────────────────
+            const statusEl = $('dciNtStatus');
+            const checkBtn = $('dciCheckNtBtn');
+            const setStatus = (html, color) => {
+                if (statusEl) { statusEl.innerHTML = html; statusEl.style.color = color || '#64748b'; }
+            };
+            const runNtCheck = async () => {
+                const name = (ntEl.value || '').trim();
+                if (!name) { setStatus('Enter an NT name to check.', '#b45309'); return; }
+                setStatus('Checking AD…', '#64748b');
+                if (checkBtn) { checkBtn.disabled = true; checkBtn.textContent = 'Checking…'; }
+                try {
+                    const res  = await fetch('/api/onboarding/check-ntname?name=' + encodeURIComponent(name));
+                    const data = await res.json();
+                    if (data.available) {
+                        setStatus('✓ Available — this NT name is free to use.', '#16a34a');
+                    } else {
+                        const who = data.match && (data.match.displayName || data.match.sAMAccountName);
+                        setStatus('✕ Name already exists' + (who ? ' (' + who + ')' : '') + ' — please change it and check again.', '#dc2626');
+                    }
+                } catch (_) {
+                    setStatus('Could not reach AD to verify. Try again.', '#b45309');
+                } finally {
+                    if (checkBtn) { checkBtn.disabled = false; checkBtn.textContent = 'Check'; }
+                }
+            };
+            if (checkBtn) checkBtn.addEventListener('click', runNtCheck);
+            // Re-derive display name spaces hint when NT changes (display keeps spaces; left to DCI)
+            ntEl.addEventListener('input', () => setStatus('', '#64748b'));
+
+            // ── Member Of: load-once AD group dropdown (multi-select) ─────────────
+            const toggleBtn   = $('dciGroupToggle');
+            const toggleLabel = $('dciGroupToggleLabel');
+            const panelEl     = $('dciGroupPanel');
+            const filterEl    = $('dciGroupFilter');
+            const listEl      = $('dciGroupList');
+            let allGroups = [];        // [{ name, sAMAccountName, mail }]
+            let groupsLoaded = false;
+
+            // Hoisted so the chip-removal handler (defined earlier) can call it.
+            function updateGroupToggleLabel() {
+                if (!toggleLabel) return;
+                const n = selectedGroups.length;
+                toggleLabel.textContent = n ? (n + ' group' + (n > 1 ? 's' : '') + ' selected') : 'Select groups…';
+                toggleLabel.style.color = n ? '#0f172a' : '#64748b';
+            }
+            function refreshGroupChecklist() {
+                if (!listEl) return;
+                const sel = new Set(selectedGroups.map(g => g.toLowerCase()));
+                listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    cb.checked = sel.has((cb.value || '').toLowerCase());
+                });
+            }
+            function onGroupSelectionChanged() {
+                syncMemberHidden();
+                renderChips();
+                refreshGroupChecklist();
+                updateGroupToggleLabel();
+            }
+
+            const renderGroupList = (filterText) => {
+                if (!listEl) return;
+                if (!allGroups.length) {
+                    listEl.innerHTML = '<div style="padding:10px 12px;color:#dc2626;font-size:0.82rem;">No groups available — the AD groups service may not be reachable.</div>';
+                    return;
+                }
+                const ft = (filterText || '').trim().toLowerCase();
+                const rows = allGroups.filter(g => !ft ||
+                    (g.name || '').toLowerCase().includes(ft) ||
+                    (g.sAMAccountName || '').toLowerCase().includes(ft));
+                if (!rows.length) {
+                    listEl.innerHTML = '<div style="padding:10px 12px;color:#94a3b8;font-size:0.82rem;">No groups match the filter.</div>';
+                    return;
+                }
+                const sel = new Set(selectedGroups.map(g => g.toLowerCase()));
+                listEl.innerHTML = rows.map(g => {
+                    const nm  = (g.name || g.sAMAccountName || '');
+                    const esc = nm.replace(/"/g, '&quot;');
+                    const checked = sel.has(nm.toLowerCase()) ? 'checked' : '';
+                    const sub = [g.sAMAccountName, g.mail].filter(Boolean).join(' · ');
+                    return `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 12px;cursor:pointer;">
+                        <input type="checkbox" value="${esc}" ${checked} style="margin-top:2px;flex-shrink:0;">
+                        <span style="min-width:0;">
+                            <span style="display:block;font-size:0.85rem;color:#0f172a;">${nm.replace(/</g, '&lt;')}</span>
+                            ${sub ? `<span style="display:block;font-size:0.72rem;color:#94a3b8;">${sub.replace(/</g, '&lt;')}</span>` : ''}
+                        </span>
+                    </label>`;
+                }).join('');
+                listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        const name = cb.value;
+                        const idx = selectedGroups.findIndex(g => g.toLowerCase() === name.toLowerCase());
+                        if (cb.checked && idx < 0) selectedGroups.push(name);
+                        else if (!cb.checked && idx >= 0) selectedGroups.splice(idx, 1);
+                        syncMemberHidden(); renderChips(); updateGroupToggleLabel();
+                    });
+                });
+            };
+
+            const loadAllGroups = async () => {
+                if (groupsLoaded) return;
+                if (listEl) listEl.innerHTML = '<div style="padding:10px 12px;color:#94a3b8;font-size:0.82rem;">Loading groups…</div>';
+                try {
+                    const res  = await fetch('/api/onboarding/ad-groups?all=1');
+                    const data = await res.json();
+                    let list = (data && data.results) || [];
+                    const seen = new Set();
+                    list = list.filter(g => {
+                        const k = (g.name || g.sAMAccountName || '').toLowerCase();
+                        if (!k || seen.has(k)) return false;
+                        seen.add(k); return true;
+                    }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                    allGroups = list;
+                } catch (_) {
+                    allGroups = [];
+                } finally {
+                    groupsLoaded = true;
+                    renderGroupList(filterEl ? filterEl.value : '');
+                }
+            };
+
+            const openPanel  = () => { if (panelEl) { panelEl.style.display = 'block'; loadAllGroups(); if (filterEl) setTimeout(() => filterEl.focus(), 30); } };
+            const closePanel = () => { if (panelEl) panelEl.style.display = 'none'; };
+
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', () => {
+                    if (panelEl && panelEl.style.display === 'block') closePanel(); else openPanel();
+                });
+            }
+            if (filterEl) filterEl.addEventListener('input', () => renderGroupList(filterEl.value));
+            // Close when clicking outside the control
+            document.addEventListener('mousedown', (e) => {
+                if (!panelEl || panelEl.style.display !== 'block') return;
+                const wrap = toggleBtn && toggleBtn.parentElement;
+                if (wrap && !wrap.contains(e.target)) closePanel();
+            });
+
+            updateGroupToggleLabel();
+        })();
     </script>
 
     <%- include('../partials/portal_scripts') %>

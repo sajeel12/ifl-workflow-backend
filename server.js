@@ -247,6 +247,11 @@ async function startServer() {
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeUsername', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'workOrderPdfPath', 'STRING');
+        // DCI stage AD-provisioning fields (auto-fill + AD checks).
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'aliasName', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'mgLevel', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'adTitle', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'adDepartment', 'STRING');
         // Add future columns here as the model evolves.
 
         // ── Employee Journey Tracking Enhancements (Phase 3) ──────────────

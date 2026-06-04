@@ -10,6 +10,7 @@ import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import { emailsMatch } from '../utils/emailMatch.js';
 import { LOCATION_GROUPS, groupByKey, groupLabel } from '../utils/locationGroups.js';
+import { checkAccountNameExists, searchADGroups, getAllADGroups } from '../services/adService.js';
 
 // Built once at module-load so each form render doesn't rebuild it.
 const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key, g.label]));
@@ -1391,5 +1392,50 @@ export const getMyHRLocation = async (req, res) => {
     } catch (err) {
         logger.error(`[Onboarding] getMyHRLocation: ${err.message}`);
         return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/onboarding/check-ntname?name=X
+ * Used by the DCI form's "Check" button to verify an NT login name is free.
+ * Returns { available, exists, match } — available is the inverse of exists.
+ */
+export const checkNtName = async (req, res) => {
+    try {
+        const name = (req.query.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'name query param required' });
+        const { exists, match } = await checkAccountNameExists(name);
+        return res.json({
+            name,
+            exists,
+            available: !exists,
+            match: match ? {
+                sAMAccountName: match.sAMAccountName || null,
+                displayName:    match.displayName    || null,
+                mail:           match.mail           || null,
+            } : null
+        });
+    } catch (err) {
+        logger.error(`[Onboarding] checkNtName: ${err.message}`);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/onboarding/ad-groups?q=X
+ * Type-ahead search of AD groups for the DCI form's "Member Of" multi-select.
+ */
+export const searchGroups = async (req, res) => {
+    try {
+        const all = String(req.query.all || '') === '1';
+        const q = (req.query.q || '').trim();
+        // all=1 (or no query) → return every group for the load-once dropdown.
+        const results = (all || q.length < 2)
+            ? await getAllADGroups()
+            : await searchADGroups(q);
+        return res.json({ success: true, results });
+    } catch (err) {
+        logger.error(`[Onboarding] searchGroups: ${err.message}`);
+        return res.status(500).json({ success: false, error: err.message });
     }
 };

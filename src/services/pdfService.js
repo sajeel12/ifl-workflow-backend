@@ -288,7 +288,7 @@ export const generateOnboardingPDF = async (request, outputPath) => {
 
         // 4-row 2-column grid for the DCI fields
         labeledField('NT User Name',    colLeftX, sy, 80, colWidth - 85, 16, request.ntUserName);
-        labeledField('DG Members',      colRightX, sy, 80, colWidth - 85, 16, request.dgMembers);
+        labeledField('MG Level',        colRightX, sy, 80, colWidth - 85, 16, request.mgLevel);
 
         sy += 22;
         labeledField('Ex.Display Name', colLeftX, sy, 80, colWidth - 85, 16, request.exchangeDisplayName);

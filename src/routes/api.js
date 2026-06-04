@@ -88,6 +88,12 @@ router.get('/onboarding/pdf/:token', onboardingController.serveWorkOrderPDF);
 // Lookup active onboarding request by employeeId (used by HR form JS)
 router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
 
+// DCI form helpers — AD NT-name availability check + AD group type-ahead.
+// Open at Node (like /hrms/employee) so the token-bearing DCI form JS can call
+// them; they only expose AD account existence + group names (low sensitivity).
+router.get('/onboarding/check-ntname', onboardingController.checkNtName);
+router.get('/onboarding/ad-groups', onboardingController.searchGroups);
+
 // HR location group for the signed-in user — used by the initiate form to
 // hydrate the Location Group field client-side after SSO auth completes.
 router.get('/onboarding/my-hr-location', ssoMiddleware, onboardingController.getMyHRLocation);
