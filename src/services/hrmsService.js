@@ -48,6 +48,8 @@ const HRMSService = {
                 payroll:         emp.payroll,
                 employeeType:    emp.employeeType,
                 location:        emp.location,
+                status:          emp.status,
+                actualTerminationDate: emp.actualTerminationDate,
             };
 
         } catch (err) {

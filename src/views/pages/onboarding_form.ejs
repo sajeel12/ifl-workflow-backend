@@ -1013,6 +1013,20 @@
                     if (!hrmsRes.ok) throw new Error('Employee not found in HRMS');
                     const data = await hrmsRes.json();
 
+                    // Block terminated employees immediately — they cannot be onboarded.
+                    if (data.actualTerminationDate) {
+                        showStateBanner(
+                            'This employee is terminated (termination date on record) and cannot be onboarded. Please contact HR if this is incorrect.',
+                            'warning'
+                        );
+                        const submitBtn = document.querySelector('.action-bar button[type="submit"]');
+                        if (submitBtn) {
+                            submitBtn.disabled = true;
+                            submitBtn.setAttribute('data-ifl-lookup-blocked', '1');
+                        }
+                        return; // stop — do not lock fields or run the existing-request check
+                    }
+
                     const setVal = (name, val) => {
                         const el = document.querySelector('[name="' + name + '"]');
                         if (el && val != null && val !== '') el.value = val;

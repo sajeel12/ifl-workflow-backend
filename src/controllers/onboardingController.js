@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import SystemConfig from '../models/SystemConfig.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
+import Employee from '../models/Employee.js';
 import { Op } from 'sequelize';
 import { humanizeDetails, humanizeDetailsHTML, humanizeAction, narrate } from '../utils/historyFormatter.js';
 import { labelFor as statusLabelFor, ownerFor as statusOwnerFor, colorFor as statusColorFor } from '../utils/workflowLabels.js';
@@ -234,6 +235,23 @@ const handleSubmission = async (req, res, token) => {
             // workflow visibility is least-privilege and HR has no claim to
             // mid-flight data. Just refuse the submission with a clean message.
             if (data.employeeId) {
+                // Guard: a terminated employee (termination date on record) can
+                // never be onboarded — block New and Change alike. Authoritative
+                // server-side mirror of the HR form's client-side check.
+                const empRecord = await Employee.findByPk(data.employeeId, {
+                    attributes: ['name', 'actualTerminationDate']
+                });
+                if (empRecord && empRecord.actualTerminationDate) {
+                    return res.status(403).render('pages/message', {
+                        title: 'Employee terminated',
+                        heading: 'This employee cannot be onboarded',
+                        titleClass: 'error',
+                        icon: '⛔',
+                        iconClass: 'error-icon',
+                        message: `Employee #${data.employeeId}${empRecord.name ? ' (' + empRecord.name + ')' : ''} has a termination date on record and is no longer active. A terminated employee cannot be onboarded or modified. Please contact HR if this is incorrect.`
+                    });
+                }
+
                 const existing = await OnboardingRequest.findOne({
                     where: {
                         employeeId: data.employeeId,
