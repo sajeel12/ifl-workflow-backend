@@ -821,6 +821,25 @@
                         // Run native validation first; if it fails, don't lock the buttons.
                         if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
 
+                        // DCI stage: the NT User Name is auto-filled, so require an explicit
+                        // AD availability check (the "Check" button) before forwarding to the
+                        // Manager. The gate is only defined on the editable DCI form.
+                        if (typeof window.__dciNtGate === 'function' && form.querySelector('#dciNtName')) {
+                            const gate = window.__dciNtGate();
+                            if (!gate.ok) {
+                                e.preventDefault();
+                                const ntEl = form.querySelector('#dciNtName');
+                                if (ntEl) {
+                                    const sec = document.getElementById('sec-dci');
+                                    if (sec && sec.classList.contains('is-collapsed')) iflToggleSection(sec.querySelector('.form-section-hd'));
+                                    ntEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    ntEl.focus();
+                                }
+                                IflDialog.alert(gate.message, { title: 'AD check required' });
+                                return;
+                            }
+                        }
+
                         const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
 
                         // Pin the action value into a hidden mirror field immediately — before any
@@ -1181,6 +1200,10 @@
             // ── NT name AD availability check ─────────────────────────────────────
             const statusEl = $('dciNtStatus');
             const checkBtn = $('dciCheckNtBtn');
+            // The NT name string last confirmed AVAILABLE in AD via the Check button.
+            // Forwarding to the Manager is blocked until the current value matches this,
+            // so the auto-filled name can never be submitted without an explicit AD check.
+            let ntVerifiedValue = null;
             const setStatus = (html, color) => {
                 if (statusEl) { statusEl.innerHTML = html; statusEl.style.color = color || '#64748b'; }
             };
@@ -1193,20 +1216,34 @@
                     const res  = await fetch('/api/onboarding/check-ntname?name=' + encodeURIComponent(name));
                     const data = await res.json();
                     if (data.available) {
+                        ntVerifiedValue = name;
                         setStatus('✓ Available — this NT name is free to use.', '#16a34a');
                     } else {
+                        ntVerifiedValue = null;
                         const who = data.match && (data.match.displayName || data.match.sAMAccountName);
                         setStatus('✕ Name already exists' + (who ? ' (' + who + ')' : '') + ' — please change it and check again.', '#dc2626');
                     }
                 } catch (_) {
+                    ntVerifiedValue = null;
                     setStatus('Could not reach AD to verify. Try again.', '#b45309');
                 } finally {
                     if (checkBtn) { checkBtn.disabled = false; checkBtn.textContent = 'Check'; }
                 }
             };
-            if (checkBtn) checkBtn.addEventListener('click', runNtCheck);
-            // Re-derive display name spaces hint when NT changes (display keeps spaces; left to DCI)
-            ntEl.addEventListener('input', () => setStatus('', '#64748b'));
+            if (checkBtn) {
+                checkBtn.addEventListener('click', runNtCheck);
+                // Gate consumed by the form-submit handler before forwarding to the Manager.
+                // Only registered on the editable DCI form (Check button is DCI-only), so
+                // other roles' submits are unaffected.
+                window.__dciNtGate = () => {
+                    const cur = (ntEl.value || '').trim();
+                    if (!cur) return { ok: false, message: 'Enter the NT User Name and press "Check" to verify it in AD before forwarding.' };
+                    if (ntVerifiedValue !== cur) return { ok: false, message: 'Press "Check" next to the NT User Name and confirm it is available in AD before forwarding to the Manager.' };
+                    return { ok: true };
+                };
+            }
+            // Any edit invalidates the prior AD check — the new value must be re-checked.
+            ntEl.addEventListener('input', () => { ntVerifiedValue = null; setStatus('', '#64748b'); });
 
             // ── Member Of: load-once AD group dropdown (multi-select) ─────────────
             const toggleBtn   = $('dciGroupToggle');
