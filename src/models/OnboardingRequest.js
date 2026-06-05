@@ -103,10 +103,30 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         allowNull: true
     },
     memberOf: {
-        type: DataTypes.STRING,
+        type: DataTypes.STRING, // comma-separated AD group names (multi-select)
         allowNull: true
     },
     dgMembers: {
+        type: DataTypes.STRING, // legacy — replaced in the DCI form by mgLevel; kept for back-compat
+        allowNull: true
+    },
+    // SMTP alias (first.last form of the display name; the part before the @domain)
+    aliasName: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // Free-text MG Level (replaces the old DG Members field in the DCI form)
+    mgLevel: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // AD title — auto-filled from the HR designation, editable by DCI
+    adTitle: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // AD department — auto-filled from the HR department, editable by DCI
+    adDepartment: {
         type: DataTypes.STRING,
         allowNull: true
     },
@@ -178,6 +198,10 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
     },
 
     // --- Phase 4: Implementation & OPS ---
+    workOrderPdfPath: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     dciImplementer: {
         type: DataTypes.STRING,
         allowNull: true

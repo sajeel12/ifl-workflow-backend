@@ -10,526 +10,699 @@ function humanAge(hours) {
 }
 %>
 
-<div class="header">
-    <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
-    <div class="brand">IFL Workflow — IT Operations Manager</div>
-</div>
-
 <style>
-    .pm-wrap { max-width: 1200px; margin: 28px auto; padding: 0 20px; }
+/* ── Full-height App Shell ──────────────────────────────── */
+html, body { height: 100%; margin: 0; }
 
-    /* ── Hero bar ───────────────────────────────────────── */
-    .pm-hero {
-        background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
-        padding: 20px 24px; margin-bottom: 20px;
-        display: flex; flex-wrap: wrap; gap: 14px;
-        align-items: center; justify-content: space-between;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-        border-top: 4px solid #64748B;
-    }
-    .pm-hero-left h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
-    .pm-hero-left .pm-role-desc { font-size: 0.8rem; color: #64748b; margin: 0 0 4px; line-height: 1.4; }
-    .pm-hero-left .pm-user-email { font-size: 0.78rem; color: #94a3b8; margin: 0; }
+.pm-app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    background: #f0f4f8;
+    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #1e293b;
+    -webkit-font-smoothing: antialiased;
+    --role-accent: #0078D4;
+}
 
-    .pm-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .pm-badge {
-        font-size: 0.75rem; font-weight: 600; padding: 4px 11px;
-        border-radius: 20px; letter-spacing: 0.02em;
-    }
-    .pm-badge--mgr          { background: #EDE9FE; color: #5B21B6; }
-    .pm-badge--delegated-out{ background: #FEE2E2; color: #991B1B; }
+/* ── Top Header Bar ─────────────────────────────────────── */
+.pm-topbar {
+    height: 66px;
+    background: linear-gradient(120deg, #1e3a5f 0%, #0f2d4e 60%, #091f38 100%);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 14px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(9, 31, 56, 0.35);
+    z-index: 100;
+    position: relative;
+}
+.pm-topbar::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+}
+.pm-topbar-logo  { height: 38px; width: auto; border-radius: 6px; flex-shrink: 0; }
+.pm-topbar-brand { flex: 1; }
+.pm-topbar-title { font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.25; letter-spacing: -0.01em; }
+.pm-topbar-sub   { font-size: 0.72rem; color: rgba(255,255,255,0.65); margin-top: 1px; }
+.pm-topbar-badge {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.9);
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 0.75rem; font-weight: 600;
+    flex-shrink: 0;
+}
 
-    /* ── Delegator read-only banner ─────────────────────── */
-    .pm-delegator-banner {
-        background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px;
-        padding: 14px 18px; margin-bottom: 20px;
-        display: flex; align-items: flex-start; gap: 12px;
-        font-size: 0.875rem; color: #78350F; line-height: 1.55;
-    }
-    .pm-delegator-banner .pm-db-icon { font-size: 1.25rem; flex-shrink: 0; margin-top: 1px; }
-    .pm-delegator-banner strong { color: #92400E; }
+/* ── Body: Sidebar + Main ───────────────────────────────── */
+.pm-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
 
-    /* ── Stats ──────────────────────────────────────────── */
-    .pm-stats { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
-    .pm-stat {
-        flex: 1; min-width: 150px;
-        background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
-        padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-    .pm-stat .s-val { font-size: 2rem; font-weight: 700; color: #0f172a; line-height: 1; }
-    .pm-stat .s-lbl { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
-    .pm-stat.s-warn .s-val { color: #D97706; }
+/* ── Left Sidebar ───────────────────────────────────────── */
+.pm-sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+.pm-sidebar::-webkit-scrollbar { width: 5px; }
+.pm-sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 
-    /* ── Module tabs ────────────────────────────────────── */
-    .pm-tabs { display: flex; gap: 4px; margin-bottom: 0; border-bottom: 2px solid #e2e8f0; }
-    .pm-tab {
-        padding: 9px 22px; font-size: 0.9rem; font-weight: 600;
-        color: #64748b; text-decoration: none; border-bottom: 2px solid transparent;
-        margin-bottom: -2px; border-radius: 6px 6px 0 0; cursor: pointer;
-    }
-    .pm-tab.is-active { color: #0078D4; border-bottom-color: #0078D4; background: #EFF6FF; }
-    .pm-tab.is-disabled { color: #cbd5e1; cursor: default; }
+/* Identity block */
+.pm-side-id {
+    padding: 22px 20px 18px;
+    position: relative;
+    border-bottom: 1px solid #f1f5f9;
+}
+.pm-side-id::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #5b21b6 0%, #7c3aed 100%);
+}
+.pm-side-chip {
+    display: inline-block;
+    font-size: 0.63rem; font-weight: 700;
+    color: #5b21b6;
+    text-transform: uppercase; letter-spacing: 0.09em;
+    background: #ede9fe;
+    padding: 3px 10px; border-radius: 999px;
+    margin-bottom: 10px;
+}
+.pm-side-name  { font-size: 1.05rem; font-weight: 800; color: #0f172a; margin: 0 0 4px; line-height: 1.3; }
+.pm-side-desc  { font-size: 0.78rem; color: #64748b; margin: 0 0 3px; line-height: 1.45; }
+.pm-side-email { font-size: 0.72rem; color: #94a3b8; margin: 0 0 12px; }
+.pm-side-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.pm-badge-mgr { font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 20px; background: #ede9fe; color: #5b21b6; }
+.pm-badge-del { font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 20px; background: #fee2e2; color: #991b1b; }
 
-    .pm-panel { display: none; }
-    .pm-panel.is-active { display: block; }
+/* KPI strip — lives in main content */
+.pm-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+@media (max-width: 1100px) { .pm-kpi-row { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px)  { .pm-kpi-row { grid-template-columns: repeat(2, 1fr); } }
+.pm-kpi-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.pm-kpi-val { font-size: 1.8rem; font-weight: 800; color: #0f172a; line-height: 1; letter-spacing: -0.02em; }
+.pm-kpi-lbl { font-size: 0.75rem; color: #64748b; font-weight: 500; margin-top: 4px; }
+.pm-kpi-card.is-warn .pm-kpi-val { color: #d97706; }
 
-    /* ── Section card ───────────────────────────────────── */
-    .pm-section {
-        background: #fff; border: 1px solid #e2e8f0;
-        border-radius: 0 10px 10px 10px; padding: 20px 24px;
-        margin-bottom: 20px;
-    }
-    .pm-section-title {
-        font-size: 0.8rem; font-weight: 700; color: #64748b;
-        text-transform: uppercase; letter-spacing: 0.05em;
-        margin: 0 0 16px;
-    }
+/* Navigation */
+.pm-side-nav {
+    padding: 10px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.pm-side-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition: background 0.12s, color 0.12s;
+    position: relative;
+    width: 100%;
+}
+.pm-side-nav-btn:hover:not(.is-disabled) { background: #f1f5f9; color: #0f172a; }
+.pm-side-nav-btn.is-active {
+    background: rgba(91,33,182,0.08);
+    color: #5b21b6;
+    font-weight: 650;
+}
+.pm-side-nav-btn.is-active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 20px;
+    background: #5b21b6;
+    border-radius: 0 3px 3px 0;
+}
+.pm-side-nav-btn.is-disabled { color: #cbd5e1; cursor: not-allowed; }
+.pm-side-nav-count {
+    margin-left: auto;
+    font-size: 0.68rem; font-weight: 700;
+    padding: 2px 7px; border-radius: 999px;
+    background: #f1f5f9; color: #64748b;
+    flex-shrink: 0;
+}
+.pm-side-nav-btn.is-active .pm-side-nav-count { background: rgba(91,33,182,0.12); color: #5b21b6; }
 
-    /* ── Location summary grid ──────────────────────────── */
-    .loc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-    .loc-card {
-        border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;
-        background: #f8fafc;
-    }
-    .loc-card.is-escalated { border-left: 3px solid #F59E0B; background: #FFFBEB; }
-    .loc-name {
-        font-size: 0.9rem; font-weight: 700; color: #0f172a; margin: 0 0 10px;
-        display: flex; align-items: center; justify-content: space-between;
-    }
-    .loc-escalated-badge {
-        font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
-        border-radius: 10px; background: #FEF3C7; color: #92400E;
-        letter-spacing: 0.03em;
-    }
-    .loc-row { display: flex; gap: 6px; align-items: baseline; margin-bottom: 4px; }
-    .loc-lbl { font-size: 0.73rem; font-weight: 600; color: #94a3b8; min-width: 70px; }
-    .loc-val { font-size: 0.82rem; color: #334155; }
-    .loc-count {
-        font-size: 0.75rem; font-weight: 700; padding: 3px 10px;
-        border-radius: 12px; background: #EDE9FE; color: #5B21B6;
-        margin-top: 8px; display: inline-block;
-    }
-    .loc-count.zero { background: #F1F5F9; color: #94a3b8; }
+/* ── Main Content Area ──────────────────────────────────── */
+.pm-main {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    background: #f0f4f8;
+}
+.pm-main-inner {
+    padding: 24px 28px 60px;
+}
 
-    /* ── Search bar ─────────────────────────────────────── */
-    .pm-search-wrap { position: relative; margin-bottom: 12px; }
-    .pm-search-wrap .search-icon {
-        position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
-        font-size: 0.9rem; color: #94a3b8; pointer-events: none;
-    }
-    .pm-search {
-        width: 100%; box-sizing: border-box;
-        padding: 9px 12px 9px 34px;
-        border: 1px solid #e2e8f0; border-radius: 8px;
-        font-size: 0.875rem; color: #334155; background: #fff;
-    }
-    .pm-search:focus { outline: none; border-color: #0078D4; box-shadow: 0 0 0 3px rgba(0,120,212,0.1); }
-    .pm-search::placeholder { color: #94a3b8; }
+/* Delegator banner */
+.pm-delegator-banner {
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 20px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 0.875rem; color: #78350f; line-height: 1.55;
+}
+.pm-delegator-banner .pm-db-icon { font-size: 1.25rem; flex-shrink: 0; margin-top: 1px; }
+.pm-delegator-banner strong { color: #92400e; }
 
-    /* ── Filters row ────────────────────────────────────── */
-    .pm-filters {
-        display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-        margin-bottom: 14px;
-    }
-    .pm-filters label { font-size: 0.8rem; font-weight: 600; color: #64748b; }
-    .pm-filters select {
-        padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px;
-        font-size: 0.85rem; color: #334155; background: #fff; cursor: pointer;
-    }
-    .pm-filters select:focus { outline: none; border-color: #0078D4; }
-    .filter-count { font-size: 0.8rem; color: #94a3b8; margin-left: auto; }
+/* Tabs */
+.pm-tabs { display: flex; gap: 4px; margin-bottom: 0; border-bottom: 2px solid #e2e8f0; }
+.pm-tab {
+    padding: 9px 22px; font-size: 0.9rem; font-weight: 600;
+    color: #64748b; text-decoration: none; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; border-radius: 6px 6px 0 0; cursor: pointer; border: none; background: none; font-family: inherit;
+}
+.pm-tab.is-active { color: #5b21b6; border-bottom-color: #5b21b6; background: rgba(91,33,182,0.05); }
+.pm-tab.is-disabled { color: #cbd5e1; cursor: default; }
 
-    /* ── Employee info chips (login name / email) ───────── */
-    .emp-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
-    .emp-chip {
-        font-size: 0.68rem; font-weight: 600; padding: 2px 8px;
-        border-radius: 10px; white-space: nowrap;
-    }
-    .emp-chip--login { background: #EDE9FE; color: #5B21B6; }
-    .emp-chip--email { background: #E0F2FE; color: #0369A1; }
-    .emp-chip--id    { background: #F1F5F9; color: #475569; }
+.pm-panel { display: none; }
+.pm-panel.is-active { display: block; }
 
-    /* ── Request table ──────────────────────────────────── */
-    .req-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-    .req-table th {
-        text-align: left; padding: 9px 12px; font-size: 0.73rem; font-weight: 700;
-        color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
-        border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap;
-    }
-    .req-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; }
-    .req-table tr:last-child td { border-bottom: none; }
-    .req-table tr:hover td { background: #f8fafc; }
-    .req-table tr.is-stale td { background: #FFF7ED; }
-    .req-table tr.is-stale:hover td { background: #FFEDD5; }
+/* Section card */
+.pm-section {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 0 10px 10px 10px; padding: 20px 24px;
+    margin-bottom: 20px;
+}
+.pm-section-title {
+    font-size: 0.8rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin: 0 0 16px;
+}
 
-    .stage-pill {
-        font-size: 0.72rem; font-weight: 600; padding: 3px 9px;
-        border-radius: 12px; display: inline-block; white-space: nowrap;
-    }
-    .sp-it    { background: #FEF3C7; color: #92400E; }
-    .sp-ops   { background: #EDE9FE; color: #5B21B6; }
+/* Location grid */
+.loc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.loc-card {
+    border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;
+    background: #f8fafc;
+}
+.loc-card.is-escalated { border-left: 3px solid #f59e0b; background: #fffbeb; }
+.loc-name {
+    font-size: 0.9rem; font-weight: 700; color: #0f172a; margin: 0 0 10px;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.loc-escalated-badge {
+    font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+    border-radius: 10px; background: #fef3c7; color: #92400e; letter-spacing: 0.03em;
+}
+.loc-row { display: flex; gap: 6px; align-items: baseline; margin-bottom: 4px; }
+.loc-lbl { font-size: 0.73rem; font-weight: 600; color: #94a3b8; min-width: 70px; }
+.loc-val { font-size: 0.82rem; color: #334155; }
+.loc-count {
+    font-size: 0.75rem; font-weight: 700; padding: 3px 10px;
+    border-radius: 12px; background: #ede9fe; color: #5b21b6; margin-top: 8px; display: inline-block;
+}
+.loc-count.zero { background: #f1f5f9; color: #94a3b8; }
 
-    .age-cell { font-size: 0.78rem; white-space: nowrap; }
-    .age-cell.stale  { color: #DC2626; font-weight: 700; }
-    .age-cell.normal { color: #94a3b8; }
+/* Search + filters */
+.pm-search-wrap { position: relative; margin-bottom: 12px; }
+.pm-search-wrap .search-icon {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    font-size: 0.9rem; color: #94a3b8; pointer-events: none;
+}
+.pm-search {
+    width: 100%; box-sizing: border-box;
+    padding: 9px 12px 9px 34px;
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    font-size: 0.875rem; color: #334155; background: #fff;
+}
+.pm-search:focus { outline: none; border-color: #5b21b6; box-shadow: 0 0 0 3px rgba(91,33,182,0.1); }
+.pm-search::placeholder { color: #94a3b8; }
 
-    .esc-badge {
-        font-size: 0.68rem; font-weight: 700; padding: 2px 7px;
-        border-radius: 10px; background: #FEF3C7; color: #92400E;
-        display: inline-block;
-    }
+.pm-filters {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;
+}
+.pm-filters label { font-size: 0.8rem; font-weight: 600; color: #64748b; }
+.pm-filters select {
+    padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px;
+    font-size: 0.85rem; color: #334155; background: #fff; cursor: pointer;
+}
+.pm-filters select:focus { outline: none; border-color: #5b21b6; }
+.filter-count { font-size: 0.8rem; color: #94a3b8; margin-left: auto; }
 
-    .req-link { color: #0078D4; text-decoration: none; font-weight: 600; }
-    .req-link:hover { text-decoration: underline; }
-    .btn-view {
-        padding: 5px 13px; background: transparent; color: #64748b;
-        border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.8rem;
-        text-decoration: none; white-space: nowrap;
-    }
-    .btn-view:hover { border-color: #94a3b8; color: #334155; }
+/* Employee chips */
+.emp-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.emp-chip { font-size: 0.68rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.emp-chip--login { background: #ede9fe; color: #5b21b6; }
+.emp-chip--email { background: #e0f2fe; color: #0369a1; }
 
-    .pm-empty { padding: 40px; text-align: center; color: #94a3b8; }
+/* Request table */
+.req-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.req-table th {
+    text-align: left; padding: 9px 12px; font-size: 0.73rem; font-weight: 700;
+    color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
+    border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap;
+}
+.req-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; }
+.req-table tr:last-child td { border-bottom: none; }
+.req-table tr:hover td { background: #f8fafc; }
+.req-table tr.is-stale td { background: #fff7ed; }
+.req-table tr.is-stale:hover td { background: #ffedd5; }
 
-    /* ── Coming soon panel ──────────────────────────────── */
-    .pm-coming-soon {
-        padding: 60px 20px; text-align: center; color: #94a3b8;
-        background: #fff; border: 1px solid #e2e8f0;
-        border-radius: 0 10px 10px 10px;
-    }
-    .pm-coming-soon .cs-icon { font-size: 2.5rem; margin-bottom: 14px; }
-    .pm-coming-soon h3 { font-size: 1rem; font-weight: 600; color: #64748b; margin: 0 0 8px; }
-    .pm-coming-soon p  { font-size: 0.875rem; margin: 0; }
+.stage-pill {
+    font-size: 0.72rem; font-weight: 600; padding: 3px 9px;
+    border-radius: 12px; display: inline-block; white-space: nowrap;
+}
+.sp-it         { background: #fef3c7; color: #92400e; }
+.sp-ops        { background: #ede9fe; color: #5b21b6; }
+.sp-completed  { background: #d1fae5; color: #065f46; }
+.sp-rejected   { background: #fee2e2; color: #991b1b; }
+.sp-pending-it { background: #fef3c7; color: #92400e; }
+.sp-pending-ops{ background: #ede9fe; color: #5b21b6; }
+.sp-pending    { background: #dbeafe; color: #1d4ed8; }
+.sp-other      { background: #f1f5f9; color: #475569; }
 
-    /* ── All-requests tab ───────────────────────────────── */
-    .sp-completed  { background: #D1FAE5; color: #065F46; }
-    .sp-rejected   { background: #FEE2E2; color: #991B1B; }
-    .sp-pending-it { background: #FEF3C7; color: #92400E; }
-    .sp-pending-ops{ background: #EDE9FE; color: #5B21B6; }
-    .sp-pending    { background: #DBEAFE; color: #1D4ED8; }
-    .sp-other      { background: #F1F5F9; color: #475569; }
+.age-cell { font-size: 0.78rem; white-space: nowrap; }
+.age-cell.stale  { color: #dc2626; font-weight: 700; }
+.age-cell.normal { color: #94a3b8; }
+
+.esc-badge {
+    font-size: 0.68rem; font-weight: 700; padding: 2px 7px;
+    border-radius: 10px; background: #fef3c7; color: #92400e; display: inline-block;
+}
+.req-link { color: #5b21b6; text-decoration: none; font-weight: 600; }
+.req-link:hover { text-decoration: underline; }
+.btn-view {
+    padding: 5px 13px; background: transparent; color: #64748b;
+    border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.8rem;
+    text-decoration: none; white-space: nowrap;
+}
+.btn-view:hover { border-color: #94a3b8; color: #334155; }
+.pm-empty { padding: 40px; text-align: center; color: #94a3b8; }
+
+/* Coming soon */
+.pm-coming-soon {
+    padding: 60px 20px; text-align: center; color: #94a3b8;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 0 10px 10px 10px;
+}
+.pm-coming-soon .cs-icon { font-size: 2.5rem; margin-bottom: 14px; }
+.pm-coming-soon h3 { font-size: 1rem; font-weight: 600; color: #64748b; margin: 0 0 8px; }
+.pm-coming-soon p  { font-size: 0.875rem; margin: 0; }
+
+/* Responsive */
+@media (max-width: 960px) {
+    .pm-app { height: auto; overflow: visible; }
+    .pm-body { flex-direction: column; overflow: visible; }
+    .pm-main { overflow: visible; }
+    .pm-sidebar { width: 100%; border-right: none; border-bottom: 1px solid #e2e8f0; overflow: visible; }
+    .pm-main-inner { padding: 16px 16px 40px; }
+}
 </style>
 
 <% const staleCount = pendingRequests.filter(r => r.isStale).length; %>
 <% const escalCount = pendingRequests.filter(r => r.isEscalated).length; %>
 
-<div class="pm-wrap">
+<div class="pm-app">
 
-    <!-- ── Hero ── -->
-    <div class="pm-hero">
-        <div class="pm-hero-left">
-            <h1>IT Operations Manager Portal</h1>
-            <p class="pm-role-desc">Monitor IT Operations workload across all locations and manage escalations.</p>
-            <p class="pm-user-email"><%= userEmail %></p>
+    <!-- ── Top header ── -->
+    <div class="pm-topbar">
+        <img src="/logo.png" alt="IFL" class="pm-topbar-logo" onerror="this.style.display='none'">
+        <div class="pm-topbar-brand">
+            <div class="pm-topbar-title">IFL Workflow</div>
+            <div class="pm-topbar-sub">IT Operations Manager</div>
         </div>
-        <div class="pm-badges">
-            <% if (isDelegator) { %>
-                <span class="pm-badge pm-badge--delegated-out">Delegated Out</span>
-            <% } else { %>
-                <span class="pm-badge pm-badge--mgr">Manager</span>
-            <% } %>
-        </div>
+        <span class="pm-topbar-badge">Manager</span>
     </div>
 
-    <!-- ── Delegator read-only banner ── -->
-    <% if (isDelegator) { %>
-    <div class="pm-delegator-banner">
-        <span class="pm-db-icon">&#9888;</span>
-        <div>
-            <strong>You have temporarily delegated this role.</strong>
-            <%= delegateName ? delegateName + ' (' + delegateEmail + ')' : delegateEmail %>
-            is currently acting as IT Operations Manager.
-            Your access is read-only. Contact your administrator to revert the delegation.
-        </div>
-    </div>
-    <% } %>
+    <!-- ── Two-pane body ── -->
+    <div class="pm-body">
 
-    <!-- ── Stats ── -->
-    <div class="pm-stats">
-        <div class="pm-stat">
-            <div class="s-val"><%= pendingCount %></div>
-            <div class="s-lbl">Total in queue</div>
-        </div>
-        <div class="pm-stat <%= staleCount > 0 ? 's-warn' : '' %>">
-            <div class="s-val"><%= staleCount %></div>
-            <div class="s-lbl">Past 48h (stale)</div>
-        </div>
-        <div class="pm-stat <%= escalCount > 0 ? 's-warn' : '' %>">
-            <div class="s-val"><%= escalCount %></div>
-            <div class="s-lbl">Escalated to secondary</div>
-        </div>
-        <div class="pm-stat">
-            <div class="s-val"><%= locationSummary.length %></div>
-            <div class="s-lbl">Active locations</div>
-        </div>
-        <div class="pm-stat">
-            <div class="s-val"><%= totalCount %></div>
-            <div class="s-lbl">IT Ops + Completed</div>
-        </div>
-    </div>
+        <!-- ── Left Sidebar ── -->
+        <aside class="pm-sidebar">
 
-    <!-- ── Module tabs ── -->
-    <div class="pm-tabs">
-        <a class="pm-tab is-active" onclick="switchTab('it-ops')" id="tab-it-ops">
-            IT Operations
-            <% if (pendingCount > 0) { %> (<%= pendingCount %>)<% } %>
-        </a>
-        <a class="pm-tab" onclick="switchTab('all-requests')" id="tab-all-requests">
-            IT Ops Overview (<%= totalCount %>)
-        </a>
-        <a class="pm-tab is-disabled" title="Network Operations monitoring is coming soon">
-            Network Operations
-        </a>
-    </div>
+            <!-- Identity -->
+            <div class="pm-side-id">
+                <div class="pm-side-chip">IT OPS MANAGER</div>
+                <h2 class="pm-side-name">IT Operations Manager</h2>
+                <p class="pm-side-desc">Monitor IT Operations workload across all locations and manage escalations.</p>
+                <p class="pm-side-email"><%= userEmail %></p>
+                <div class="pm-side-badges">
+                    <% if (isDelegator) { %>
+                        <span class="pm-badge-del">Delegated Out</span>
+                    <% } else { %>
+                        <span class="pm-badge-mgr">Manager</span>
+                    <% } %>
+                </div>
+            </div>
 
-    <!-- ══ IT Operations Panel ══ -->
-    <div class="pm-panel is-active" id="panel-it-ops">
+            <!-- Navigation -->
+            <div class="pm-side-nav">
+                <button class="pm-side-nav-btn is-active" data-panel="it-ops"
+                    onclick="switchTab('it-ops')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                        <rect x="2" y="3" width="20" height="14" rx="2"/>
+                        <line x1="8" y1="21" x2="16" y2="21"/>
+                        <line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                    IT Operations
+                    <% if (pendingCount > 0) { %>
+                        <span class="pm-side-nav-count"><%= pendingCount %></span>
+                    <% } %>
+                </button>
+                <button class="pm-side-nav-btn" data-panel="all-requests"
+                    onclick="switchTab('all-requests')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                        <line x1="8" y1="6" x2="21" y2="6"/>
+                        <line x1="8" y1="12" x2="21" y2="12"/>
+                        <line x1="8" y1="18" x2="21" y2="18"/>
+                        <line x1="3" y1="6" x2="3.01" y2="6"/>
+                        <line x1="3" y1="12" x2="3.01" y2="12"/>
+                        <line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                    IT Ops Overview
+                    <span class="pm-side-nav-count"><%= totalCount %></span>
+                </button>
+                <button class="pm-side-nav-btn is-disabled" title="Network Operations monitoring is coming soon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                        <circle cx="12" cy="12" r="2"/>
+                        <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>
+                    </svg>
+                    Network Operations
+                    <span style="margin-left:auto; font-size:0.62rem; color:#cbd5e1; background:#f8fafc; padding:2px 6px; border-radius:10px; font-weight:600;">Soon</span>
+                </button>
+            </div>
 
-        <!-- Location summary grid -->
-        <div class="pm-section">
-            <p class="pm-section-title">Location Coverage</p>
-            <% if (locationSummary.length === 0) { %>
-                <div class="pm-empty">No IT Ops locations configured yet.</div>
-            <% } else { %>
-            <div class="loc-grid">
-                <% locationSummary.forEach(loc => { %>
-                <div class="loc-card <%= loc.isEscalated ? 'is-escalated' : '' %>">
-                    <div class="loc-name">
-                        <%= loc.location %>
-                        <% if (loc.isEscalated) { %>
-                            <span class="loc-escalated-badge">ESCALATED</span>
+        </aside>
+
+        <!-- ── Main content ── -->
+        <main class="pm-main">
+            <div class="pm-main-inner">
+
+                <!-- ── KPI Cards ── -->
+                <div class="pm-kpi-row">
+                    <div class="pm-kpi-card">
+                        <div class="pm-kpi-val"><%= pendingCount %></div>
+                        <div class="pm-kpi-lbl">Total in queue</div>
+                    </div>
+                    <div class="pm-kpi-card <%= staleCount > 0 ? 'is-warn' : '' %>">
+                        <div class="pm-kpi-val"><%= staleCount %></div>
+                        <div class="pm-kpi-lbl">Past 48h (stale)</div>
+                    </div>
+                    <div class="pm-kpi-card <%= escalCount > 0 ? 'is-warn' : '' %>">
+                        <div class="pm-kpi-val"><%= escalCount %></div>
+                        <div class="pm-kpi-lbl">Escalated</div>
+                    </div>
+                    <div class="pm-kpi-card">
+                        <div class="pm-kpi-val"><%= locationSummary.length %></div>
+                        <div class="pm-kpi-lbl">Active locations</div>
+                    </div>
+                    <div class="pm-kpi-card">
+                        <div class="pm-kpi-val"><%= totalCount %></div>
+                        <div class="pm-kpi-lbl">IT Ops + Completed</div>
+                    </div>
+                </div>
+
+                <!-- Delegator read-only banner -->
+                <% if (isDelegator) { %>
+                <div class="pm-delegator-banner">
+                    <span class="pm-db-icon">&#9888;</span>
+                    <div>
+                        <strong>You have temporarily delegated this role.</strong>
+                        <%= delegateName ? delegateName + ' (' + delegateEmail + ')' : delegateEmail %>
+                        is currently acting as IT Operations Manager.
+                        Your access is read-only. Contact your administrator to revert the delegation.
+                    </div>
+                </div>
+                <% } %>
+
+                <!-- Tabs -->
+                <div class="pm-tabs">
+                    <button class="pm-tab is-active" onclick="switchTab('it-ops')" id="tab-it-ops">
+                        IT Operations<% if (pendingCount > 0) { %> (<%= pendingCount %>)<% } %>
+                    </button>
+                    <button class="pm-tab" onclick="switchTab('all-requests')" id="tab-all-requests">
+                        IT Ops Overview (<%= totalCount %>)
+                    </button>
+                    <button class="pm-tab is-disabled" title="Coming soon">
+                        Network Operations
+                    </button>
+                </div>
+
+                <!-- ══ IT Operations Panel ══ -->
+                <div class="pm-panel is-active" id="panel-it-ops">
+                    <div class="pm-section">
+                        <p class="pm-section-title">Location Coverage</p>
+                        <% if (locationSummary.length === 0) { %>
+                            <div class="pm-empty">No IT Ops locations configured yet.</div>
+                        <% } else { %>
+                        <div class="loc-grid">
+                            <% locationSummary.forEach(loc => { %>
+                            <div class="loc-card <%= loc.isEscalated ? 'is-escalated' : '' %>">
+                                <div class="loc-name">
+                                    <%= loc.location %>
+                                    <% if (loc.isEscalated) { %>
+                                        <span class="loc-escalated-badge">ESCALATED</span>
+                                    <% } %>
+                                </div>
+                                <div class="loc-row"><span class="loc-lbl">Primary</span><span class="loc-val"><%= loc.primaryName %></span></div>
+                                <div class="loc-row"><span class="loc-lbl">Secondary</span><span class="loc-val"><%= loc.secondaryName %></span></div>
+                                <span class="loc-count <%= loc.activeCount === 0 ? 'zero' : '' %>">
+                                    <%= loc.activeCount %> active <%= loc.activeCount === 1 ? 'request' : 'requests' %>
+                                </span>
+                            </div>
+                            <% }) %>
+                        </div>
                         <% } %>
                     </div>
-                    <div class="loc-row">
-                        <span class="loc-lbl">Primary</span>
-                        <span class="loc-val"><%= loc.primaryName %></span>
+
+                    <div class="pm-section">
+                        <div class="pm-search-wrap">
+                            <span class="search-icon">&#128269;</span>
+                            <input type="text" id="req-search" class="pm-search"
+                                placeholder="Search by name, ID, login name, or email…"
+                                oninput="applyFilters()" autocomplete="off">
+                        </div>
+                        <div class="pm-filters">
+                            <label>Location:</label>
+                            <select id="filter-location" onchange="applyFilters()">
+                                <option value="">All Locations</option>
+                                <% [...new Set(pendingRequests.map(r => r.location).filter(Boolean))].sort().forEach(loc => { %>
+                                    <option value="<%= loc %>"><%= loc %></option>
+                                <% }) %>
+                            </select>
+                            <label>Status:</label>
+                            <select id="filter-status" onchange="applyFilters()">
+                                <option value="">All Stages</option>
+                                <option value="PendingIT">PendingIT</option>
+                                <option value="PendingOPSAction">PendingOPSAction</option>
+                            </select>
+                            <span class="filter-count" id="filter-count"><%= pendingCount %> requests</span>
+                        </div>
+
+                        <% if (pendingRequests.length === 0) { %>
+                            <div class="pm-empty">No pending IT Operations requests.</div>
+                        <% } else { %>
+                        <table class="req-table" id="req-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Employee</th>
+                                    <th>Location</th>
+                                    <th>Stage</th>
+                                    <th>Assigned To</th>
+                                    <th>Time in Stage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% pendingRequests.forEach(r => {
+                                    const searchTokens = [
+                                        String(r.id), r.fullName || '', r.employeeId || '',
+                                        r.ntUserName || '', r.smtpAddress || '',
+                                    ].join(' ').toLowerCase();
+                                %>
+                                <tr class="<%= r.isStale ? 'is-stale' : '' %>"
+                                    data-location="<%= r.location || '' %>"
+                                    data-status="<%= r.status %>"
+                                    data-search="<%= searchTokens %>">
+                                    <td>
+                                        <a href="<%= appUrl %>/api/onboarding/history/<%= r.id %>"
+                                           class="req-link" target="_blank">#<%= r.id %></a>
+                                        <% if (r.employeeId) { %>
+                                            <div style="font-size:0.72rem;color:#94a3b8;margin-top:2px">EMP: <%= r.employeeId %></div>
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight:600;color:#0f172a"><%= r.fullName || '—' %></div>
+                                        <div style="font-size:0.77rem;color:#64748b">
+                                            <%= [r.designation, r.department].filter(Boolean).join(' · ') || '' %>
+                                        </div>
+                                        <% if (r.ntUserName || r.smtpAddress) { %>
+                                        <div class="emp-chips">
+                                            <% if (r.ntUserName) { %>
+                                                <span class="emp-chip emp-chip--login" title="AD Login Name">&#128100; <%= r.ntUserName %></span>
+                                            <% } %>
+                                            <% if (r.smtpAddress) { %>
+                                                <span class="emp-chip emp-chip--email" title="Email Address">&#9993; <%= r.smtpAddress %></span>
+                                            <% } %>
+                                        </div>
+                                        <% } %>
+                                    </td>
+                                    <td style="color:#475569;font-size:0.84rem"><%= r.location || '—' %></td>
+                                    <td>
+                                        <span class="stage-pill <%= r.status === 'PendingOPSAction' ? 'sp-ops' : 'sp-it' %>">
+                                            <%= r.status === 'PendingOPSAction' ? 'OPS Action' : 'IT Review' %>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style="font-size:0.82rem;color:#334155"><%= r.primaryName %></div>
+                                        <% if (r.isEscalated) { %>
+                                            <span class="esc-badge">Escalated &#8594; <%= r.secondaryName %></span>
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <div class="age-cell <%= r.isStale ? 'stale' : 'normal' %>">
+                                            <%= humanAge(r.stageAgeHours) %>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                        <% } %>
                     </div>
-                    <div class="loc-row">
-                        <span class="loc-lbl">Secondary</span>
-                        <span class="loc-val"><%= loc.secondaryName %></span>
+                </div><!-- end IT Ops panel -->
+
+                <!-- ══ All Requests Panel ══ -->
+                <div class="pm-panel" id="panel-all-requests">
+                    <div class="pm-section">
+                        <div class="pm-search-wrap">
+                            <span class="search-icon">&#128269;</span>
+                            <input type="text" id="all-search" class="pm-search"
+                                placeholder="Search by name, ID, department, location…"
+                                oninput="applyAllFilters()" autocomplete="off">
+                        </div>
+                        <div class="pm-filters">
+                            <label>Status:</label>
+                            <select id="all-filter-status" onchange="applyAllFilters()">
+                                <option value="">All</option>
+                                <option value="PendingIT">Pending IT Review</option>
+                                <option value="PendingOPSAction">Pending OPS Action</option>
+                                <option value="Completed">Completed</option>
+                            </select>
+                            <label>Location:</label>
+                            <select id="all-filter-location" onchange="applyAllFilters()">
+                                <option value="">All Locations</option>
+                                <% [...new Set(allRequests.map(r => r.location).filter(Boolean))].sort().forEach(loc => { %>
+                                    <option value="<%= loc %>"><%= loc %></option>
+                                <% }) %>
+                            </select>
+                            <span class="filter-count" id="all-filter-count"><%= totalCount %> requests</span>
+                        </div>
+
+                        <% if (allRequests.length === 0) { %>
+                            <div class="pm-empty">No IT Ops or completed requests found.</div>
+                        <% } else { %>
+                        <table class="req-table" id="all-req-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Employee</th>
+                                    <th>Location</th>
+                                    <th>Status</th>
+                                    <th>Submitted</th>
+                                    <th>Joining Date</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% allRequests.forEach(r => {
+                                    const searchTokens = [
+                                        String(r.id), r.fullName || '', r.department || '',
+                                        r.designation || '', r.location || '',
+                                        r.ntUserName || '', r.smtpAddress || '', r.employeeId || '',
+                                    ].join(' ').toLowerCase();
+                                    let pillClass = 'sp-other';
+                                    if (r.status === 'Completed')             pillClass = 'sp-completed';
+                                    else if (r.status === 'Rejected')         pillClass = 'sp-rejected';
+                                    else if (r.status === 'PendingIT')        pillClass = 'sp-pending-it';
+                                    else if (r.status === 'PendingOPSAction') pillClass = 'sp-pending-ops';
+                                    else if (r.status && r.status.startsWith('Pending')) pillClass = 'sp-pending';
+                                %>
+                                <tr data-status="<%= r.status %>"
+                                    data-location="<%= r.location || '' %>"
+                                    data-search="<%= searchTokens %>">
+                                    <td>
+                                        <a href="<%= appUrl %>/api/onboarding/history/<%= r.id %>"
+                                           class="req-link" target="_blank">#<%= r.id %></a>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight:600;color:#0f172a"><%= r.fullName || '—' %></div>
+                                        <div style="font-size:0.77rem;color:#64748b">
+                                            <%= [r.designation, r.department].filter(Boolean).join(' · ') || '' %>
+                                        </div>
+                                    </td>
+                                    <td style="font-size:0.84rem;color:#475569"><%= r.location || '—' %></td>
+                                    <td><span class="stage-pill <%= pillClass %>"><%= r.status || '—' %></span></td>
+                                    <td style="font-size:0.8rem;color:#64748b;white-space:nowrap">
+                                        <%= r.hrSubmittedAt ? new Date(r.hrSubmittedAt).toLocaleDateString('en-GB') : '—' %>
+                                    </td>
+                                    <td style="font-size:0.8rem;color:#64748b;white-space:nowrap">
+                                        <%= r.joiningDate ? new Date(r.joiningDate).toLocaleDateString('en-GB') : '—' %>
+                                    </td>
+                                    <td>
+                                        <a href="<%= appUrl %>/api/onboarding/history/<%= r.id %>"
+                                           class="btn-view" target="_blank">View</a>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                        <% } %>
                     </div>
-                    <span class="loc-count <%= loc.activeCount === 0 ? 'zero' : '' %>">
-                        <%= loc.activeCount %> active <%= loc.activeCount === 1 ? 'request' : 'requests' %>
-                    </span>
                 </div>
-                <% }) %>
+
+                <!-- ══ Networks Panel (placeholder) ══ -->
+                <div class="pm-panel" id="panel-networks">
+                    <div class="pm-coming-soon">
+                        <div class="cs-icon">&#128311;</div>
+                        <h3>Network Operations Monitoring</h3>
+                        <p>Network workflow monitoring is being built and will be available here soon.</p>
+                    </div>
+                </div>
+
             </div>
-            <% } %>
-        </div>
+        </main>
 
-        <!-- Request table -->
-        <div class="pm-section">
-            <div class="pm-search-wrap">
-                <span class="search-icon">&#128269;</span>
-                <input
-                    type="text"
-                    id="req-search"
-                    class="pm-search"
-                    placeholder="Search by name, ID, login name, or email…"
-                    oninput="applyFilters()"
-                    autocomplete="off"
-                >
-            </div>
-            <div class="pm-filters">
-                <label>Location:</label>
-                <select id="filter-location" onchange="applyFilters()">
-                    <option value="">All Locations</option>
-                    <% [...new Set(pendingRequests.map(r => r.location).filter(Boolean))].sort().forEach(loc => { %>
-                        <option value="<%= loc %>"><%= loc %></option>
-                    <% }) %>
-                </select>
-                <label>Status:</label>
-                <select id="filter-status" onchange="applyFilters()">
-                    <option value="">All Stages</option>
-                    <option value="PendingIT">PendingIT</option>
-                    <option value="PendingOPSAction">PendingOPSAction</option>
-                </select>
-                <span class="filter-count" id="filter-count"><%= pendingCount %> requests</span>
-            </div>
+    </div><!-- /.pm-body -->
 
-            <% if (pendingRequests.length === 0) { %>
-                <div class="pm-empty">No pending IT Operations requests.</div>
-            <% } else { %>
-            <table class="req-table" id="req-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Employee</th>
-                        <th>Location</th>
-                        <th>Stage</th>
-                        <th>Assigned To</th>
-                        <th>Time in Stage</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% pendingRequests.forEach(r => {
-                        const searchTokens = [
-                            String(r.id),
-                            r.fullName        || '',
-                            r.employeeId      || '',
-                            r.ntUserName      || '',
-                            r.smtpAddress     || '',
-                        ].join(' ').toLowerCase();
-                    %>
-                    <tr class="<%= r.isStale ? 'is-stale' : '' %>"
-                        data-location="<%= r.location || '' %>"
-                        data-status="<%= r.status %>"
-                        data-search="<%= searchTokens %>">
-                        <td>
-                            <a href="<%= appUrl %>/api/onboarding/history/<%= r.id %>"
-                               class="req-link" target="_blank">#<%= r.id %></a>
-                            <% if (r.employeeId) { %>
-                                <div style="font-size:0.72rem;color:#94a3b8;margin-top:2px">EMP: <%= r.employeeId %></div>
-                            <% } %>
-                        </td>
-                        <td>
-                            <div style="font-weight:600;color:#0f172a"><%= r.fullName || '—' %></div>
-                            <div style="font-size:0.77rem;color:#64748b">
-                                <%= [r.designation, r.department].filter(Boolean).join(' · ') || '' %>
-                            </div>
-                            <% if (r.ntUserName || r.smtpAddress) { %>
-                            <div class="emp-chips">
-                                <% if (r.ntUserName) { %>
-                                    <span class="emp-chip emp-chip--login" title="AD Login Name">&#128100; <%= r.ntUserName %></span>
-                                <% } %>
-                                <% if (r.smtpAddress) { %>
-                                    <span class="emp-chip emp-chip--email" title="Email Address">&#9993; <%= r.smtpAddress %></span>
-                                <% } %>
-                            </div>
-                            <% } %>
-                        </td>
-                        <td style="color:#475569;font-size:0.84rem"><%= r.location || '—' %></td>
-                        <td>
-                            <span class="stage-pill <%= r.status === 'PendingOPSAction' ? 'sp-ops' : 'sp-it' %>">
-                                <%= r.status === 'PendingOPSAction' ? 'OPS Action' : 'IT Review' %>
-                            </span>
-                        </td>
-                        <td>
-                            <div style="font-size:0.82rem;color:#334155"><%= r.primaryName %></div>
-                            <% if (r.isEscalated) { %>
-                                <span class="esc-badge">Escalated &#8594; <%= r.secondaryName %></span>
-                            <% } %>
-                        </td>
-                        <td>
-                            <div class="age-cell <%= r.isStale ? 'stale' : 'normal' %>">
-                                <%= humanAge(r.stageAgeHours) %>
-                            </div>
-                        </td>
-                    </tr>
-                    <% }) %>
-                </tbody>
-            </table>
-            <% } %>
-        </div>
-
-    </div><!-- end IT Ops panel -->
-
-    <!-- ══ All Requests Panel ══ -->
-    <div class="pm-panel" id="panel-all-requests">
-        <div class="pm-section">
-            <div class="pm-search-wrap">
-                <span class="search-icon">&#128269;</span>
-                <input type="text" id="all-search" class="pm-search"
-                    placeholder="Search by name, ID, department, location…"
-                    oninput="applyAllFilters()" autocomplete="off">
-            </div>
-            <div class="pm-filters">
-                <label>Status:</label>
-                <select id="all-filter-status" onchange="applyAllFilters()">
-                    <option value="">All</option>
-                    <option value="PendingIT">Pending IT Review</option>
-                    <option value="PendingOPSAction">Pending OPS Action</option>
-                    <option value="Completed">Completed</option>
-                </select>
-                <label>Location:</label>
-                <select id="all-filter-location" onchange="applyAllFilters()">
-                    <option value="">All Locations</option>
-                    <% [...new Set(allRequests.map(r => r.location).filter(Boolean))].sort().forEach(loc => { %>
-                        <option value="<%= loc %>"><%= loc %></option>
-                    <% }) %>
-                </select>
-                <span class="filter-count" id="all-filter-count"><%= totalCount %> requests</span>
-            </div>
-
-            <% if (allRequests.length === 0) { %>
-                <div class="pm-empty">No IT Ops or completed requests found.</div>
-            <% } else { %>
-            <table class="req-table" id="all-req-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Employee</th>
-                        <th>Location</th>
-                        <th>Status</th>
-                        <th>Submitted</th>
-                        <th>Joining Date</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% allRequests.forEach(r => {
-                        const searchTokens = [
-                            String(r.id),
-                            r.fullName     || '',
-                            r.department   || '',
-                            r.designation  || '',
-                            r.location     || '',
-                            r.ntUserName   || '',
-                            r.smtpAddress  || '',
-                            r.employeeId   || '',
-                        ].join(' ').toLowerCase();
-
-                        let pillClass = 'sp-other';
-                        if (r.status === 'Completed')          pillClass = 'sp-completed';
-                        else if (r.status === 'Rejected')      pillClass = 'sp-rejected';
-                        else if (r.status === 'PendingIT')     pillClass = 'sp-pending-it';
-                        else if (r.status === 'PendingOPSAction') pillClass = 'sp-pending-ops';
-                        else if (r.status && r.status.startsWith('Pending')) pillClass = 'sp-pending';
-                    %>
-                    <tr data-status="<%= r.status %>"
-                        data-location="<%= r.location || '' %>"
-                        data-search="<%= searchTokens %>">
-                        <td>
-                            <a href="<%= appUrl %>/api/onboarding/history/<%= r.id %>"
-                               class="req-link" target="_blank">#<%= r.id %></a>
-                        </td>
-                        <td>
-                            <div style="font-weight:600;color:#0f172a"><%= r.fullName || '—' %></div>
-                            <div style="font-size:0.77rem;color:#64748b">
-                                <%= [r.designation, r.department].filter(Boolean).join(' · ') || '' %>
-                            </div>
-                        </td>
-                        <td style="font-size:0.84rem;color:#475569"><%= r.location || '—' %></td>
-                        <td>
-                            <span class="stage-pill <%= pillClass %>"><%= r.status || '—' %></span>
-                        </td>
-                        <td style="font-size:0.8rem;color:#64748b;white-space:nowrap">
-                            <%= r.hrSubmittedAt ? new Date(r.hrSubmittedAt).toLocaleDateString('en-GB') : '—' %>
-                        </td>
-                        <td style="font-size:0.8rem;color:#64748b;white-space:nowrap">
-                            <%= r.joiningDate ? new Date(r.joiningDate).toLocaleDateString('en-GB') : '—' %>
-                        </td>
-                        <td>
-                            <a href="<%= appUrl %>/api/onboarding/history/<%= r.id %>"
-                               class="btn-view" target="_blank">View</a>
-                        </td>
-                    </tr>
-                    <% }) %>
-                </tbody>
-            </table>
-            <% } %>
-        </div>
-    </div>
-
-    <!-- ══ Networks Panel (placeholder) ══ -->
-    <div class="pm-panel" id="panel-networks">
-        <div class="pm-coming-soon">
-            <div class="cs-icon">&#128311;</div>
-            <h3>Network Operations Monitoring</h3>
-            <p>Network workflow monitoring is being built and will be available here soon.</p>
-        </div>
-    </div>
-
-</div><!-- .pm-wrap -->
+</div><!-- /.pm-app -->
 
 <script>
 (function () {
@@ -540,6 +713,10 @@ function humanAge(hours) {
         const panel = document.getElementById('panel-' + name);
         if (tab)   tab.classList.add('is-active');
         if (panel) panel.classList.add('is-active');
+        // Sync sidebar nav
+        document.querySelectorAll('.pm-side-nav-btn:not(.is-disabled)').forEach(b => b.classList.remove('is-active'));
+        const sideBtn = document.querySelector('.pm-side-nav-btn[data-panel="' + name + '"]');
+        if (sideBtn) sideBtn.classList.add('is-active');
     }
     window.switchTab = switchTab;
 
@@ -550,20 +727,15 @@ function humanAge(hours) {
         const rows         = document.querySelectorAll('#req-table tbody tr');
         let visible        = 0;
         rows.forEach(row => {
-            const loc      = row.dataset.location || '';
-            const status   = row.dataset.status   || '';
-            const haystack = row.dataset.search   || '';
-            const matchLoc    = !locFilter    || loc === locFilter;
-            const matchStatus = !statusFilter || status === statusFilter;
-            const matchSearch = !searchRaw    || haystack.includes(searchRaw);
-            const show = matchLoc && matchStatus && matchSearch;
+            const show = (!locFilter    || row.dataset.location === locFilter)
+                      && (!statusFilter || row.dataset.status   === statusFilter)
+                      && (!searchRaw    || (row.dataset.search  || '').includes(searchRaw));
             row.style.display = show ? '' : 'none';
             if (show) visible++;
         });
         const countEl = document.getElementById('filter-count');
         if (countEl) countEl.textContent = visible + ' request' + (visible !== 1 ? 's' : '');
     }
-
     window.applyFilters = applyFilters;
 
     function applyAllFilters() {
@@ -573,10 +745,9 @@ function humanAge(hours) {
         const rows  = document.querySelectorAll('#all-req-table tbody tr');
         let visible = 0;
         rows.forEach(row => {
-            const matchStatus = !statusFilter || row.dataset.status   === statusFilter;
-            const matchLoc    = !locFilter    || row.dataset.location === locFilter;
-            const matchSearch = !searchRaw    || (row.dataset.search  || '').includes(searchRaw);
-            const show = matchStatus && matchLoc && matchSearch;
+            const show = (!statusFilter || row.dataset.status   === statusFilter)
+                      && (!locFilter    || row.dataset.location === locFilter)
+                      && (!searchRaw    || (row.dataset.search  || '').includes(searchRaw));
             row.style.display = show ? '' : 'none';
             if (show) visible++;
         });
@@ -585,7 +756,6 @@ function humanAge(hours) {
     }
     window.applyAllFilters = applyAllFilters;
 
-    // Clear search on Escape for both tables
     document.getElementById('req-search')?.addEventListener('keydown', e => {
         if (e.key === 'Escape') { e.target.value = ''; applyFilters(); }
     });

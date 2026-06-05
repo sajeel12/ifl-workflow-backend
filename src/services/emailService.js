@@ -32,8 +32,10 @@ if (hasAuth) {
 const transporter = nodemailer.createTransport(transporterOptions);
 
 
-export const sendApprovalEmail = async (toEmail, subject, requestDetails, approvalLink, requesterName, requesterEmail) => {
+export const sendApprovalEmail = async (toEmail, subject, requestDetails, approvalLink, requesterName, requesterEmail, displayOpts = {}) => {
     logger.info(`[Email] Sending approval email to ${toEmail}`);
+    // displayOpts.reqId   — request number shown large in the body (e.g. "42")
+    // displayOpts.stageName — stage label shown below the separator (e.g. "IT Configuration")
 
     const adaptiveCardPayload = {
         "type": "AdaptiveCard",
@@ -42,7 +44,7 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
         "body": [
             {
                 "type": "TextBlock",
-                "text": "Ibrahim Fibres Limited",
+                "text": "New Employee Onboarding",
                 "weight": "Bolder",
                 "size": "Medium",
                 "color": "Accent"
@@ -77,6 +79,25 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
         ]
     };
 
+    // Two-column heading row: "Request | Stage" side by side with labeled titles.
+    // Falls back to a plain h2 if displayOpts are not provided (legacy callers).
+    const F = "'Segoe UI',Calibri,Arial,sans-serif"; // enterprise font stack
+    const headingHtml = displayOpts.reqId
+        ? `<table width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="margin-bottom:16px;border:1px solid #dde3ec;border-radius:4px;overflow:hidden;">
+               <tr>
+                   <td style="padding:1px 14px;width:50%;vertical-align:middle;background:#f4f6f9;border-right:1px solid #dde3ec;">
+                       <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#8a96a8;font-family:${F};line-height:1;margin:0;padding:0;">Request</div>
+                       <div style="font-size:20px;font-weight:700;color:#0f172a;font-family:${F};line-height:1;margin:0;padding:0;">${displayOpts.reqId}</div>
+                   </td>
+                   <td style="padding:1px 14px;width:50%;vertical-align:middle;background:#f4f6f9;">
+                       <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#8a96a8;font-family:${F};line-height:1;margin:0;padding:0;">Stage</div>
+                       <div style="font-size:15px;font-weight:600;color:#0078D4;font-family:${F};line-height:1;margin:0;padding:0;">${displayOpts.stageName || ''}</div>
+                   </td>
+               </tr>
+           </table>`
+        : `<h2 style="color:#0078D4;margin-top:0;margin-bottom:18px;font-family:${F};font-size:17px;">${subject}</h2>`;
+
     const htmlBody = `
     <!DOCTYPE html>
     <html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -87,34 +108,37 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
         <xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
         <![endif]-->
     </head>
-    <body style="margin:0;padding:0;background-color:#f3f2f1;font-family:Arial,sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f2f1;">
+    <body style="margin:0;padding:0;background-color:#eef0f3;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef0f3;">
             <tr>
-                <td align="center" style="padding:20px 10px;">
+                <td align="center" style="padding:24px 10px;">
                     <!-- Outer container -->
-                    <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e1dfdd;">
+                    <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #d0d5de;border-radius:4px;overflow:hidden;">
                         <!-- Header -->
                         <tr>
-                            <td bgcolor="#0078D4" style="background-color:#0078D4;padding:20px;text-align:center;">
-                                <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:600;font-family:Arial,sans-serif;">Ibrahim Fibres Limited</h1>
+                            <td bgcolor="#0078D4" style="background-color:#0078D4;padding:18px 24px;text-align:center;">
+                                <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:600;font-family:'Segoe UI',Calibri,Arial,sans-serif;letter-spacing:0.01em;">New Employee Onboarding</h1>
                             </td>
                         </tr>
                         <!-- Content -->
                         <tr>
-                            <td style="padding:30px;color:#323130;font-family:Arial,sans-serif;">
-                                <h2 style="color:#0078D4;margin-top:0;margin-bottom:20px;font-family:Arial,sans-serif;font-size:18px;">${subject}</h2>
+                            <td style="padding:24px 28px;color:#1e2735;font-family:'Segoe UI',Calibri,Arial,sans-serif;">
+                                ${headingHtml}
+
+                                <!-- Section label above the details box -->
+                                <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:#374151;font-family:'Segoe UI',Calibri,Arial,sans-serif;border-bottom:1px solid #e5e9f0;padding-bottom:6px;margin-bottom:10px;">Request Details</div>
 
                                 <!-- Info box: render details as a bullet list when the
                                      body starts with "::BULLETS::"; otherwise as a paragraph. -->
-                                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8f9fa;border-left:4px solid #0078D4;margin-bottom:20px;">
+                                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f6f8fb;border-left:3px solid #0078D4;margin-bottom:22px;">
                                     <tr>
-                                        <td style="padding:15px;">
+                                        <td style="padding:13px 16px;">
                                             ${(() => {
                                                 if (typeof requestDetails === 'string' && requestDetails.startsWith('::BULLETS::')) {
                                                     const items = requestDetails.split('\n').slice(1).filter(Boolean);
-                                                    return `<ul style="margin:0;padding:0 0 0 18px;font-size:14px;line-height:1.6;color:#323130;font-family:Arial,sans-serif;">${items.map(i => `<li style="margin-bottom:4px;">${i}</li>`).join('')}</ul>`;
+                                                    return `<ul style="margin:0;padding:0 0 0 18px;font-size:14px;line-height:1.75;color:#1e2735;font-family:'Segoe UI',Calibri,Arial,sans-serif;">${items.map(i => `<li style="margin-bottom:3px;">${i}</li>`).join('')}</ul>`;
                                                 }
-                                                return `<p style="margin:0;font-size:14px;line-height:1.5;color:#323130;font-family:Arial,sans-serif;">${requestDetails}</p>`;
+                                                return `<p style="margin:0;font-size:14px;line-height:1.6;color:#1e2735;font-family:'Segoe UI',Calibri,Arial,sans-serif;">${requestDetails}</p>`;
                                             })()}
                                         </td>
                                     </tr>
@@ -123,20 +147,20 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
                                 <!-- Button (VML for Outlook, fallback for others) -->
                                 <table width="100%" cellpadding="0" cellspacing="0" border="0">
                                     <tr>
-                                        <td align="center" style="padding-top:10px;">
+                                        <td align="center" style="padding-top:6px;">
                                             <!--[if mso]>
                                             <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
                                                 href="${approvalLink}"
-                                                style="height:44px;v-text-anchor:middle;width:240px;"
+                                                style="height:42px;v-text-anchor:middle;width:220px;"
                                                 arcsize="6%"
                                                 stroke="f"
                                                 fillcolor="#0078D4">
                                                 <w:anchorlock/>
-                                                <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">Review &amp; Approve/Reject</center>
+                                                <center style="color:#ffffff;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:14px;font-weight:600;">Review &amp; Approve/Reject</center>
                                             </v:roundrect>
                                             <![endif]-->
                                             <!--[if !mso]><!-->
-                                            <a href="${approvalLink}" style="background-color:#0078D4;color:#ffffff;display:inline-block;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;line-height:44px;text-align:center;text-decoration:none;width:240px;-webkit-text-size-adjust:none;">Review &amp; Approve/Reject</a>
+                                            <a href="${approvalLink}" style="background-color:#0078D4;color:#ffffff;display:inline-block;font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:14px;font-weight:600;line-height:42px;text-align:center;text-decoration:none;width:220px;border-radius:3px;-webkit-text-size-adjust:none;">Review &amp; Approve/Reject</a>
                                             <!--<![endif]-->
                                         </td>
                                     </tr>
@@ -145,8 +169,8 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
                         </tr>
                         <!-- Footer -->
                         <tr>
-                            <td bgcolor="#f3f2f1" style="background-color:#f3f2f1;padding:15px;text-align:center;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;">
-                                <p style="margin:0;">This is an automated notification from the IFL Workflow System.</p>
+                            <td bgcolor="#eef0f3" style="background-color:#eef0f3;padding:12px 24px;text-align:center;border-top:1px solid #d0d5de;">
+                                <p style="margin:0;color:#6b7280;font-size:11px;font-family:'Segoe UI',Calibri,Arial,sans-serif;line-height:1.5;">This is an automated notification from the IGCPortal Workflow System.</p>
                             </td>
                         </tr>
                     </table>
@@ -454,58 +478,133 @@ export const sendWorkOrderPDF = async (toEmail, request, pdfPath, ccList = []) =
 export const sendOnboardingNotification = async (toEmail, request, actionLink, type) => {
     const userInfo = `${request.fullName || '—'}${request.designation ? ' (' + request.designation + ')' : ''}`;
     const dept = [request.department, request.subDepartment].filter(Boolean).join(' / ') || '—';
-    const reqNo = `#${request.id}`;
+    const reqNo = String(request.id); // no "#" prefix
 
-    // Each stage email is just three bullets: who it's for, what's needed, what's next.
-    // Marker line "::BULLETS::" tells sendApprovalEmail to render the body as <ul><li>.
-    const buildBullets = (action, next) => [
-        '::BULLETS::',
-        `Employee: ${userInfo}`,
-        `Department: ${dept}`,
-        `Action: ${action}`,
-        `Next: ${next}`
-    ].join('\n');
+    // Each stage email is three or four bullets. "Next:" is omitted when not applicable.
+    const buildBullets = (action, next) => {
+        const lines = ['::BULLETS::', `Employee: ${userInfo}`, `Department: ${dept}`, `Action: ${action}`];
+        if (next) lines.push(`Next: ${next}`);
+        return lines.join('\n');
+    };
 
-    let subject, body;
+    let subject, stageName, body;
     switch (type) {
         case 'IT_OPS':
-            subject = `Onboarding ${reqNo} — IT Configuration`;
-            body = buildBullets('Configure intranet, email, printers, file shares.');
+            stageName = 'IT Configuration';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Configure intranet, email, printers, file shares.', 'Forwarded to HOD for approval.');
             break;
         case 'HOD_REVIEW':
-            subject = `Onboarding ${reqNo} — HOD Approval`;
-            body = buildBullets('Review configured services and approve or reject.', 'Forwarded to DCI Team.');
+            stageName = 'HOD Approval';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Review configured services and approve or reject.', 'Forwarded to DCI Team.');
             break;
         case 'DCI_INPUT':
-            subject = `Onboarding ${reqNo} — DCI Setup`;
-            body = buildBullets('Configure NT user, SMTP, mailbox limits, GPO.');
+            stageName = 'DCI Setup';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Configure NT user, SMTP, mailbox limits, GPO.', 'Forwarded to DCI Manager for review.');
             break;
         case 'DCI_CHANGES_REQUESTED':
-            subject = `Onboarding ${reqNo} — Changes Requested`;
-            body = buildBullets('See remarks on the form and resubmit.', 'Goes back to DCI Manager.');
+            stageName = 'Changes Requested';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Review the remarks on the form and resubmit.', 'Returns to DCI Manager after resubmission.');
             break;
         case 'DCI_MANAGER_APPROVAL':
-            subject = `Onboarding ${reqNo} — Manager Review`;
-            body = buildBullets('Approve, reject, or request changes.');
+            stageName = 'Manager Review';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Approve, reject, or request changes.', 'Forwarded to IT HOD or directly to DCI Implementation.');
             break;
         case 'IT_HOD_APPROVAL':
-            subject = `Onboarding ${reqNo} — IT HOD Sign-off`;
-            body = buildBullets('Approve external email access.', 'Forwarded to DCI Implementation.');
+            stageName = 'IT HOD Sign-off';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Approve external email access.', 'Forwarded to DCI Implementation.');
             break;
         case 'DCI_IMPLEMENTATION':
-            subject = `Onboarding ${reqNo} — Account Provisioning`;
-            body = buildBullets('Create AD/Exchange account and upload proofs.');
+            stageName = 'Account Provisioning';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Create AD/Exchange account and upload proof screenshots.', 'Forwarded to OPS for desk setup.');
             break;
         case 'OPS_ACTION':
-            subject = `Onboarding ${reqNo} — Desk Setup`;
-            body = buildBullets('Complete physical setup checklist at user\'s desk.', 'Request will be marked Completed.');
+            stageName = 'Desk Setup';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Complete the physical setup checklist at the user\'s desk.', 'Request will be marked Completed.');
             break;
         default:
-            subject = `Onboarding ${reqNo} — Action Required`;
-            body = buildBullets('Your input is required.', 'Workflow will continue.');
+            stageName = 'Action Required';
+            subject   = `Request ${reqNo} — ${stageName}`;
+            body      = buildBullets('Your input is required on this onboarding request.', 'Workflow will continue after your action.');
     }
 
-    return sendApprovalEmail(toEmail, subject, body, actionLink, request.requesterName || 'HR', request.requesterEmail || '');
+    return sendApprovalEmail(
+        toEmail, subject, body, actionLink,
+        request.requesterName || 'HR', request.requesterEmail || '',
+        { reqId: reqNo, stageName }
+    );
+};
+
+export const sendDeletionNotification = async (toEmail, request, { deletedBy, reason, priorStatus }) => {
+    const reqNo = `#${request.id}`;
+    const userInfo = `${request.fullName || '—'}${request.designation ? ' (' + request.designation + ')' : ''}`;
+    const dept = [request.department, request.subDepartment].filter(Boolean).join(' / ') || '—';
+    const subject = `Onboarding ${reqNo} — Request Deleted by Administrator`;
+
+    const htmlBody = `
+    <!DOCTYPE html>
+    <html xmlns="http://www.w3.org/1999/xhtml">
+    <head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background-color:#f3f2f1;font-family:Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f2f1;">
+            <tr><td align="center" style="padding:20px 10px;">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border:1px solid #e1dfdd;">
+                    <!-- Header — red to signal termination -->
+                    <tr><td bgcolor="#b91c1c" style="background-color:#b91c1c;padding:20px;text-align:center;">
+                        <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:600;font-family:Arial,sans-serif;">Ibrahim Fibres Limited</h1>
+                        <p style="color:#fecaca;margin:4px 0 0;font-size:13px;font-family:Arial,sans-serif;">Onboarding Workflow — Administrative Deletion</p>
+                    </td></tr>
+                    <!-- Content -->
+                    <tr><td style="padding:30px;color:#323130;font-family:Arial,sans-serif;">
+                        <h2 style="color:#b91c1c;margin-top:0;margin-bottom:16px;font-family:Arial,sans-serif;font-size:18px;">Onboarding Request ${reqNo} Has Been Deleted</h2>
+                        <p style="font-size:14px;color:#323130;margin:0 0 20px;line-height:1.5;">
+                            This is to inform you that the above onboarding request has been <strong>permanently removed</strong> from the workflow by a system administrator. No further action is required or possible on this request.
+                        </p>
+                        <!-- Details box -->
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#fef2f2;border-left:4px solid #b91c1c;margin-bottom:20px;">
+                            <tr><td style="padding:16px;">
+                                <table width="100%" cellpadding="4" cellspacing="0" border="0" style="font-size:13px;color:#323130;font-family:Arial,sans-serif;">
+                                    <tr><td style="font-weight:600;width:140px;color:#6b7280;">Employee:</td><td>${userInfo}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;">Department:</td><td>${dept}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;">Request ID:</td><td>${reqNo}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;">Stage at deletion:</td><td>${priorStatus}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;">Deleted by:</td><td>${deletedBy}</td></tr>
+                                    <tr><td style="font-weight:600;color:#6b7280;vertical-align:top;">Reason:</td><td style="font-style:italic;">${reason}</td></tr>
+                                </table>
+                            </td></tr>
+                        </table>
+                        <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.5;">If you have questions about this action, please contact your system administrator. Any action links you received for this request are now invalid.</p>
+                    </td></tr>
+                    <!-- Footer -->
+                    <tr><td bgcolor="#f3f2f1" style="background-color:#f3f2f1;padding:15px;text-align:center;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;">
+                        <p style="margin:0;">This is an automated notification from the IFL Workflow System.</p>
+                    </td></tr>
+                </table>
+            </td></tr>
+        </table>
+    </body>
+    </html>`;
+
+    try {
+        const info = await transporter.sendMail({
+            from: process.env.SMTP_FROM,
+            to:   toEmail,
+            subject,
+            html: htmlBody
+        });
+        logger.info(`[Email] Deletion notice sent to ${toEmail} for request #${request.id}: ${info.messageId}`);
+        return info;
+    } catch (err) {
+        logger.error(`[Email] Failed to send deletion notice to ${toEmail}: ${err.message}`);
+        throw err;
+    }
 };
 
 // Offboarding stage notification — same bullet shape as

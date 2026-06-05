@@ -22,11 +22,30 @@
 
         string q          = (Request.QueryString["q"]          ?? "").Trim();
         string employeeId = (Request.QueryString["employeeId"] ?? "").Trim();
+        string groups     = (Request.QueryString["groups"]     ?? "").Trim();
 
         string filter;
         string sigKey; // used in HMAC — tells Node which path was taken
+        int    limit = 15;
 
-        if (!string.IsNullOrEmpty(employeeId)) {
+        if (!string.IsNullOrEmpty(groups)) {
+            // ── Group path: list/search GROUP objects (objectClass=group) ─────────
+            // groups=all (or 1) → every group, for the DCI form's load-once dropdown.
+            // groups=<text>     → substring search on cn / sAMAccountName / mail.
+            if (groups == "all" || groups == "1") {
+                filter = "(objectClass=group)";
+                sigKey = "group:all";
+                limit  = 2000;
+            } else {
+                string esc = EscLdap(groups);
+                filter = "(&(objectClass=group)"
+                       +   "(|(cn=*" + esc + "*)"
+                       +     "(sAMAccountName=*" + esc + "*)"
+                       +     "(mail=*" + esc + "*)))";
+                sigKey = "group:" + groups;
+                limit  = 50;
+            }
+        } else if (!string.IsNullOrEmpty(employeeId)) {
             // ── Employee-ID path: exact match on the employeeID attribute ──────────
             // Immune to name/email mismatches across domains.
             // Only accounts that have had employeeID set (via Set-ADUser -EmployeeID)
@@ -38,7 +57,7 @@
             // ── Name/email path (existing behaviour) ─────────────────────────────
             if (q.Length < 2) {
                 Response.StatusCode = 400;
-                Response.Write("{\"error\":\"q or employeeId required (q min 2 chars)\"}");
+                Response.Write("{\"error\":\"q, employeeId or groups required (q min 2 chars)\"}");
                 return;
             }
             string esc = EscLdap(q);
@@ -55,11 +74,11 @@
         // Try Global Catalog first — covers every domain in the ifl.net forest
         bool ok = false;
         if (!string.IsNullOrEmpty(gcHost))
-            ok = TrySearch("LDAP://" + gcHost + ":3268", filter, results, 15);
+            ok = TrySearch("LDAP://" + gcHost + ":3268", filter, results, limit);
 
         // Fallback: primary-domain LDAP (uses app-pool Windows identity, no explicit credentials)
         if (!ok || results.Count == 0)
-            TrySearch(null, filter, results, 15);
+            TrySearch(null, filter, results, limit);
 
         long   timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         string sig       = Sign("search|" + sigKey + "|" + timestamp + "|" + results.Count);
@@ -82,6 +101,7 @@
                 searcher.PageSize  = limit;
                 searcher.PropertiesToLoad.Add("sAMAccountName");
                 searcher.PropertiesToLoad.Add("displayName");
+                searcher.PropertiesToLoad.Add("cn");
                 searcher.PropertiesToLoad.Add("mail");
                 searcher.PropertiesToLoad.Add("title");
                 searcher.PropertiesToLoad.Add("employeeID");
@@ -94,8 +114,10 @@
 
                 foreach (SearchResult r in searcher.FindAll()) {
                     string sam  = Prop(r, "sAMAccountName");
+                    // Groups carry cn but often no displayName — fall back to cn.
                     string name = Prop(r, "displayName");
-                    if (string.IsNullOrEmpty(sam) || string.IsNullOrEmpty(name)) continue;
+                    if (string.IsNullOrEmpty(name)) name = Prop(r, "cn");
+                    if (string.IsNullOrEmpty(sam) && string.IsNullOrEmpty(name)) continue;
 
                     // userAccountControl — bit 1 (value 2) means disabled
                     // NOTE: no C# 6 null-conditional (?.) — the inline ASPX compiler
@@ -124,6 +146,7 @@
                         if (g != null) grps.Add(g.ToString());
 
                     out_results.Add(new {
+                        name            = name,
                         sAMAccountName  = sam,
                         displayName     = name,
                         mail            = Prop(r, "mail"),

@@ -432,18 +432,30 @@ function onHodKey(e) {
   else if (e.key === 'Escape') FloatSuggest.close();
 }
 
-function selectHod(hodId, hodName, designation, dept, email) {
+async function selectHod(hodId, hodName, designation, dept, email) {
   document.getElementById('selectedHodId').value = hodId;
   document.getElementById('hodSearchInput').value = hodName;
 
   document.getElementById('selectedHodAvatar').textContent = hodName.charAt(0).toUpperCase();
   document.getElementById('selectedHodName').textContent   = hodName;
-  document.getElementById('selectedHodMeta').textContent   =
-    [hodId, dept, designation, email].filter(Boolean).join(' · ');
+  // Show DB email immediately; replace with AD email once the sidecar responds
+  const metaEl = document.getElementById('selectedHodMeta');
+  metaEl.textContent = [hodId, dept, designation, email || 'Fetching email…'].filter(Boolean).join(' · ');
   document.getElementById('selectedHodCard').style.display = 'flex';
   document.getElementById('assignForm').style.display      = 'block';
-
   FloatSuggest.close();
+
+  // Resolve real email from AD sidecar — DB emails are often stale
+  try {
+    const adRes  = await window.iflFetch(`/admin/ad-search?employeeId=${encodeURIComponent(hodId)}`);
+    const adJson = await adRes.json();
+    const adMail = adJson.success && adJson.results && adJson.results[0] && adJson.results[0].mail;
+    if (adMail) {
+      metaEl.textContent = [hodId, dept, designation, adMail].filter(Boolean).join(' · ');
+    } else if (!email) {
+      metaEl.textContent = [hodId, dept, designation].filter(Boolean).join(' · ');
+    }
+  } catch (_) { /* non-fatal — DB email or placeholder already shown */ }
 }
 
 function clearHodSelection(clearInput = true) {
@@ -701,11 +713,11 @@ function toggleEditMode() {
 
 function renderDetailsContent(editMode) {
   const emp = currentViewedEmployee;
-  const readonlyKeys = ['employeeId','createdAt','updatedAt'];
+  const readonlyKeys = ['employeeId','createdAt','updatedAt','hodName','hodEmail'];
   const groups = [
     { title:'Basic Information',      keys:['employeeId','name','fatherName','email','mobile','gender','dateOfBirth','cnic','bloodGroup'] },
     { title:'Employment Details',     keys:['designation','mainDept','status','joiningDate','location','unit','employeeType','assignmentCategory','employmentCategory','payroll'] },
-    { title:'Organization Structure', keys:['managerName','managerId','managerDesignation','managerEmail','hodId','orgElementName','assignmentNumber'] },
+    { title:'Organization Structure', keys:['managerName','managerId','managerDesignation','managerEmail','hodId','hodName','hodEmail','orgElementName','assignmentNumber'] },
     { title:'System & Other',         keys:['personId','extension','rfid','erpUser','pposDateStart','lastResignedDate','actualTerminationDate','createdAt','updatedAt'] }
   ];
   let html = [];
@@ -715,7 +727,7 @@ function renderDetailsContent(editMode) {
       <div><div style="font-size:1.1rem;font-weight:700;">${emp.name||'Unknown'}</div>
       <div style="font-size:.8rem;color:var(--a-text-muted);">${emp.designation||'No Designation'} · ${emp.mainDept||'No Department'}${emp.location ? ' · ' + emp.location : ''}</div></div>
     </div>`);
-  const alwaysShowKeys = ['employeeId','name','email','designation','mainDept','location','status','hodId'];
+  const alwaysShowKeys = ['employeeId','name','email','designation','mainDept','location','status','hodId','hodName','hodEmail'];
   groups.forEach(g => {
     const visible = g.keys.filter(k => alwaysShowKeys.includes(k) || (emp[k] != null && emp[k] !== '') || editMode);
     if (!visible.length) return;

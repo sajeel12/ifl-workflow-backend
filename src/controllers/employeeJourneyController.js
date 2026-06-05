@@ -32,7 +32,15 @@ export async function listEmployees(req, res) {
         }
 
         const where = {};
-        if (status) where.status = status;
+        // Termination is authoritative via actualTerminationDate — the `status`
+        // column is often left at 'Active' even for terminated staff, so it can't
+        // be trusted for the Active/Terminated filter.
+        if (status === 'Terminated') {
+            where.actualTerminationDate = { [Op.ne]: null };
+        } else if (status === 'Active') {
+            where.actualTerminationDate = { [Op.is]: null };
+        }
+        // status === '' (All Statuses) → no termination filter
         if (department) where.mainDept = department;
         if (location)   where.location = location;
 
@@ -50,7 +58,7 @@ export async function listEmployees(req, res) {
             limit: Math.min(parseInt(limit), 50),
             offset: parseInt(offset),
             order: [['name', 'ASC']],
-            attributes: ['employeeId', 'name', 'email', 'mainDept', 'location', 'status', 'joiningDate']
+            attributes: ['employeeId', 'name', 'email', 'mainDept', 'location', 'status', 'joiningDate', 'actualTerminationDate']
         });
 
         res.json({ total: count, limit: parseInt(limit), offset: parseInt(offset), employees });
@@ -121,7 +129,8 @@ export async function getEmployeeDetail(req, res) {
                 department: employee.mainDept,
                 location:   employee.location,
                 status:     employee.status,
-                joiningDate: employee.joiningDate
+                joiningDate: employee.joiningDate,
+                actualTerminationDate: employee.actualTerminationDate
             },
             summary,
             recentRequests: allRequests.slice(0, 20)

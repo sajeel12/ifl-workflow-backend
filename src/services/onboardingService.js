@@ -433,28 +433,8 @@ const generateAndStorePDF = async (request) => {
         const outputPath = path.resolve('generated_pdfs', filename);
         await pdfService.generateOnboardingPDF(request, outputPath);
         logger.info(`[Onboarding] PDF Generated: ${outputPath}`);
-
-        // Email the Work Order PDF to the DCI Manager for record-keeping.
-        // CC the IT HOD only if their approval was part of this request.
-        try {
-            const dciManagerEmail = await RecipientService.get('DCI_MANAGER', { location: request.location });
-            const ccList = [];
-            if (request.itHodDecidedAt) {
-                const itHodEmail = await RecipientService.get('IT_HOD', { location: request.location });
-                if (itHodEmail && itHodEmail !== dciManagerEmail) ccList.push(itHodEmail);
-            }
-            await emailService.sendWorkOrderPDF(dciManagerEmail, request, outputPath, ccList);
-            await logTimelineEvent(
-                request.id,
-                'Work Order PDF Emailed',
-                'System',
-                `PDF "${filename}" sent to DCI Manager${ccList.length ? ' (cc: ' + ccList.join(', ') + ')' : ''}.`
-            );
-        } catch (mailErr) {
-            // Non-fatal — the workflow continues even if the courtesy email fails
-            logger.error(`[Onboarding] Work Order PDF email failed (non-fatal): ${mailErr.message}`);
-        }
-
+        await request.update({ workOrderPdfPath: outputPath });
+        await logTimelineEvent(request.id, 'Work Order PDF Generated', 'System', `PDF "${filename}" saved for DCI Implementer review.`);
         return outputPath;
     } catch (err) {
         logger.error(`[Onboarding] PDF Gen Error: ${err.message}`);

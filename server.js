@@ -188,7 +188,7 @@ async function shutdown(signal) {
     process.exit(0);
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Retry sequelize.authenticate() up to maxAttempts times with a linear backoff.
 async function connectWithRetry(maxAttempts = 3, delayMs = 2000) {
@@ -252,33 +252,33 @@ async function startServer() {
         // them, but migrations aren't auto-run on startup and the AD-username
         // pair was never written into a migration at all. Missing any one of
         // these causes the workflow-approvers admin page to 500 on findAll().
-        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'approverUsername',          'STRING');
-        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'secondaryUsername',         'STRING');
-        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'isDelegatedTemporarily',    'BOOLEAN');
-        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverEmail',     'STRING');
-        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverName',      'STRING');
-        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverUsername',  'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'approverUsername', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'secondaryUsername', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'isDelegatedTemporarily', 'BOOLEAN');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverEmail', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverName', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverConfigs', 'previousApproverUsername', 'STRING');
 
         // WorkflowApproverLocationOverride — same AD-username pair as above.
-        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverLocationOverrides', 'approverUsername',  'STRING');
+        await ensureColumn(sequelize, isSqlite, 'WorkflowApproverLocationOverrides', 'approverUsername', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'WorkflowApproverLocationOverrides', 'secondaryUsername', 'STRING');
 
         // Delegation in-flight snapshot — populated when an admin temporarily
         // delegates a role and the stage email is re-emitted to the delegate.
         // Stored as TEXT (JSON-serialized by Sequelize). Used by the auto-
         // revert pass in src/services/escalationService.js.
-        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests',  'delegationEvent', 'TEXT');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'delegationEvent', 'TEXT');
         await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'delegationEvent', 'TEXT');
 
         // Offboarding rebuild (plan §1) — new fields on OffboardingRequests.
-        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'currentStageAssigneeEmail',    'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'currentStageAssigneeEmail', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'currentStageAssigneeUsername', 'STRING');
-        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'location',                    'STRING');
-        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'smartXRevoked',               'BOOLEAN');
-        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'doorAccessRevoked',           'BOOLEAN');
-        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciImplementerName',          'STRING');
-        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciImplementerCompletedAt',   'DATETIME');
-        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciProofAttachments',         'TEXT');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'location', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'smartXRevoked', 'BOOLEAN');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'doorAccessRevoked', 'BOOLEAN');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciImplementerName', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciImplementerCompletedAt', 'DATETIME');
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciProofAttachments', 'TEXT');
 
         // One-time status migration. Legacy offboarding rows used the
         // SystemManager/SystemTeam role names; rename to the new DCI Manager /
@@ -383,101 +383,101 @@ async function startServer() {
 
         // Seed sample onboarding requests + timeline events for UI demonstration. Non-fatal.
         try {
-        const onboardingCount = await OnboardingRequest.count();
-        if (onboardingCount === 0) {
-            const now = new Date();
-            const daysAgo = (n) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
-            const hoursAgo = (n) => new Date(now.getTime() - n * 60 * 60 * 1000);
+            const onboardingCount = await OnboardingRequest.count();
+            if (onboardingCount === 0) {
+                const now = new Date();
+                const daysAgo = (n) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+                const hoursAgo = (n) => new Date(now.getTime() - n * 60 * 60 * 1000);
 
-            const samples = [
-                {
-                    status: 'Completed',
-                    employeeId: '1042',
-                    fullName: 'Ahmed Raza',
-                    department: 'IT',
-                    designation: 'Software Engineer',
-                    location: 'Head Office',
-                    joiningDate: daysAgo(30),
-                    hrSubmittedAt: daysAgo(10),
-                    itSubmittedAt: daysAgo(9),
-                    hodApprovedAt: daysAgo(8),
-                    dciSubmittedAt: daysAgo(7),
-                    dciManagerDecidedAt: daysAgo(6),
-                    dciImplementedAt: daysAgo(4),
-                    opsCompletedAt: daysAgo(2),
-                    approvalStatus: 'Approved',
-                    createdAt: daysAgo(10),
-                    timeline: [
-                        { action: 'Submitted', actorRole: 'HR', details: 'Initial onboarding request created', timestamp: daysAgo(10) },
-                        { action: 'Configured', actorRole: 'IT', details: 'IT services configured: email, network, printers', timestamp: daysAgo(9) },
-                        { action: 'Approved', actorRole: 'HOD', details: 'Access approved by HOD', timestamp: daysAgo(8) },
-                        { action: 'Submitted', actorRole: 'DCI', details: 'DCI configuration submitted for manager review', timestamp: daysAgo(7) },
-                        { action: 'Approved', actorRole: 'DCIManager', details: 'DCI Manager approved the configuration', timestamp: daysAgo(6) },
-                        { action: 'Configured', actorRole: 'DCI', details: 'AD account provisioned and group policy applied', timestamp: daysAgo(4) },
-                        { action: 'Approved', actorRole: 'OPS', details: 'OPS verified all services — onboarding complete', timestamp: daysAgo(2) }
-                    ]
-                },
-                {
-                    status: 'Pending',
-                    employeeId: '1055',
-                    fullName: 'Fatima Khan',
-                    department: 'Finance',
-                    designation: 'Financial Analyst',
-                    location: 'Head Office',
-                    joiningDate: daysAgo(5),
-                    hrSubmittedAt: daysAgo(3),
-                    itSubmittedAt: daysAgo(2),
-                    hodApprovedAt: hoursAgo(20),
-                    approvalStatus: 'Pending',
-                    createdAt: daysAgo(3),
-                    timeline: [
-                        { action: 'Submitted', actorRole: 'HR', details: 'Onboarding initiated for Finance hire', timestamp: daysAgo(3) },
-                        { action: 'Configured', actorRole: 'IT', details: 'Basic IT services provisioned', timestamp: daysAgo(2) },
-                        { action: 'Approved', actorRole: 'HOD', details: 'HOD approved, forwarded to DCI team', timestamp: hoursAgo(20) }
-                    ]
-                },
-                {
-                    status: 'Rejected',
-                    employeeId: '1061',
-                    fullName: 'Bilal Ahmed',
-                    department: 'HR',
-                    designation: 'HR Officer',
-                    joiningDate: daysAgo(14),
-                    hrSubmittedAt: daysAgo(14),
-                    itSubmittedAt: daysAgo(13),
-                    approvalStatus: 'Rejected',
-                    createdAt: daysAgo(14),
-                    timeline: [
-                        { action: 'Submitted', actorRole: 'HR', details: 'Onboarding request submitted', timestamp: daysAgo(14) },
-                        { action: 'Configured', actorRole: 'IT', details: 'Services configured', timestamp: daysAgo(13) },
-                        { action: 'Rejected', actorRole: 'HOD', details: 'Rejected: duplicate account exists for this person', timestamp: daysAgo(12) }
-                    ]
-                },
-                {
-                    status: 'Draft',
-                    employeeId: '1078',
-                    fullName: 'Sara Malik',
-                    department: 'Marketing',
-                    designation: 'Marketing Executive',
-                    joiningDate: daysAgo(1),
-                    hrSubmittedAt: hoursAgo(6),
-                    approvalStatus: 'Pending',
-                    createdAt: hoursAgo(6),
-                    timeline: [
-                        { action: 'Submitted', actorRole: 'HR', details: 'Draft created — awaiting IT configuration', timestamp: hoursAgo(6) }
-                    ]
-                }
-            ];
+                const samples = [
+                    {
+                        status: 'Completed',
+                        employeeId: '1042',
+                        fullName: 'Ahmed Raza',
+                        department: 'IT',
+                        designation: 'Software Engineer',
+                        location: 'Head Office',
+                        joiningDate: daysAgo(30),
+                        hrSubmittedAt: daysAgo(10),
+                        itSubmittedAt: daysAgo(9),
+                        hodApprovedAt: daysAgo(8),
+                        dciSubmittedAt: daysAgo(7),
+                        dciManagerDecidedAt: daysAgo(6),
+                        dciImplementedAt: daysAgo(4),
+                        opsCompletedAt: daysAgo(2),
+                        approvalStatus: 'Approved',
+                        createdAt: daysAgo(10),
+                        timeline: [
+                            { action: 'Submitted', actorRole: 'HR', details: 'Initial onboarding request created', timestamp: daysAgo(10) },
+                            { action: 'Configured', actorRole: 'IT', details: 'IT services configured: email, network, printers', timestamp: daysAgo(9) },
+                            { action: 'Approved', actorRole: 'HOD', details: 'Access approved by HOD', timestamp: daysAgo(8) },
+                            { action: 'Submitted', actorRole: 'DCI', details: 'DCI configuration submitted for manager review', timestamp: daysAgo(7) },
+                            { action: 'Approved', actorRole: 'DCIManager', details: 'DCI Manager approved the configuration', timestamp: daysAgo(6) },
+                            { action: 'Configured', actorRole: 'DCI', details: 'AD account provisioned and group policy applied', timestamp: daysAgo(4) },
+                            { action: 'Approved', actorRole: 'OPS', details: 'OPS verified all services — onboarding complete', timestamp: daysAgo(2) }
+                        ]
+                    },
+                    {
+                        status: 'Pending',
+                        employeeId: '1055',
+                        fullName: 'Fatima Khan',
+                        department: 'Finance',
+                        designation: 'Financial Analyst',
+                        location: 'Head Office',
+                        joiningDate: daysAgo(5),
+                        hrSubmittedAt: daysAgo(3),
+                        itSubmittedAt: daysAgo(2),
+                        hodApprovedAt: hoursAgo(20),
+                        approvalStatus: 'Pending',
+                        createdAt: daysAgo(3),
+                        timeline: [
+                            { action: 'Submitted', actorRole: 'HR', details: 'Onboarding initiated for Finance hire', timestamp: daysAgo(3) },
+                            { action: 'Configured', actorRole: 'IT', details: 'Basic IT services provisioned', timestamp: daysAgo(2) },
+                            { action: 'Approved', actorRole: 'HOD', details: 'HOD approved, forwarded to DCI team', timestamp: hoursAgo(20) }
+                        ]
+                    },
+                    {
+                        status: 'Rejected',
+                        employeeId: '1061',
+                        fullName: 'Bilal Ahmed',
+                        department: 'HR',
+                        designation: 'HR Officer',
+                        joiningDate: daysAgo(14),
+                        hrSubmittedAt: daysAgo(14),
+                        itSubmittedAt: daysAgo(13),
+                        approvalStatus: 'Rejected',
+                        createdAt: daysAgo(14),
+                        timeline: [
+                            { action: 'Submitted', actorRole: 'HR', details: 'Onboarding request submitted', timestamp: daysAgo(14) },
+                            { action: 'Configured', actorRole: 'IT', details: 'Services configured', timestamp: daysAgo(13) },
+                            { action: 'Rejected', actorRole: 'HOD', details: 'Rejected: duplicate account exists for this person', timestamp: daysAgo(12) }
+                        ]
+                    },
+                    {
+                        status: 'Draft',
+                        employeeId: '1078',
+                        fullName: 'Sara Malik',
+                        department: 'Marketing',
+                        designation: 'Marketing Executive',
+                        joiningDate: daysAgo(1),
+                        hrSubmittedAt: hoursAgo(6),
+                        approvalStatus: 'Pending',
+                        createdAt: hoursAgo(6),
+                        timeline: [
+                            { action: 'Submitted', actorRole: 'HR', details: 'Draft created — awaiting IT configuration', timestamp: hoursAgo(6) }
+                        ]
+                    }
+                ];
 
-            for (const sample of samples) {
-                const { timeline, ...requestData } = sample;
-                const req = await OnboardingRequest.create(requestData);
-                for (const ev of timeline) {
-                    await TimelineEvent.create({ ...ev, requestId: req.id });
+                for (const sample of samples) {
+                    const { timeline, ...requestData } = sample;
+                    const req = await OnboardingRequest.create(requestData);
+                    for (const ev of timeline) {
+                        await TimelineEvent.create({ ...ev, requestId: req.id });
+                    }
                 }
+                logger.info(`Seeded ${samples.length} sample onboarding requests with timeline events.`);
             }
-            logger.info(`Seeded ${samples.length} sample onboarding requests with timeline events.`);
-        }
         } catch (err) {
             logger.warn(`[Seed] Sample onboarding seed skipped: ${err.message}`);
         }

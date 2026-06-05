@@ -322,6 +322,83 @@ export const searchUsersByName = async (q) => {
     }
 };
 
+/**
+ * Search AD groups by cn / sAMAccountName / mail via the adsearch.aspx sidecar (?groups=).
+ * Returns an array of { name, sAMAccountName, mail, description } — empty on failure.
+ */
+// Group lookups reuse the already-deployed adsearch.aspx sidecar (ADSEARCH_URL)
+// via its ?groups= mode — the same proven endpoint that powers the 360 profile
+// and approver/HOD lookups. No separate sidecar deployment required.
+export const searchADGroups = async (q) => {
+    if (!q || q.length < 2 || !ADSEARCH_URL) return [];
+    try {
+        const url = new URL(ADSEARCH_URL);
+        url.searchParams.set('groups', q);
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6000) });
+        if (!res.ok) { logger.warn(`[ADGroups] HTTP ${res.status}`); return []; }
+        const data = await res.json();
+        if (!Array.isArray(data.results)) return [];
+        const age      = Math.abs(Date.now() / 1000 - data.timestamp);
+        const expected = _hmacHex(`search|group:${q}|${data.timestamp}|${data.results.length}`);
+        if (age > 30 || data.signature !== expected) {
+            logger.warn(`[ADGroups] HMAC mismatch for query "${q}"`);
+            return [];
+        }
+        return data.results;
+    } catch (e) {
+        logger.warn(`[ADGroups] sidecar error: ${e.message}`);
+        return [];
+    }
+};
+
+/**
+ * Fetch EVERY AD group via the adsearch.aspx sidecar (?groups=all mode).
+ * Used to populate the DCI form's "Member Of" multi-select dropdown once on load.
+ * Returns an array of { name, sAMAccountName, mail, description } — empty on failure.
+ */
+export const getAllADGroups = async () => {
+    if (!ADSEARCH_URL) return [];
+    try {
+        const url = new URL(ADSEARCH_URL);
+        url.searchParams.set('groups', 'all');
+        // Larger timeout — listing all groups is heavier than a substring search.
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(15000) });
+        if (!res.ok) { logger.warn(`[ADGroups] all HTTP ${res.status}`); return []; }
+        const data = await res.json();
+        if (!Array.isArray(data.results)) return [];
+        const age      = Math.abs(Date.now() / 1000 - data.timestamp);
+        const expected = _hmacHex(`search|group:all|${data.timestamp}|${data.results.length}`);
+        if (age > 30 || data.signature !== expected) {
+            logger.warn(`[ADGroups] HMAC mismatch on all-groups response`);
+            return [];
+        }
+        logger.info(`[ADGroups] Loaded ${data.results.length} groups (all mode)`);
+        return data.results;
+    } catch (e) {
+        logger.warn(`[ADGroups] all-groups sidecar error: ${e.message}`);
+        return [];
+    }
+};
+
+/**
+ * Check whether an AD account with the given login/display name already exists.
+ * Uses the adsearch.aspx substring search, then confirms an EXACT
+ * (case-insensitive) match on sAMAccountName or displayName — so "israrhaq"
+ * returns the existing account but is not a false-positive for "israrhaq2".
+ * Returns { exists: boolean, match: {...}|null }.
+ */
+export const checkAccountNameExists = async (name) => {
+    const needle = (name || '').trim();
+    if (!needle) return { exists: false, match: null };
+    const results = await searchUsersByName(needle);
+    const lc = needle.toLowerCase();
+    const match = results.find(r =>
+        (r.sAMAccountName && r.sAMAccountName.toLowerCase() === lc) ||
+        (r.displayName    && r.displayName.toLowerCase()    === lc)
+    );
+    return { exists: !!match, match: match || null };
+};
+
 // ── Internal: search by arbitrary LDAP filter, returns first match ────────────────
 function _searchByFilter(client, filter, attrs, label) {
     return new Promise(resolve => {

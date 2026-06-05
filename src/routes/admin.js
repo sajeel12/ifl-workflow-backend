@@ -11,14 +11,14 @@ const router = express.Router();
 // so IIS Windows-Auth never re-prompts. Non-admins get a 403 render page.
 // If the header is absent (direct Node access), guard passes through and the
 // API guards on each data call still protect the data.
-router.get('/hod-panel',          adminPageGuard, adminController.renderHodPanel);
-router.get('/settings',           adminPageGuard, adminController.renderSettingsPanel);
-router.get('/offboarding',        adminPageGuard, adminController.renderOffboardingPanel);
+router.get('/hod-panel', adminPageGuard, adminController.renderHodPanel);
+router.get('/settings', adminPageGuard, adminController.renderSettingsPanel);
+router.get('/offboarding', adminPageGuard, adminController.renderOffboardingPanel);
 router.get('/workflow-approvers', adminPageGuard, adminController.renderWorkflowApproversPanel);
-router.get('/onboarding-history',  adminPageGuard, adminController.renderOnboardingHistoryPanel);
+router.get('/onboarding-history', adminPageGuard, adminController.renderOnboardingHistoryPanel);
 router.get('/offboarding-history', adminPageGuard, adminController.renderOffboardingHistoryPanel);
-router.get('/system-config',      adminPageGuard, adminController.renderSystemConfigPanel);
-router.get('/employee-journey',   adminPageGuard, adminController.renderEmployeeJourneyPanel);
+router.get('/system-config', adminPageGuard, adminController.renderSystemConfigPanel);
+router.get('/employee-journey', adminPageGuard, adminController.renderEmployeeJourneyPanel);
 
 // ── API guard ─────────────────────────────────────────────────────────────────
 // adminApiGuard reads X-Auth-User directly (same as adminPageGuard) and returns
@@ -26,40 +26,41 @@ router.get('/employee-journey',   adminPageGuard, adminController.renderEmployee
 // login popup for every fetch() call, which breaks the admin page JS.
 const guard = [adminApiGuard];
 
-router.get('/employees',                        ...guard, adminController.searchEmployees);
-router.get('/employee/:id',                     ...guard, adminController.getEmployeeDetails);
-router.put('/employee/:id',                     ...guard, adminController.updateEmployeeDetails);
-router.post('/assign-hod',                      ...guard, adminController.assignHod);
-router.post('/remove-hod',                      ...guard, adminController.removeHod);
-router.post('/sync-now',                        ...guard, adminController.triggerManualSync);
-router.post('/update-sync-config',              ...guard, adminController.updateSyncConfig);
-router.get('/departments',                      ...guard, adminController.getDepartments);
-router.post('/assign-department-hod',           ...guard, adminController.assignDepartmentHod);
-router.get('/locations',                        ...guard, adminController.getLocations);
-router.get('/workflow-approvers/by-location',   ...guard, adminController.getApproversForLocation);
-router.put('/workflow-approvers/by-location',   ...guard, adminController.upsertApproverForLocation);
-router.get('/workflow-approvers/api',           ...guard, adminController.getWorkflowApprovers);
-router.put('/workflow-approvers/:id/revert',    ...guard, adminController.revertDelegation);
-router.put('/workflow-approvers/:id',           ...guard, adminController.updateWorkflowApprover);
-router.get('/onboarding-requests',              ...guard, adminController.getOnboardingRequests);
-router.get('/onboarding-timeline/:id',          ...guard, adminController.getOnboardingTimeline);
-router.get('/offboarding-requests',             ...guard, adminController.getOffboardingRequests);
-router.get('/offboarding-timeline/:id',         ...guard, adminController.getOffboardingTimeline);
+router.get('/employees', ...guard, adminController.searchEmployees);
+router.get('/employee/:id', ...guard, adminController.getEmployeeDetails);
+router.put('/employee/:id', ...guard, adminController.updateEmployeeDetails);
+router.post('/assign-hod', ...guard, adminController.assignHod);
+router.post('/remove-hod', ...guard, adminController.removeHod);
+router.post('/sync-now', ...guard, adminController.triggerManualSync);
+router.post('/update-sync-config', ...guard, adminController.updateSyncConfig);
+router.get('/departments', ...guard, adminController.getDepartments);
+router.post('/assign-department-hod', ...guard, adminController.assignDepartmentHod);
+router.get('/locations', ...guard, adminController.getLocations);
+router.get('/workflow-approvers/by-location', ...guard, adminController.getApproversForLocation);
+router.put('/workflow-approvers/by-location', ...guard, adminController.upsertApproverForLocation);
+router.get('/workflow-approvers/api', ...guard, adminController.getWorkflowApprovers);
+router.put('/workflow-approvers/:id/revert', ...guard, adminController.revertDelegation);
+router.put('/workflow-approvers/:id', ...guard, adminController.updateWorkflowApprover);
+router.get('/onboarding-requests', ...guard, adminController.getOnboardingRequests);
+router.get('/onboarding-timeline/:id', ...guard, adminController.getOnboardingTimeline);
+router.get('/offboarding-requests', ...guard, adminController.getOffboardingRequests);
+router.get('/offboarding-timeline/:id', ...guard, adminController.getOffboardingTimeline);
 
 // ── Employee Journey APIs (admin-only, adminApiGuard) ─────────────────────
-router.get('/ej/employees',                              ...guard, ejController.listEmployees);
-router.get('/ej/employees-ad-batch',                     ...guard, ejController.getEmployeesAdBatch);
-router.get('/ej/employees/:employeeNumber',              ...guard, ejController.getEmployeeDetail);
-router.get('/ej/employees/:employeeNumber/ad-profile',   ...guard, ejController.getEmployeeAdProfile);
-router.get('/ej/requests/:requestId/timeline',           ...guard, ejController.getRequestTimeline);
-router.post('/system-config/update',            ...guard, adminController.updateSystemConfig);
-router.post('/onboarding/:id/resend-email',     ...guard, adminController.resendStageEmail);
-router.post('/offboarding/:id/resend-email',    ...guard, adminController.resendOffboardingStageEmail);
+router.get('/ej/employees', ...guard, ejController.listEmployees);
+router.get('/ej/employees-ad-batch', ...guard, ejController.getEmployeesAdBatch);
+router.get('/ej/employees/:employeeNumber', ...guard, ejController.getEmployeeDetail);
+router.get('/ej/employees/:employeeNumber/ad-profile', ...guard, ejController.getEmployeeAdProfile);
+router.get('/ej/requests/:requestId/timeline', ...guard, ejController.getRequestTimeline);
+router.post('/system-config/update', ...guard, adminController.updateSystemConfig);
+router.post('/onboarding/:id/resend-email', ...guard, adminController.resendStageEmail);
+router.post('/offboarding/:id/resend-email', ...guard, adminController.resendOffboardingStageEmail);
+router.delete('/onboarding/:id', ...guard, adminController.adminDeleteRequest);
 
 // Search AD users by name/sAMAccountName/email — powers the approver search box.
 // Also accepts ?employeeId=X for a reliable exact-match lookup by employeeID attribute.
 router.get('/ad-search', ...guard, async (req, res) => {
-    const q          = (req.query.q          || '').trim();
+    const q = (req.query.q || '').trim();
     const employeeId = (req.query.employeeId || '').trim();
 
     try {
@@ -85,10 +86,10 @@ router.get('/ad-user', ...guard, async (req, res) => {
         const user = await findUserByEmail(email);
         if (!user) return res.json({ found: false, sAMAccountName: null, displayName: null });
         res.json({
-            found:          true,
+            found: true,
             sAMAccountName: user.sAMAccountName || null,
-            displayName:    user.displayName    || null,
-            mail:           user.mail           || null,
+            displayName: user.displayName || null,
+            mail: user.mail || null,
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

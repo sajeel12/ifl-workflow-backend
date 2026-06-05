@@ -368,7 +368,12 @@ function fmtD(d) {
 }
 
 function renderCenter({ employee, summary, recentRequests }, ad) {
-  const empStatusBadge = `<span class="badge badge--${employee.status === 'Active' ? 'green' : 'gray'}">${escHtml(employee.status || 'Unknown')}</span>`;
+  // Termination is authoritative via actualTerminationDate — the status column
+  // is often left at 'Active' for terminated staff, so prefer the date.
+  const isTerminated = !!employee.actualTerminationDate;
+  const empStatusBadge = isTerminated
+    ? `<span class="badge badge--red">Terminated</span>`
+    : `<span class="badge badge--${employee.status === 'Active' ? 'green' : 'gray'}">${escHtml(employee.status || 'Unknown')}</span>`;
   const adStatusBadge  = ad
     ? `<span class="badge badge--${ad.accountEnabled ? 'green' : 'red'}">${ad.accountStatus}</span>`
     : '';

@@ -53,7 +53,6 @@ async function loadService({ status, extraRequestFields = {} }) {
     }));
     await jest.unstable_mockModule('../src/services/emailService.js', () => ({
         sendOnboardingNotification: jest.fn().mockResolvedValue(undefined),
-        sendWorkOrderPDF:           jest.fn().mockResolvedValue(undefined),
         sendRequesterNotification:  jest.fn().mockResolvedValue(undefined)
     }));
     await jest.unstable_mockModule('../src/services/pdfService.js', () => ({

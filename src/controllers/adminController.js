@@ -14,6 +14,7 @@ import cronService from '../services/cronService.js';
 import * as emailService from '../services/emailService.js';
 import RecipientService from '../services/recipientService.js';
 import { humanizeAction, humanizeDetails, humanizeDetailsHTML } from '../utils/historyFormatter.js';
+import { findUserByEmployeeIdViaSidecar } from '../services/adService.js';
 
 // Map workflow status -> the role currently responsible
 const STATUS_TO_RESEND = {
@@ -29,12 +30,12 @@ const STATUS_TO_RESEND = {
 
 // Notification email type → portal entry slug. HOD_REVIEW has no portal.
 const EMAIL_TYPE_TO_PORTAL_SLUG = {
-    IT_OPS:               'it-ops',
-    DCI_INPUT:            'dci-team',
+    IT_OPS: 'it-ops',
+    DCI_INPUT: 'dci-team',
     DCI_MANAGER_APPROVAL: 'dci-manager',
-    IT_HOD_APPROVAL:      'it-hod',
-    DCI_IMPLEMENTATION:   'dci-implementer',
-    OPS_ACTION:           'it-ops',
+    IT_HOD_APPROVAL: 'it-hod',
+    DCI_IMPLEMENTATION: 'dci-implementer',
+    OPS_ACTION: 'it-ops',
 };
 
 // Delegation roles own a single pending status. When admin reassigns the role,
@@ -43,7 +44,7 @@ const EMAIL_TYPE_TO_PORTAL_SLUG = {
 //   (b) the old delegate's token is rejected by the form POST guard (live config).
 const DELEGATION_ROLE_TO_STATUS = {
     DCI_MANAGER: 'PendingDCIManager',
-    IT_HOD:      'PendingITHOD',
+    IT_HOD: 'PendingITHOD',
 };
 
 // Send the stage action email to a specific recipient for an in-flight request.
@@ -60,8 +61,8 @@ async function sendDelegationNotification(inflightReq, recipientEmail, kind = 'o
         if (!inflightReq.currentStageToken) return;
         if (kind === 'offboarding') {
             const type = inflightReq.status === 'PendingDCIManager' ? 'DCI_MANAGER_APPROVAL'
-                       : inflightReq.status === 'PendingDCIImplementation' ? 'DCI_IMPLEMENTER'
-                       : null;
+                : inflightReq.status === 'PendingDCIImplementation' ? 'DCI_IMPLEMENTER'
+                    : null;
             if (!type) return;
             const actionLink = `${process.env.APP_URL}/api/offboarding/handle?token=${inflightReq.currentStageToken}`;
             await emailService.sendOffboardingNotification(recipientEmail, inflightReq, actionLink, type);
@@ -91,7 +92,7 @@ async function rebindInFlightToDelegate({
     if (!pendingStatus || !newEmail) return 0;
     let count = 0;
 
-    const ONBOARDING  = { model: OnboardingRequest,  kind: 'onboarding'  };
+    const ONBOARDING = { model: OnboardingRequest, kind: 'onboarding' };
     const OFFBOARDING = { model: OffboardingRequest, kind: 'offboarding' };
 
     for (const { model, kind } of [ONBOARDING, OFFBOARDING]) {
@@ -102,13 +103,13 @@ async function rebindInFlightToDelegate({
                 || prevEmail
                 || null;
             const delegationEvent = isRevert ? null : {
-                delegatedAt:           new Date().toISOString(),
-                delegatedFromEmail:    r.currentStageAssigneeEmail || prevEmail || null,
-                delegatedToEmail:      newEmail,
+                delegatedAt: new Date().toISOString(),
+                delegatedFromEmail: r.currentStageAssigneeEmail || prevEmail || null,
+                delegatedToEmail: newEmail,
                 originalAssigneeEmail: originalEmail
             };
             await r.update({
-                currentStageAssigneeEmail:    newEmail,
+                currentStageAssigneeEmail: newEmail,
                 currentStageAssigneeUsername: newUsername || null,
                 delegationEvent
             });
@@ -193,13 +194,22 @@ class AdminController {
             }
 
             let hodName = null;
+            let hodEmail = null;
             if (employee.hodId) {
-                const hod = await Employee.findByPk(employee.hodId, { attributes: ['name'] });
-                if (hod) hodName = hod.name;
+                const hod = await Employee.findByPk(employee.hodId, { attributes: ['name', 'employeeId', 'email'] });
+                if (hod) {
+                    hodName = hod.name;
+                    // Resolve real email from AD sidecar — DB emails are often stale
+                    try {
+                        const adHod = await findUserByEmployeeIdViaSidecar(hod.employeeId || employee.hodId);
+                        if (adHod && adHod.mail) hodEmail = adHod.mail;
+                    } catch (_) { }
+                    if (!hodEmail) hodEmail = hod.email || null; // fallback to DB
+                }
             }
 
             // Return full data
-            res.json({ success: true, data: { ...employee.toJSON(), hodName } });
+            res.json({ success: true, data: { ...employee.toJSON(), hodName, hodEmail } });
         } catch (error) {
             console.error('Error fetching employee details:', error);
             res.status(500).json({ success: false, error: 'Failed to fetch employee details' });
@@ -478,7 +488,7 @@ class AdminController {
             // they're fixed groups defined in src/utils/locationGroups.js.
             // The page passes both the group keys (used as <option value>)
             // and a parallel `locationLabels` map for human display.
-            const locations      = LOCATION_GROUPS.map(g => g.key);
+            const locations = LOCATION_GROUPS.map(g => g.key);
             const locationLabels = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key, g.label]));
             res.render('pages/admin_workflow_approvers', {
                 activeTab: 'approvers',
@@ -516,7 +526,7 @@ class AdminController {
             // return both the keys (for API consumers) and the human labels.
             return res.json({
                 success: true,
-                data:   LOCATION_GROUPS.map(g => g.key),
+                data: LOCATION_GROUPS.map(g => g.key),
                 groups: LOCATION_GROUPS
             });
         } catch (error) {
@@ -547,22 +557,22 @@ class AdminController {
             // re-rendered cards on the client can PUT to /workflow-approvers/:id.
             if (isDefault) {
                 const data = globals.map(g => ({
-                    id:                 g.id,
-                    roleKey:            g.roleKey,
-                    label:              g.label,
-                    description:        g.description,
-                    workflowStage:      g.workflowStage,
-                    approverEmail:      g.approverEmail,
-                    approverName:       g.approverName,
-                    approverUsername:   g.approverUsername,
-                    secondaryEmail:     g.secondaryEmail,
-                    secondaryName:      g.secondaryName,
-                    secondaryUsername:  g.secondaryUsername,
-                    primaryExpiredAt:   g.primaryExpiredAt,
-                    isActive:           g.isActive,
-                    isOverride:         false,
-                    overrideId:         null,
-                    location:           null
+                    id: g.id,
+                    roleKey: g.roleKey,
+                    label: g.label,
+                    description: g.description,
+                    workflowStage: g.workflowStage,
+                    approverEmail: g.approverEmail,
+                    approverName: g.approverName,
+                    approverUsername: g.approverUsername,
+                    secondaryEmail: g.secondaryEmail,
+                    secondaryName: g.secondaryName,
+                    secondaryUsername: g.secondaryUsername,
+                    primaryExpiredAt: g.primaryExpiredAt,
+                    isActive: g.isActive,
+                    isOverride: false,
+                    overrideId: null,
+                    location: null
                 }));
                 return res.json({ success: true, location: null, data });
             }
@@ -580,39 +590,39 @@ class AdminController {
                 const o = overrideByRole.get(g.roleKey);
                 if (o) {
                     return {
-                        roleKey:            g.roleKey,
-                        label:              g.label,
-                        description:        g.description,
-                        workflowStage:      g.workflowStage,
-                        approverEmail:      o.approverEmail,
-                        approverName:       o.approverName,
-                        approverUsername:   o.approverUsername,
-                        secondaryEmail:     o.secondaryEmail,
-                        secondaryName:      o.secondaryName,
-                        secondaryUsername:  o.secondaryUsername,
-                        primaryExpiredAt:   o.primaryExpiredAt,
-                        isActive:           o.isActive,
-                        isOverride:         true,
-                        overrideId:         o.id,
+                        roleKey: g.roleKey,
+                        label: g.label,
+                        description: g.description,
+                        workflowStage: g.workflowStage,
+                        approverEmail: o.approverEmail,
+                        approverName: o.approverName,
+                        approverUsername: o.approverUsername,
+                        secondaryEmail: o.secondaryEmail,
+                        secondaryName: o.secondaryName,
+                        secondaryUsername: o.secondaryUsername,
+                        primaryExpiredAt: o.primaryExpiredAt,
+                        isActive: o.isActive,
+                        isOverride: true,
+                        overrideId: o.id,
                         location
                     };
                 }
                 return {
-                    roleKey:            g.roleKey,
-                    label:              g.label,
-                    description:        g.description,
-                    workflowStage:      g.workflowStage,
+                    roleKey: g.roleKey,
+                    label: g.label,
+                    description: g.description,
+                    workflowStage: g.workflowStage,
                     // Show the global value as a "ghost" so admins know what would be used.
-                    approverEmail:      g.approverEmail,
-                    approverName:       g.approverName,
-                    approverUsername:   g.approverUsername,
-                    secondaryEmail:     g.secondaryEmail,
-                    secondaryName:      g.secondaryName,
-                    secondaryUsername:  g.secondaryUsername,
-                    primaryExpiredAt:   null,
-                    isActive:           g.isActive,
-                    isOverride:         false,
-                    overrideId:         null,
+                    approverEmail: g.approverEmail,
+                    approverName: g.approverName,
+                    approverUsername: g.approverUsername,
+                    secondaryEmail: g.secondaryEmail,
+                    secondaryName: g.secondaryName,
+                    secondaryUsername: g.secondaryUsername,
+                    primaryExpiredAt: null,
+                    isActive: g.isActive,
+                    isOverride: false,
+                    overrideId: null,
                     location
                 };
             });
@@ -652,13 +662,13 @@ class AdminController {
                 });
             }
 
-            const approverEmail  = (req.body.approverEmail  || '').trim() || null;
-            const approverName   = (req.body.approverName   || '').trim() || null;
+            const approverEmail = (req.body.approverEmail || '').trim() || null;
+            const approverName = (req.body.approverName || '').trim() || null;
             const secondaryEmail = (req.body.secondaryEmail || '').trim() || null;
-            const secondaryName  = (req.body.secondaryName  || '').trim() || null;
-            const isActive       = req.body.isActive !== undefined ? Boolean(req.body.isActive) : true;
+            const secondaryName = (req.body.secondaryName || '').trim() || null;
+            const isActive = req.body.isActive !== undefined ? Boolean(req.body.isActive) : true;
 
-            const approverUsername  = (req.body.approverUsername  || '').trim().toLowerCase() || null;
+            const approverUsername = (req.body.approverUsername || '').trim().toLowerCase() || null;
             const secondaryUsername = (req.body.secondaryUsername || '').trim().toLowerCase() || null;
 
             // Verify the global role exists; we won't accept overrides for
@@ -686,10 +696,10 @@ class AdminController {
             // which has no guaranteed order). Check both username and email fields since
             // older rows may lack a username.
             const uniquenessConditions = [];
-            if (approverUsername)  uniquenessConditions.push({ approverUsername }, { secondaryUsername: approverUsername });
+            if (approverUsername) uniquenessConditions.push({ approverUsername }, { secondaryUsername: approverUsername });
             if (secondaryUsername) uniquenessConditions.push({ approverUsername: secondaryUsername }, { secondaryUsername });
-            if (approverEmail)     uniquenessConditions.push({ approverEmail }, { secondaryEmail: approverEmail });
-            if (secondaryEmail)    uniquenessConditions.push({ approverEmail: secondaryEmail }, { secondaryEmail });
+            if (approverEmail) uniquenessConditions.push({ approverEmail }, { secondaryEmail: approverEmail });
+            if (secondaryEmail) uniquenessConditions.push({ approverEmail: secondaryEmail }, { secondaryEmail });
 
             if (uniquenessConditions.length > 0) {
                 const conflict = await WorkflowApproverLocationOverride.findOne({
@@ -704,8 +714,8 @@ class AdminController {
                     return res.status(409).json({
                         success: false,
                         error: `This person is already assigned to "${roleKey}" at location "${conflict.location}". ` +
-                               `Each person can only be assigned to one location per role — ` +
-                               `otherwise request routing becomes non-deterministic.`
+                            `Each person can only be assigned to one location per role — ` +
+                            `otherwise request routing becomes non-deterministic.`
                     });
                 }
             }
@@ -757,33 +767,33 @@ class AdminController {
                 return res.status(404).json({ success: false, error: 'Approver config not found' });
             }
 
-            const pEmail = approverEmail?.trim()   || null;
-            const sEmail = secondaryEmail?.trim()   || null;
-            const pUser  = approverUsername?.trim()?.toLowerCase()  || null;
-            const sUser  = secondaryUsername?.trim()?.toLowerCase() || null;
+            const pEmail = approverEmail?.trim() || null;
+            const sEmail = secondaryEmail?.trim() || null;
+            const pUser = approverUsername?.trim()?.toLowerCase() || null;
+            const sUser = secondaryUsername?.trim()?.toLowerCase() || null;
 
             const isDelegationRole = !!DELEGATION_ROLE_TO_STATUS[config.roleKey];
-            const isTemporary      = isDelegationRole && delegationType === 'temporary';
+            const isTemporary = isDelegationRole && delegationType === 'temporary';
 
             // Snapshot the current primary before overwriting so the original person
             // retains read-only portal access and can be restored in one click.
-            const prevEmail = isTemporary ? (config.approverEmail    || null) : null;
-            const prevName  = isTemporary ? (config.approverName     || null) : null;
-            const prevUser  = isTemporary ? (config.approverUsername || null) : null;
+            const prevEmail = isTemporary ? (config.approverEmail || null) : null;
+            const prevName = isTemporary ? (config.approverName || null) : null;
+            const prevUser = isTemporary ? (config.approverUsername || null) : null;
 
             await config.update({
-                approverEmail:            pEmail,
-                approverName:             approverName?.trim()  || null,
-                approverUsername:         pUser,
-                secondaryEmail:           sEmail,
-                secondaryName:            secondaryName?.trim() || null,
-                secondaryUsername:        sUser,
-                isActive:                 isActive !== undefined ? Boolean(isActive) : config.isActive,
-                primaryExpiredAt:         null,
-                lastAssignedAt:           null,
-                isDelegatedTemporarily:   isTemporary,
-                previousApproverEmail:    prevEmail,
-                previousApproverName:     prevName,
+                approverEmail: pEmail,
+                approverName: approverName?.trim() || null,
+                approverUsername: pUser,
+                secondaryEmail: sEmail,
+                secondaryName: secondaryName?.trim() || null,
+                secondaryUsername: sUser,
+                isActive: isActive !== undefined ? Boolean(isActive) : config.isActive,
+                primaryExpiredAt: null,
+                lastAssignedAt: null,
+                isDelegatedTemporarily: isTemporary,
+                previousApproverEmail: prevEmail,
+                previousApproverName: prevName,
                 previousApproverUsername: prevUser,
             });
 
@@ -796,12 +806,12 @@ class AdminController {
             const pendingStatus = DELEGATION_ROLE_TO_STATUS[config.roleKey];
             const rebound = await rebindInFlightToDelegate({
                 pendingStatus,
-                prevEmail:   prevEmail,
-                newEmail:    pEmail,
+                prevEmail: prevEmail,
+                newEmail: pEmail,
                 newUsername: pUser,
-                roleLabel:   config.label,
+                roleLabel: config.label,
                 isTemporary,
-                isRevert:    false
+                isRevert: false
             });
 
             const msg = rebound > 0
@@ -836,30 +846,30 @@ class AdminController {
             }
 
             const restoredEmail = config.previousApproverEmail;
-            const restoredName  = config.previousApproverName  || null;
-            const restoredUser  = config.previousApproverUsername || null;
+            const restoredName = config.previousApproverName || null;
+            const restoredUser = config.previousApproverUsername || null;
 
             await config.update({
-                approverEmail:            restoredEmail,
-                approverName:             restoredName,
-                approverUsername:         restoredUser,
-                isDelegatedTemporarily:   false,
-                previousApproverEmail:    null,
-                previousApproverName:     null,
+                approverEmail: restoredEmail,
+                approverName: restoredName,
+                approverUsername: restoredUser,
+                isDelegatedTemporarily: false,
+                previousApproverEmail: null,
+                previousApproverName: null,
                 previousApproverUsername: null,
-                primaryExpiredAt:         null,
-                lastAssignedAt:           null,
+                primaryExpiredAt: null,
+                lastAssignedAt: null,
             });
 
             const pendingStatus = DELEGATION_ROLE_TO_STATUS[config.roleKey];
             const rebound = await rebindInFlightToDelegate({
                 pendingStatus,
-                prevEmail:   null,
-                newEmail:    restoredEmail,
+                prevEmail: null,
+                newEmail: restoredEmail,
                 newUsername: restoredUser,
-                roleLabel:   config.label,
+                roleLabel: config.label,
                 isTemporary: false,
-                isRevert:    true
+                isRevert: true
             });
 
             const msg = rebound > 0
@@ -1017,8 +1027,8 @@ class AdminController {
         try {
             const { page = 1, limit = 15, status, search } = req.query;
             const limitInt = parseInt(limit, 10);
-            const pageInt  = parseInt(page, 10);
-            const offset   = (pageInt - 1) * limitInt;
+            const pageInt = parseInt(page, 10);
+            const offset = (pageInt - 1) * limitInt;
 
             const whereClause = {};
             if (status) whereClause.status = status;
@@ -1026,7 +1036,7 @@ class AdminController {
                 const searchStr = `%${search}%`;
                 whereClause[Op.or] = [
                     { employeeId: { [Op.like]: searchStr } },
-                    { fullName:   { [Op.like]: searchStr } },
+                    { fullName: { [Op.like]: searchStr } },
                     { department: { [Op.like]: searchStr } }
                 ];
             }
@@ -1196,7 +1206,7 @@ class AdminController {
 
             // Map the current pending status → role + email type.
             const OFFBOARDING_STAGE_MAP = {
-                PendingDCIManager:        { roleKey: 'DCI_MANAGER',     type: 'DCI_MANAGER_APPROVAL' },
+                PendingDCIManager: { roleKey: 'DCI_MANAGER', type: 'DCI_MANAGER_APPROVAL' },
                 PendingDCIImplementation: { roleKey: 'DCI_IMPLEMENTER', type: 'DCI_IMPLEMENTER' }
             };
             const map = OFFBOARDING_STAGE_MAP[request.status];
@@ -1208,7 +1218,7 @@ class AdminController {
                 overrideEmail ||
                 request.currentStageAssigneeEmail ||
                 (await RecipientService.get(map.roleKey, {
-                    location:   request.location,
+                    location: request.location,
                     employeeId: request.employeeId
                 }));
 
@@ -1227,9 +1237,9 @@ class AdminController {
 
             await TimelineEvent.create({
                 requestId: request.id,
-                action:    'Email Regenerated',
+                action: 'Email Regenerated',
                 actorRole: 'Admin',
-                details:   `Offboarding action email re-sent to ${recipientEmail} for stage ${request.status} using existing token.`,
+                details: `Offboarding action email re-sent to ${recipientEmail} for stage ${request.status} using existing token.`,
                 timestamp: new Date()
             });
 
@@ -1263,6 +1273,76 @@ class AdminController {
 
     renderEmployeeJourneyPanel(req, res) {
         res.render('pages/admin_employee_journey');
+    }
+
+    /**
+     * API: Admin-only hard termination of an onboarding request.
+     * Soft-deletes the record (status → AdminDeleted), voids the live token so
+     * all outstanding action links go dead immediately, records an audit event,
+     * and sends a deletion notice to every party that has been involved.
+     */
+    async adminDeleteRequest(req, res) {
+        try {
+            const { id } = req.params;
+            const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : '';
+
+            if (!reason) {
+                return res.status(400).json({ success: false, error: 'A deletion reason is required.' });
+            }
+
+            const request = await OnboardingRequest.findByPk(id);
+            if (!request) {
+                return res.status(404).json({ success: false, error: 'Onboarding request not found.' });
+            }
+            if (request.status === 'AdminDeleted') {
+                return res.status(409).json({ success: false, error: 'This request has already been deleted.' });
+            }
+
+            const deletedBy = req.user && (req.user.displayName || req.user.username || 'Admin');
+            const priorStatus = request.status;
+
+            // Collect involved emails BEFORE marking deleted (while assignee fields are still set)
+            const notifyEmails = await collectNotifyEmails(request);
+
+            // Soft-delete: invalidate all active links + mark status
+            await request.update({
+                status: 'AdminDeleted',
+                currentStageToken: null,
+                currentStageAssigneeEmail: null,
+                currentStageAssigneeUsername: null,
+            });
+
+            await TimelineEvent.create({
+                requestId: request.id,
+                action: 'Admin Deleted',
+                actorRole: 'Admin',
+                details: JSON.stringify({ deletedBy, priorStatus, reason, notifiedEmails: notifyEmails }),
+                timestamp: new Date()
+            });
+
+            // Notify all involved parties — non-blocking; log failures but don't abort
+            const emailsSent = [];
+            const emailsFailed = [];
+            for (const email of notifyEmails) {
+                try {
+                    await emailService.sendDeletionNotification(email, request, { deletedBy, reason, priorStatus });
+                    emailsSent.push(email);
+                } catch (err) {
+                    console.error(`[Admin Delete] Notification failed for ${email}:`, err.message);
+                    emailsFailed.push(email);
+                }
+            }
+
+            return res.json({
+                success: true,
+                message: `Request #${id} has been deleted. ${emailsSent.length} notification(s) sent.`,
+                emailsSent,
+                emailsFailed,
+            });
+        } catch (err) {
+            console.error('[Admin Delete] Error:', err.message);
+            return res.status(500).json({ success: false, error: err.message });
+        }
     }
 
 }

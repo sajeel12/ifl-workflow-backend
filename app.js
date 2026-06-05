@@ -26,6 +26,8 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
+// Serve DCI implementation proof images (UUID-named, so effectively obscure)
+app.use('/uploads/proofs', express.static(path.join(__dirname, 'uploads', 'proofs')));
 
 
 app.use('/api', apiRoutes);

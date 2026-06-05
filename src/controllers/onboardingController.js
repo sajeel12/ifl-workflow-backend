@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import SystemConfig from '../models/SystemConfig.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
+import Employee from '../models/Employee.js';
 import { Op } from 'sequelize';
 import { humanizeDetails, humanizeDetailsHTML, humanizeAction, narrate } from '../utils/historyFormatter.js';
 import { labelFor as statusLabelFor, ownerFor as statusOwnerFor, colorFor as statusColorFor } from '../utils/workflowLabels.js';
@@ -10,6 +11,7 @@ import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import { emailsMatch } from '../utils/emailMatch.js';
 import { LOCATION_GROUPS, groupByKey, groupLabel } from '../utils/locationGroups.js';
+import { checkAccountNameExists, searchADGroups, getAllADGroups } from '../services/adService.js';
 
 // Built once at module-load so each form render doesn't rebuild it.
 const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key, g.label]));
@@ -233,10 +235,27 @@ const handleSubmission = async (req, res, token) => {
             // workflow visibility is least-privilege and HR has no claim to
             // mid-flight data. Just refuse the submission with a clean message.
             if (data.employeeId) {
+                // Guard: a terminated employee (termination date on record) can
+                // never be onboarded — block New and Change alike. Authoritative
+                // server-side mirror of the HR form's client-side check.
+                const empRecord = await Employee.findByPk(data.employeeId, {
+                    attributes: ['name', 'actualTerminationDate']
+                });
+                if (empRecord && empRecord.actualTerminationDate) {
+                    return res.status(403).render('pages/message', {
+                        title: 'Employee terminated',
+                        heading: 'This employee cannot be onboarded',
+                        titleClass: 'error',
+                        icon: '⛔',
+                        iconClass: 'error-icon',
+                        message: `Employee #${data.employeeId}${empRecord.name ? ' (' + empRecord.name + ')' : ''} has a termination date on record and is no longer active. A terminated employee cannot be onboarded or modified. Please contact HR if this is incorrect.`
+                    });
+                }
+
                 const existing = await OnboardingRequest.findOne({
                     where: {
                         employeeId: data.employeeId,
-                        status: { [Op.notIn]: ['Rejected', 'Completed'] }
+                        status: { [Op.notIn]: ['Rejected', 'Completed', 'AdminDeleted'] }
                     },
                     attributes: ['id']
                 });
@@ -248,6 +267,25 @@ const handleSubmission = async (req, res, token) => {
                         message: `An onboarding request for employee #${data.employeeId} is already moving through the workflow. You cannot submit a duplicate. Please wait for the existing request to complete (or be rejected) before initiating a new one.`
                     });
                 }
+
+                // Guard: block "New Hiring" for an employee who already has a
+                // completed onboarding record, regardless of which HR location
+                // is submitting. The form should have locked the dropdown to
+                // "Change / Modification" — this is the server-side safety net.
+                if (data.requestMode !== 'Change') {
+                    const completedRecord = await OnboardingRequest.findOne({
+                        where: { employeeId: data.employeeId, status: 'Completed' },
+                        attributes: ['id']
+                    });
+                    if (completedRecord) {
+                        return res.status(409).render('pages/message', {
+                            title: 'Employee already onboarded',
+                            heading: 'This employee has already been onboarded',
+                            titleClass: 'error',
+                            message: `Employee #${data.employeeId} has an existing completed onboarding record. Please submit a "Change / Modification" request — not a new hiring request.`
+                        });
+                    }
+                }
             }
 
             // Step 1: HR/IT initiates the request.
@@ -256,7 +294,7 @@ const handleSubmission = async (req, res, token) => {
                 res,
                 'Request Submitted',
                 'Request submitted successfully. The request has been forwarded to IT Operations for service configuration.',
-                { status: 'PendingIT', requestId: created && created.id }
+                { status: 'PendingIT', requestId: created && created.id, actorRole: 'HR' }
             );
         } else {
             const context = await onboardingService.getFormContext(token);
@@ -458,6 +496,32 @@ export const handleProofUpload = async (req, res) => {
     }
 };
 
+// Serve the Work Order PDF for the DCI Implementer — validated via stage token.
+// The file path is stored in request.workOrderPdfPath at PDF generation time.
+export const serveWorkOrderPDF = async (req, res) => {
+    try {
+        const token = req.params.token || req.query.token;
+        if (!token) return res.status(400).send('Token required');
+        const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
+        if (!request || request.status !== 'PendingDCIImplementation') {
+            return res.status(404).send('PDF not available or token invalid.');
+        }
+        if (!request.workOrderPdfPath) {
+            return res.status(404).send('Work Order PDF not yet generated for this request.');
+        }
+        const { createReadStream, existsSync } = await import('fs');
+        if (!existsSync(request.workOrderPdfPath)) {
+            return res.status(404).send('PDF file not found on server.');
+        }
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="WorkOrder_${request.id}.pdf"`);
+        createReadStream(request.workOrderPdfPath).pipe(res);
+    } catch (err) {
+        logger.error(`[PDF Serve] ${err.message}`);
+        res.status(500).send('Error serving PDF.');
+    }
+};
+
 const renderForm = async (req, res, token) => {
     let request = {};
     let role = 'HR';
@@ -574,7 +638,7 @@ const renderForm = async (req, res, token) => {
             const existing = await OnboardingRequest.findOne({
                 where: {
                     employeeId: req.query.employeeId,
-                    status: { [Op.notIn]: ['Rejected', 'Completed'] }
+                    status: { [Op.notIn]: ['Rejected', 'Completed', 'AdminDeleted'] }
                 },
                 attributes: ['id']
             });
@@ -693,12 +757,34 @@ const renderForm = async (req, res, token) => {
         if (request.iflPortalLink) items.push('Add IFL Portal Shortcut');
         items.push('Verify Domain Login');
 
+        // Build proof images section for OPS desk setup
+        const proofPaths = Array.isArray(request.dciProofAttachments) ? request.dciProofAttachments : [];
+        const proofImagesHTML = proofPaths.length > 0
+            ? `<div style="margin-bottom:20px;">
+                <div class="section-title" style="margin-bottom:10px;">
+                    <span>DCI Implementation Proof</span>
+                    <span class="section-tag" style="background:#7c3aed20;color:#7c3aed;">Uploaded by Implementer</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                    ${proofPaths.map((fp, idx) => {
+                        const urlPath = fp.replace(/\\/g, '/').replace(/^uploads\/proofs\//, '/uploads/proofs/');
+                        const src = urlPath.startsWith('/uploads/proofs/') ? urlPath : `/uploads/proofs/${urlPath.split('/').pop()}`;
+                        return `<a href="${src}" target="_blank" rel="noopener" title="Open proof ${idx + 1} in new tab">
+                            <img src="${src}" alt="Implementation proof ${idx + 1}"
+                                 style="height:120px;width:auto;border-radius:6px;border:1px solid #e2e8f0;object-fit:cover;cursor:pointer;">
+                        </a>`;
+                    }).join('')}
+                </div>
+               </div>`
+            : '';
+
         opsChecklistHTML = `
             <div class="ops-box">
                 <div class="section-title">
                     <span>OPS Verification Checklist</span>
                     <span class="section-tag">Required</span>
                 </div>
+                ${proofImagesHTML}
                 <div class="grid-2">
                     <div class="form-group">
                         <label>Verifier Name
@@ -1182,7 +1268,7 @@ export const lookupExistingRequest = async (req, res) => {
 
         // Check active (in-flight) request first — highest priority block.
         const active = await OnboardingRequest.findOne({
-            where: { employeeId, status: { [Op.notIn]: ['Rejected', 'Completed'] } },
+            where: { employeeId, status: { [Op.notIn]: ['Rejected', 'Completed', 'AdminDeleted'] } },
             attributes: ['id']
         });
         if (active) return res.json({ existingRequestId: active.id, state: 'active' });
@@ -1258,7 +1344,7 @@ export const renderHistory = async (req, res) => {
 // post-submission message page so the user can immediately see their other
 // pending tasks / history without going back to email.
 const FORM_ROLE_TO_PORTAL = {
-    HR:             null,                 // HR isn't part of the role queue
+    HR:             { key: 'HR_INITIATOR',    label: 'HR' },
     IT:             { key: 'IT_OPS',          label: 'IT Operations' },
     HOD:            { key: 'HOD',             label: 'Head of Department' },
     DCI:            { key: 'DCI_TEAM',        label: 'DCI Team' },
@@ -1324,5 +1410,50 @@ export const getMyHRLocation = async (req, res) => {
     } catch (err) {
         logger.error(`[Onboarding] getMyHRLocation: ${err.message}`);
         return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/onboarding/check-ntname?name=X
+ * Used by the DCI form's "Check" button to verify an NT login name is free.
+ * Returns { available, exists, match } — available is the inverse of exists.
+ */
+export const checkNtName = async (req, res) => {
+    try {
+        const name = (req.query.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'name query param required' });
+        const { exists, match } = await checkAccountNameExists(name);
+        return res.json({
+            name,
+            exists,
+            available: !exists,
+            match: match ? {
+                sAMAccountName: match.sAMAccountName || null,
+                displayName:    match.displayName    || null,
+                mail:           match.mail           || null,
+            } : null
+        });
+    } catch (err) {
+        logger.error(`[Onboarding] checkNtName: ${err.message}`);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/onboarding/ad-groups?q=X
+ * Type-ahead search of AD groups for the DCI form's "Member Of" multi-select.
+ */
+export const searchGroups = async (req, res) => {
+    try {
+        const all = String(req.query.all || '') === '1';
+        const q = (req.query.q || '').trim();
+        // all=1 (or no query) → return every group for the load-once dropdown.
+        const results = (all || q.length < 2)
+            ? await getAllADGroups()
+            : await searchADGroups(q);
+        return res.json({ success: true, results });
+    } catch (err) {
+        logger.error(`[Onboarding] searchGroups: ${err.message}`);
+        return res.status(500).json({ success: false, error: err.message });
     }
 };

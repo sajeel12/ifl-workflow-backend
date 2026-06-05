@@ -4,3 +4,7 @@ error.log
 combined.log
 docs
 database.sqlite
+uploads/
+employee-ad-map.csv
+set-employee-ids.ps1
+generated_pdfs/
