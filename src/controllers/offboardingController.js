@@ -400,6 +400,37 @@ export const getRoleQueue = async (req, res) => {
 void groupByKey;
 
 // ───────────────────────────────────────────────────────────────────────
+// Quick existence-check used by the initiate form's "Get Employee Data" flow.
+// Returns { state: 'active' | 'completed' | null } for the given employeeId
+// so the form can warn the user before they try to submit a duplicate.
+// GET /api/offboarding/lookup?employeeId=...
+// ───────────────────────────────────────────────────────────────────────
+export const lookupExistingRequest = async (req, res) => {
+    try {
+        const employeeId = (req.query.employeeId || '').trim();
+        if (!employeeId) return res.json({ state: null });
+
+        const active = await OffboardingRequest.findOne({
+            where: { employeeId, status: ['Draft', 'PendingDCIManager', 'PendingDCIImplementation'] },
+            attributes: ['id', 'status']
+        });
+        if (active) return res.json({ state: 'active', id: active.id, status: active.status });
+
+        const completed = await OffboardingRequest.findOne({
+            where: { employeeId, status: 'Completed' },
+            attributes: ['id'],
+            order: [['completedAt', 'DESC']]
+        });
+        if (completed) return res.json({ state: 'completed', id: completed.id });
+
+        return res.json({ state: null });
+    } catch (err) {
+        logger.error(`[Offboarding lookup] ${err.message}`);
+        return res.status(500).json({ state: null, error: err.message });
+    }
+};
+
+// ───────────────────────────────────────────────────────────────────────
 // Per-request history page — mirrors onboardingController.renderHistory.
 // GET /api/offboarding/history/:id
 // ───────────────────────────────────────────────────────────────────────

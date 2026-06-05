@@ -13,7 +13,7 @@
 
 <style>
     .off-init-card {
-        max-width: 720px; margin: 40px auto; padding: 0 20px;
+        max-width: 760px; margin: 40px auto; padding: 0 20px;
     }
     .off-init-card .panel {
         background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
@@ -31,20 +31,58 @@
         color: #475569; text-transform: uppercase; letter-spacing: 0.04em;
         margin-bottom: 6px;
     }
+    .off-init-card label .lbl-hint {
+        text-transform: none; letter-spacing: 0; font-weight: 400;
+        color: #94a3b8; font-size: 0.78rem;
+    }
     .off-init-card input, .off-init-card select {
         width: 100%; padding: 10px 12px; border-radius: 6px;
         border: 1px solid #cbd5e1; font-size: 0.95rem; font-family: inherit;
     }
+    .off-init-card input[readonly] {
+        background: #f1f5f9; cursor: not-allowed;
+    }
     .off-init-card .grid-2 {
         display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
     }
+
+    /* Employee-ID block — emphasised like the onboarding form */
+    .off-init-card .emp-id-block {
+        background: #f8fafc; padding: 18px;
+        border-radius: 8px; border: 1px solid #e2e8f0;
+        margin-bottom: 20px;
+    }
+    .off-init-card .emp-id-block label {
+        font-weight: 700; color: #0f172a; font-size: 0.92rem;
+        text-transform: none; letter-spacing: 0;
+    }
+    .off-init-card .emp-id-row {
+        display: flex; gap: 10px; align-items: center;
+    }
+    .off-init-card .emp-id-row input {
+        flex: 1; font-size: 1.05rem; padding: 11px; max-width: 320px;
+    }
+    .off-init-card .btn-get {
+        height: 44px; padding: 0 14px;
+        background: #0078D4; color: #fff; border: none;
+        border-radius: 6px; font-weight: 600; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px;
+        white-space: nowrap;
+    }
+    .off-init-card .btn-get:disabled { opacity: 0.6; cursor: not-allowed; }
+    .off-init-card .btn-get:hover:not(:disabled) { background: #005fa8; }
+
     .off-init-card .submit-btn {
         width: 100%; padding: 13px; font-size: 1rem; background: #0078D4;
         color: #fff; border: none; border-radius: 6px; cursor: pointer;
         font-weight: 600; margin-top: 8px;
     }
     .off-init-card .submit-btn:hover { background: #005fa8; }
-    @media (max-width: 600px) { .off-init-card .grid-2 { grid-template-columns: 1fr; } }
+    @media (max-width: 600px) {
+        .off-init-card .grid-2 { grid-template-columns: 1fr; }
+        .off-init-card .emp-id-row { flex-direction: column; align-items: stretch; }
+        .off-init-card .emp-id-row input { max-width: none; }
+    }
 </style>
 
 <div class="off-init-card">
@@ -57,28 +95,52 @@
         </p>
 
         <form action="/api/offboarding/initiate" method="POST" id="offInitForm">
-            <div class="form-row">
-                <label for="employeeId">Employee ID <span style="color:#dc2626;">*</span></label>
-                <input type="text" name="employeeId" id="employeeId" required
-                       autocomplete="off"
-                       placeholder="e.g. 1001">
+            <!-- Requester block — auto-filled from SSO. -->
+            <div class="grid-2">
+                <div class="form-row">
+                    <label for="requesterName">Requester Name <span class="lbl-hint">(auto-filled)</span></label>
+                    <input type="text" name="requesterName" id="requesterName" readonly
+                           value="<%= (typeof currentUser !== 'undefined' && currentUser && (currentUser.displayName || currentUser.username)) || '' %>">
+                </div>
+                <div class="form-row">
+                    <label for="requesterEmail">Requester Email <span class="lbl-hint">(auto-filled)</span></label>
+                    <input type="text" name="requesterEmail" id="requesterEmail" readonly
+                           value="<%= (typeof currentUser !== 'undefined' && currentUser && currentUser.email) || '' %>">
+                </div>
             </div>
 
+            <!-- Employee ID block with Get Employee Data lookup -->
+            <div class="emp-id-block">
+                <label for="employeeId">Employee ID <span style="color:#dc2626;">*</span></label>
+                <div class="emp-id-row" style="margin-top:6px;">
+                    <input type="text" name="employeeId" id="employeeId" required autocomplete="off"
+                           placeholder="e.g. 1001">
+                    <button type="button" id="btnGetEmployee" class="btn-get">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
+                        </svg>
+                        Get Employee Data
+                    </button>
+                </div>
+                <div id="empStateBanner" style="display:none; margin-top:10px; padding:10px 14px; border-radius:6px; font-size:0.86rem; font-weight:500;"></div>
+            </div>
+
+            <!-- Auto-filled employee fields (readonly after lookup; manual entry allowed until then) -->
             <div class="grid-2">
                 <div class="form-row">
                     <label for="fullName">Full Name</label>
-                    <input type="text" name="fullName" id="fullName" placeholder="e.g. Sajeel Dilshad">
+                    <input type="text" name="fullName" id="fullName" placeholder="—">
                 </div>
                 <div class="form-row">
                     <label for="designation">Designation</label>
-                    <input type="text" name="designation" id="designation" placeholder="e.g. Software Engineer">
+                    <input type="text" name="designation" id="designation" placeholder="—">
                 </div>
             </div>
 
             <div class="grid-2">
                 <div class="form-row">
                     <label for="department">Department</label>
-                    <input type="text" name="department" id="department" placeholder="e.g. IT">
+                    <input type="text" name="department" id="department" placeholder="—">
                 </div>
                 <div class="form-row">
                     <label for="location">Location Group</label>
@@ -99,8 +161,104 @@
 </div>
 
 <script>
-    // Attach sidecar token to the POST body so ssoMiddleware can authenticate
-    // the request. Same pattern as the onboarding form's submit handler.
+    // ── Auto-fill Requester Name/Email from SSO when not server-rendered.
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            if (typeof window.iflGetUser !== 'function') return;
+            const u = await window.iflGetUser();
+            if (!u) return;
+            const nameEl  = document.getElementById('requesterName');
+            const emailEl = document.getElementById('requesterEmail');
+            if (nameEl  && !nameEl.value)  nameEl.value  = u.displayName || u.username || '';
+            if (emailEl && !emailEl.value) emailEl.value = u.email || '';
+        } catch (_) {}
+    });
+
+    // ── Get Employee Data — calls /api/hrms/employee/:id and fills the form.
+    // Runs on button click AND on Employee-ID blur so HR doesn't have to hit
+    // the button manually every time. Mirrors the onboarding form pattern.
+    (function () {
+        const empIdInput = document.getElementById('employeeId');
+        const btn        = document.getElementById('btnGetEmployee');
+        const banner     = document.getElementById('empStateBanner');
+
+        const showBanner = (msg, kind) => {
+            if (!banner) return;
+            const palette = {
+                info:    { bg: '#eff6ff', border: '#93c5fd', text: '#1d4ed8' },
+                warn:    { bg: '#fff7ed', border: '#fdba74', text: '#c2410c' },
+                error:   { bg: '#fef2f2', border: '#fca5a5', text: '#b91c1c' },
+                ok:      { bg: '#ecfdf5', border: '#86efac', text: '#15803d' }
+            };
+            const c = palette[kind] || palette.info;
+            banner.style.cssText = `display:block; margin-top:10px; padding:10px 14px; border-radius:6px; font-size:0.86rem; font-weight:500; background:${c.bg}; border:1px solid ${c.border}; color:${c.text};`;
+            banner.textContent = msg;
+        };
+        const clearBanner = () => { if (banner) banner.style.display = 'none'; };
+
+        const setVal = (id, v) => {
+            const el = document.getElementById(id);
+            if (el && v != null && v !== '') el.value = v;
+        };
+        const lockField = (id) => {
+            const el = document.getElementById(id);
+            if (el) { el.readOnly = true; }
+        };
+
+        const lookupAndFill = async () => {
+            const empId = empIdInput ? empIdInput.value.trim() : '';
+            if (!empId) return;
+
+            clearBanner();
+            if (btn) { btn.disabled = true; btn.innerHTML = 'Fetching…'; }
+
+            try {
+                // 1. HRMS fetch — populate employee details.
+                const r = await fetch('/api/hrms/employee/' + encodeURIComponent(empId));
+                if (!r.ok) {
+                    showBanner('Employee not found in HRMS for ID "' + empId + '".', 'error');
+                    return;
+                }
+                const data = await r.json();
+                setVal('fullName',    data.fullName);
+                setVal('department',  data.department);
+                setVal('designation', data.designation);
+                ['fullName', 'department', 'designation'].forEach(lockField);
+
+                // 2. Existing-offboarding lookup — warn admin if one is already
+                //    in flight, so they don't accidentally raise a duplicate.
+                try {
+                    const lkRes  = await fetch('/api/offboarding/lookup?employeeId=' + encodeURIComponent(empId));
+                    const lkData = lkRes.ok ? await lkRes.json() : null;
+                    if (lkData && lkData.state === 'active') {
+                        showBanner(
+                            'An offboarding request for this employee is already in progress. Submitting again will be refused — wait for the in-flight one to complete or be rejected.',
+                            'warn'
+                        );
+                    } else if (lkData && lkData.state === 'completed') {
+                        showBanner('This employee has a previous completed offboarding record. Proceeding will create a new request.', 'info');
+                    } else {
+                        showBanner('Employee details loaded. Review and submit when ready.', 'ok');
+                    }
+                } catch (_) {
+                    // lookup failure is non-fatal — let the user proceed.
+                    showBanner('Employee details loaded. Review and submit when ready.', 'ok');
+                }
+            } catch (err) {
+                showBanner(err.message || 'Could not look up the employee.', 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg> Get Employee Data';
+                }
+            }
+        };
+
+        if (btn)        btn.addEventListener('click', lookupAndFill);
+        if (empIdInput) empIdInput.addEventListener('blur', () => { if (empIdInput.value.trim()) lookupAndFill(); });
+    })();
+
+    // ── Attach sidecar token to the POST body so ssoMiddleware can authenticate.
     (function () {
         const form = document.getElementById('offInitForm');
         if (!form) return;
@@ -119,7 +277,7 @@
                     }
                     hidden.value = t || '';
                 }
-            } catch (_) { /* server returns 401 if missing — clear message */ }
+            } catch (_) { /* server returns 401 with clear JSON */ }
             form.dataset.iflTokenAttached = '1';
             form.submit();
         });

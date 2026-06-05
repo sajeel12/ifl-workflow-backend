@@ -171,6 +171,11 @@ router.get('/offboarding/queue', ssoMiddleware, offboardingController.getRoleQue
 // dashboards, and the admin panel). Mirrors /api/onboarding/history/:id.
 router.get('/offboarding/history/:id', offboardingController.renderHistory);
 
+// Quick employee-state lookup for the initiate form's "Get Employee Data"
+// flow. Returns { state: 'active' | 'completed' | null } so the form can
+// warn the user before submitting a duplicate.
+router.get('/offboarding/lookup', offboardingController.lookupExistingRequest);
+
 // Token-based Handle Routes.
 // GET stays open (email-link click pattern). POST is SSO-gated for the
 // forwarded-email guard inside the controller.
