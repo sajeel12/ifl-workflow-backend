@@ -58,6 +58,21 @@
         <button class="close-btn" onclick="closeModal()">×</button>
       </div>
 
+      <!-- Admin Recovery Actions Bar (only shown while the request is still
+           in an active token-bearing stage). Lets admin re-send the stage
+           email to the original recipient (or an override) using the same
+           currentStageToken — useful when the recipient deleted the email. -->
+      <div id="adminActionsBar" style="display:none; padding:12px 24px; border-bottom:1px solid var(--a-border); background:#fffbeb; gap:10px; align-items:center; flex-wrap:wrap;">
+        <div style="flex:1; min-width:240px;">
+          <div style="font-size:.8rem; font-weight:600; color:#854d0e; margin-bottom:2px;">Recovery Action</div>
+          <div style="font-size:.75rem; color:#a16207;" id="adminActionsHint">If the original recipient deleted their action email, re-send it using the same token.</div>
+        </div>
+        <input type="email" id="resendOverrideEmail" class="a-input" placeholder="Override email (optional)" style="max-width:240px;">
+        <button id="btnResendEmail" class="a-btn" style="background:#0078D4; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:600;" onclick="resendOffboardingEmail()">
+          ✉ Resend Action Email
+        </button>
+      </div>
+
       <!-- Revocation summary (Completed-only) -->
       <div id="revocationBar" style="display:none; padding:14px 24px; border-bottom:1px solid var(--a-border); background:#f0fdf4;">
         <div style="font-size:.78rem;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Revocation Summary</div>
@@ -232,6 +247,10 @@ function renderRequests(requests) {
   document.getElementById('requestsList').innerHTML = html;
 }
 
+// Track the request currently shown in the modal so the resend button can target it.
+let currentModalRequestId = null;
+let currentModalStatus    = null;
+
 async function loadTimeline(id) {
   try {
     const res = await window.iflFetch(`/admin/offboarding-timeline/${id}`);
@@ -241,10 +260,26 @@ async function loadTimeline(id) {
       return;
     }
     const { request, timeline } = json;
+    currentModalRequestId = request.id;
+    currentModalStatus    = request.status;
 
     document.getElementById('modalTitle').textContent = request.fullName || ('Offboarding #' + request.id);
     document.getElementById('modalSubtitle').textContent =
       `Employee ID: ${request.employeeId} · Department: ${request.department || '—'} · Status: ${statusBadgeLabel(request.status)}`;
+
+    // Show recovery bar only when the request is still in an active token-bearing stage.
+    const closedStates = ['Completed', 'Rejected', 'Draft'];
+    const bar = document.getElementById('adminActionsBar');
+    if (bar) {
+      const canResend = !closedStates.includes(request.status);
+      bar.style.display = canResend ? 'flex' : 'none';
+      const hint = document.getElementById('adminActionsHint');
+      if (hint) {
+        hint.textContent = canResend
+          ? `Stage: ${statusBadgeLabel(request.status)}. The original action email can be re-sent — the existing token will be reused.`
+          : `Request is ${request.status}; no active stage email to resend.`;
+      }
+    }
 
     renderRevocationBar(request);
     renderTimeline(timeline);
@@ -252,6 +287,37 @@ async function loadTimeline(id) {
   } catch (e) {
     console.error(e);
     IflDialog.error('Could not load the timeline for this request.');
+  }
+}
+
+async function resendOffboardingEmail() {
+  if (!currentModalRequestId) return;
+  const btn = document.getElementById('btnResendEmail');
+  const overrideEl = document.getElementById('resendOverrideEmail');
+  const overrideEmail = overrideEl ? overrideEl.value.trim() : '';
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Sending…'; }
+
+  try {
+    const res = await window.iflFetch(`/admin/offboarding/${currentModalRequestId}/resend-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(overrideEmail ? { toEmail: overrideEmail } : {})
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      IflDialog.error(json.error || 'Failed to resend email.');
+      return;
+    }
+    IflDialog.success(json.message || 'Action email re-sent successfully.');
+    if (overrideEl) overrideEl.value = '';
+    // Refresh the modal so the new "Email Regenerated" timeline event appears.
+    await loadTimeline(currentModalRequestId);
+  } catch (e) {
+    console.error(e);
+    IflDialog.error('Network error while resending email.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = original; }
   }
 }
 

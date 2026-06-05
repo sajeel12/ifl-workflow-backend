@@ -1171,6 +1171,76 @@ class AdminController {
     }
 
     /**
+     * API: Resend the active stage email for an OFFBOARDING request.
+     * Mirrors resendStageEmail but targets OffboardingRequest + the
+     * offboarding email types. Reuses the existing currentStageToken so
+     * any prior link is still valid.
+     *
+     * POST /admin/offboarding/:id/resend-email
+     * Body (optional): { toEmail }  — override recipient
+     */
+    async resendOffboardingStageEmail(req, res) {
+        try {
+            const { id } = req.params;
+            const overrideEmail = (req.body && req.body.toEmail) ? String(req.body.toEmail).trim() : null;
+
+            const request = await OffboardingRequest.findByPk(id);
+            if (!request) return res.status(404).json({ success: false, error: 'Offboarding request not found' });
+
+            if (!request.currentStageToken) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Request is in a closed state (${request.status}); no active token to resend.`
+                });
+            }
+
+            // Map the current pending status → role + email type.
+            const OFFBOARDING_STAGE_MAP = {
+                PendingDCIManager:        { roleKey: 'DCI_MANAGER',     type: 'DCI_MANAGER_APPROVAL' },
+                PendingDCIImplementation: { roleKey: 'DCI_IMPLEMENTER', type: 'DCI_IMPLEMENTER' }
+            };
+            const map = OFFBOARDING_STAGE_MAP[request.status];
+            if (!map) return res.status(400).json({ success: false, error: `No resend handler for status "${request.status}"` });
+
+            // Prefer the override; else the request's stamped assignee; else
+            // re-resolve via RecipientService (which honours delegation).
+            const recipientEmail =
+                overrideEmail ||
+                request.currentStageAssigneeEmail ||
+                (await RecipientService.get(map.roleKey, {
+                    location:   request.location,
+                    employeeId: request.employeeId
+                }));
+
+            if (!recipientEmail) {
+                return res.status(400).json({ success: false, error: `No recipient email could be resolved for role ${map.roleKey}` });
+            }
+
+            const actionLink = `${process.env.APP_URL}/api/offboarding/handle?token=${request.currentStageToken}`;
+            await emailService.sendOffboardingNotification(recipientEmail, request, actionLink, map.type);
+
+            // If admin used the override, re-stamp the assignee so the
+            // forwarded-email guard at POST accepts the new recipient.
+            if (overrideEmail) {
+                await request.update({ currentStageAssigneeEmail: overrideEmail });
+            }
+
+            await TimelineEvent.create({
+                requestId: request.id,
+                action:    'Email Regenerated',
+                actorRole: 'Admin',
+                details:   `Offboarding action email re-sent to ${recipientEmail} for stage ${request.status} using existing token.`,
+                timestamp: new Date()
+            });
+
+            return res.json({ success: true, message: `Action email re-sent to ${recipientEmail}` });
+        } catch (error) {
+            console.error('Error resending offboarding stage email:', error);
+            return res.status(500).json({ success: false, error: 'Failed to resend stage email', details: error.message });
+        }
+    }
+
+    /**
      * API: Update system configuration
      */
     async updateSystemConfig(req, res) {
