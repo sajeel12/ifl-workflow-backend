@@ -373,4 +373,43 @@
             });
         } catch (_) {}
     });
+
+    // Attach the sidecar token to EVERY form on this page before submit.
+    // Without this, the POST hits IIS without identity, IIS returns a
+    // Windows-auth challenge, and the browser shows a login prompt in a loop
+    // (rewrite-before-auth means even re-authenticated retries reach Node
+    // without identity). Same pattern as the onboarding form's setupSubmitLoaders.
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', async (e) => {
+                if (form.dataset.iflTokenAttached) return;        // re-fire after token attach
+                if (typeof window.iflGetToken !== 'function') return; // SSO unavailable — let it through
+                e.preventDefault();
+                // Preserve which Approve/Reject button was clicked.
+                const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
+                try {
+                    const token = await window.iflGetToken();
+                    let hidden = form.querySelector('input[name="x-sidecar-token"]');
+                    if (!hidden) {
+                        hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = 'x-sidecar-token';
+                        form.appendChild(hidden);
+                    }
+                    hidden.value = token || '';
+                    // Mirror the submitter's name/value so the server still sees
+                    // which Approve/Reject was clicked when we re-submit.
+                    if (submitter && submitter.name && !form.querySelector('input[type="hidden"][name="' + submitter.name + '"]')) {
+                        const h = document.createElement('input');
+                        h.type = 'hidden';
+                        h.name = submitter.name;
+                        h.value = submitter.value || '';
+                        form.appendChild(h);
+                    }
+                } catch (_) { /* server returns 401 with clear JSON */ }
+                form.dataset.iflTokenAttached = '1';
+                form.submit();
+            });
+        });
+    });
 </script>
