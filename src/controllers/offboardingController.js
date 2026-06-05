@@ -212,6 +212,41 @@ const renderForm = async (req, res, token) => {
         request = context.request;
         role    = context.role;
 
+        // ─── Server-side Access Denied (matches the onboarding portal UX) ─
+        // When req.user IS present (portal-first flow, or IIS proxy header
+        // populated the user), reject up-front if they're not the assignee
+        // for this stage — show a clear "not configured for…" page rather
+        // than loading the form and blocking submit. Mirrors the
+        // forwarded-email guard at POST.
+        //
+        // If req.user is ABSENT (fresh email-link click before SSO hydrates),
+        // we do NOT 401 — that loops through IIS Windows auth. The page's
+        // client-side cloak handles that case.
+        if (req.user && req.user.email && request.currentStageAssigneeEmail
+            && !emailsMatch(req.user.email, request.currentStageAssigneeEmail)) {
+            try {
+                await TimelineEvent.create({
+                    requestId: request.id,
+                    action:    'Unauthorized Click (Offboarding)',
+                    actorRole: 'System',
+                    details:   `Expected ${request.currentStageAssigneeEmail}, got ${req.user.email}`,
+                    timestamp: new Date()
+                });
+            } catch (_) {}
+            const roleLabel = role === 'DCIManager' ? 'DCI Manager'
+                            : role === 'DCIImplementer' ? 'DCI Implementer'
+                            : 'this stage';
+            const acctName  = (req.user.username || req.user.email || 'this user');
+            return res.status(403).render('pages/message', {
+                title: 'Access Denied',
+                heading: 'Access Denied',
+                titleClass: 'error',
+                icon: '⛔',
+                iconClass: 'error-icon',
+                message: `Account "${acctName}" is not configured as the ${roleLabel} for this offboarding request. Contact your administrator.`
+            });
+        }
+
         // Privileges summary: read the most recent Completed OnboardingRequest
         // for the same employee. Surfaced to the DCI Manager at approval time
         // so "approve" = explicit acknowledgement of what will be revoked.
@@ -264,6 +299,10 @@ const renderForm = async (req, res, token) => {
         privileges,
         locationGroupLabels: LOCATION_GROUP_LABELS,
         currentUser: req.user || null,
+        // Used by the client-side cloak in offboarding_status.ejs to verify
+        // the SSO user matches the assignee before lifting the page. If null
+        // (no token / no assignee), the cloak lifts immediately.
+        expectedAssigneeEmail: (token && request.currentStageAssigneeEmail) || null,
         // Sidebar context — reused from the shared portal partial.
         showPortal,
         roleKey:    PORTAL_ROLE_KEYS[role] || null,
