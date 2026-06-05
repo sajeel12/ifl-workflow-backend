@@ -15,7 +15,8 @@ router.get('/hod-panel',          adminPageGuard, adminController.renderHodPanel
 router.get('/settings',           adminPageGuard, adminController.renderSettingsPanel);
 router.get('/offboarding',        adminPageGuard, adminController.renderOffboardingPanel);
 router.get('/workflow-approvers', adminPageGuard, adminController.renderWorkflowApproversPanel);
-router.get('/onboarding-history', adminPageGuard, adminController.renderOnboardingHistoryPanel);
+router.get('/onboarding-history',  adminPageGuard, adminController.renderOnboardingHistoryPanel);
+router.get('/offboarding-history', adminPageGuard, adminController.renderOffboardingHistoryPanel);
 router.get('/system-config',      adminPageGuard, adminController.renderSystemConfigPanel);
 router.get('/employee-journey',   adminPageGuard, adminController.renderEmployeeJourneyPanel);
 
@@ -42,6 +43,8 @@ router.put('/workflow-approvers/:id/revert',    ...guard, adminController.revert
 router.put('/workflow-approvers/:id',           ...guard, adminController.updateWorkflowApprover);
 router.get('/onboarding-requests',              ...guard, adminController.getOnboardingRequests);
 router.get('/onboarding-timeline/:id',          ...guard, adminController.getOnboardingTimeline);
+router.get('/offboarding-requests',             ...guard, adminController.getOffboardingRequests);
+router.get('/offboarding-timeline/:id',         ...guard, adminController.getOffboardingTimeline);
 
 // ── Employee Journey APIs (admin-only, adminApiGuard) ─────────────────────
 router.get('/ej/employees',                              ...guard, ejController.listEmployees);

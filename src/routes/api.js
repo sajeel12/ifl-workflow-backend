@@ -167,6 +167,10 @@ router.get('/offboarding/all', offboardingController.getAll);
 // SSO-gated so a malicious caller can't enumerate every role's queue.
 router.get('/offboarding/queue', ssoMiddleware, offboardingController.getRoleQueue);
 
+// Per-request offboarding history / status view (open — used from email links,
+// dashboards, and the admin panel). Mirrors /api/onboarding/history/:id.
+router.get('/offboarding/history/:id', offboardingController.renderHistory);
+
 // Token-based Handle Routes.
 // GET stays open (email-link click pattern). POST is SSO-gated for the
 // forwarded-email guard inside the controller.

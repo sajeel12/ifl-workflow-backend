@@ -6,6 +6,7 @@ import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocation
 import TimelineEvent from '../models/TimelineEvent.js';
 import { emailsMatch } from '../utils/emailMatch.js';
 import { LOCATION_GROUPS, groupByKey, groupKeyForLocation } from '../utils/locationGroups.js';
+import { humanizeAction, humanizeDetails, humanizeDetailsHTML, narrate } from '../utils/historyFormatter.js';
 import logger from '../utils/logger.js';
 
 const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key, g.label]));
@@ -397,3 +398,74 @@ export const getRoleQueue = async (req, res) => {
 // Suppress unused-import warning for groupByKey; it is intentionally available
 // for future use (e.g. resolving a group from a freeform location string).
 void groupByKey;
+
+// ───────────────────────────────────────────────────────────────────────
+// Per-request history page — mirrors onboardingController.renderHistory.
+// GET /api/offboarding/history/:id
+// ───────────────────────────────────────────────────────────────────────
+const STATUS_LABEL = {
+    Draft:                     'Draft',
+    PendingDCIManager:         'Pending DCI Manager Approval',
+    PendingDCIImplementation:  'Pending AD + Access Revocation',
+    Completed:                 'Completed',
+    Rejected:                  'Rejected'
+};
+const STATUS_OWNER = {
+    Draft:                     '—',
+    PendingDCIManager:         'DCI Manager',
+    PendingDCIImplementation:  'DCI Implementer',
+    Completed:                 '—',
+    Rejected:                  '—'
+};
+
+export const renderHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const request = await OffboardingRequest.findByPk(id);
+        if (!request) {
+            return res.status(404).render('pages/message', {
+                title: 'Not Found', heading: 'Offboarding request not found',
+                titleClass: 'error', icon: '⛔', iconClass: 'error-icon',
+                message: `No offboarding request with id #${id}.`
+            });
+        }
+
+        const events = await TimelineEvent.findAll({
+            where: { requestId: id },
+            order: [['timestamp', 'ASC']],
+            attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
+        });
+        const timeline = events.map(e => {
+            const ev = e.toJSON();
+            ev.actionLabel = humanizeAction(ev.action);
+            ev.detailsText = humanizeDetails(ev.details);
+            ev.detailsHTML = humanizeDetailsHTML(ev.details);
+            ev.summary     = narrate(ev);
+            return ev;
+        });
+
+        // "Currently With" — resolve from the request's assignee email
+        // (already stamped at the previous stage transition).
+        const currentRecipient = {
+            role:  STATUS_OWNER[request.status] || '—',
+            name:  '',
+            email: request.currentStageAssigneeEmail || ''
+        };
+
+        return res.render('pages/offboarding_history', {
+            title: `Offboarding History - ${request.fullName || request.employeeId}`,
+            request,
+            timeline,
+            currentRecipient,
+            statusLabel:         STATUS_LABEL[request.status] || request.status,
+            locationGroupLabels: LOCATION_GROUP_LABELS
+        });
+    } catch (err) {
+        logger.error(`[Offboarding History] ${err.message}`);
+        return res.status(500).render('pages/message', {
+            title: 'Error', heading: 'Error', titleClass: 'error',
+            icon: '❌', iconClass: 'error-icon',
+            message: err.message
+        });
+    }
+};

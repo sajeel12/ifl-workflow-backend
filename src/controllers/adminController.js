@@ -1002,6 +1002,104 @@ class AdminController {
     }
 
     /**
+     * View: Render the Offboarding History admin panel — mirrors the
+     * onboarding-history panel exactly, using offboarding-specific endpoints.
+     */
+    renderOffboardingHistoryPanel(req, res) {
+        res.render('pages/admin_offboarding_history', { activeTab: 'offboarding-history' });
+    }
+
+    /**
+     * API: List offboarding requests with optional search + status filter.
+     * Mirrors getOnboardingRequests.
+     */
+    async getOffboardingRequests(req, res) {
+        try {
+            const { page = 1, limit = 15, status, search } = req.query;
+            const limitInt = parseInt(limit, 10);
+            const pageInt  = parseInt(page, 10);
+            const offset   = (pageInt - 1) * limitInt;
+
+            const whereClause = {};
+            if (status) whereClause.status = status;
+            if (search) {
+                const searchStr = `%${search}%`;
+                whereClause[Op.or] = [
+                    { employeeId: { [Op.like]: searchStr } },
+                    { fullName:   { [Op.like]: searchStr } },
+                    { department: { [Op.like]: searchStr } }
+                ];
+            }
+
+            const { count, rows } = await OffboardingRequest.findAndCountAll({
+                where: whereClause,
+                limit: limitInt,
+                offset,
+                order: [['createdAt', 'DESC']],
+                attributes: [
+                    'id', 'employeeId', 'fullName', 'department', 'designation',
+                    'status', 'createdAt', 'initiatedAt', 'managerApprovedAt',
+                    'dciImplementerCompletedAt', 'completedAt'
+                ]
+            });
+
+            res.json({
+                success: true,
+                data: rows,
+                pagination: {
+                    total: count,
+                    page: pageInt,
+                    limit: limitInt,
+                    totalPages: Math.ceil(count / limitInt)
+                }
+            });
+        } catch (error) {
+            console.error('Error fetching offboarding requests:', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch offboarding requests' });
+        }
+    }
+
+    /**
+     * API: Get timeline events for a specific offboarding request.
+     * Mirrors getOnboardingTimeline.
+     */
+    async getOffboardingTimeline(req, res) {
+        try {
+            const { id } = req.params;
+            const request = await OffboardingRequest.findByPk(id, {
+                attributes: [
+                    'id', 'employeeId', 'fullName', 'department', 'designation',
+                    'status', 'createdAt', 'initiatedAt', 'managerApprovedAt',
+                    'dciImplementerCompletedAt', 'completedAt',
+                    'adRevoked', 'smartXRevoked', 'doorAccessRevoked',
+                    'dciImplementerName', 'managerRemarks', 'checklistNotes'
+                ]
+            });
+            if (!request) {
+                return res.status(404).json({ success: false, error: 'Offboarding request not found' });
+            }
+
+            const events = await TimelineEvent.findAll({
+                where: { requestId: id },
+                order: [['timestamp', 'ASC']],
+                attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
+            });
+            const timeline = events.map(e => {
+                const ev = e.toJSON();
+                ev.actionLabel = humanizeAction(ev.action);
+                ev.detailsText = humanizeDetails(ev.details);
+                ev.detailsHTML = humanizeDetailsHTML(ev.details);
+                return ev;
+            });
+
+            res.json({ success: true, request, timeline });
+        } catch (error) {
+            console.error('Error fetching offboarding timeline:', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch offboarding timeline' });
+        }
+    }
+
+    /**
      * View: Render System Configuration Admin Panel
      */
     async renderSystemConfigPanel(req, res) {
