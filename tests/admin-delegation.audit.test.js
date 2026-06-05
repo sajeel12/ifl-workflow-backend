@@ -79,6 +79,21 @@ async function loadController({ config, inFlightRequests = [], allRequests = inF
             findByPk:  jest.fn().mockResolvedValue(allRequests[0] || null)
         }
     }));
+    // Offboarding table — rebindInFlightToDelegate + rebindStageToCurrentRecipient
+    // walk this too. Empty here so onboarding assertions stay isolated.
+    await jest.unstable_mockModule('../src/models/OffboardingRequest.js', () => ({
+        default: { findAll: jest.fn().mockResolvedValue([]), findByPk: jest.fn().mockResolvedValue(null) }
+    }));
+    // Stage recipient resolver — used by the non-delegation-role rebind. Returns a
+    // fixed "new" person so rebind assertions are deterministic.
+    await jest.unstable_mockModule('../src/utils/resolveStageRecipient.js', () => ({
+        resolveStageRecipient: jest.fn().mockResolvedValue({ role: 'IT Operations', name: 'New ITOps', email: 'new.itops@ifl.com', username: 'new.itops' }),
+        STATUS_TO_ROLE: {},
+        LOCATION_AWARE_ROLE_KEYS: new Set(['IT_OPS', 'HR_INITIATOR'])
+    }));
+    await jest.unstable_mockModule('../src/utils/emailMatch.js', () => ({
+        emailsMatch: (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase()
+    }));
     await jest.unstable_mockModule('../src/models/TimelineEvent.js', () => ({
         default: { create: timelineCreate, findAll: jest.fn().mockResolvedValue([]) }
     }));
@@ -436,6 +451,17 @@ describe('revertDelegation', () => {
                 findAll:  jest.fn().mockResolvedValue(inFlightRequests),
                 findByPk: jest.fn().mockResolvedValue(inFlightRequests[0] || null)
             }
+        }));
+        await jest.unstable_mockModule('../src/models/OffboardingRequest.js', () => ({
+            default: { findAll: jest.fn().mockResolvedValue([]), findByPk: jest.fn().mockResolvedValue(null) }
+        }));
+        await jest.unstable_mockModule('../src/utils/resolveStageRecipient.js', () => ({
+            resolveStageRecipient: jest.fn().mockResolvedValue({ role: 'DCI Manager', name: 'Resolved', email: 'resolved@ifl.com', username: 'resolved' }),
+            STATUS_TO_ROLE: {},
+            LOCATION_AWARE_ROLE_KEYS: new Set(['IT_OPS', 'HR_INITIATOR'])
+        }));
+        await jest.unstable_mockModule('../src/utils/emailMatch.js', () => ({
+            emailsMatch: (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase()
         }));
         await jest.unstable_mockModule('../src/models/TimelineEvent.js', () => ({
             default: { create: timelineCreate, findAll: jest.fn().mockResolvedValue([]) }

@@ -102,7 +102,7 @@
 
         <!-- ── Step Progress Bar (always visible) ── -->
         <div class="steps-container">
-            <div class="steps" style="--step-progress: <%= stepProgress %>%">
+            <div class="steps-row">
                 <% steps.forEach((s, i) => { %>
                     <div class="step-item <%= s.status %>">
                         <div class="step-circle">
@@ -110,7 +110,13 @@
                         </div>
                         <div class="step-label"><%= s.label %></div>
                     </div>
+                    <% if (i < steps.length - 1) { %>
+                        <div class="step-separator <%= s.status === 'completed' ? 'completed' : '' %>"></div>
+                    <% } %>
                 <% }); %>
+            </div>
+            <div class="global-progress">
+                <div class="global-progress-fill" style="width: <%= stepProgress %>%"></div>
             </div>
         </div>
 
