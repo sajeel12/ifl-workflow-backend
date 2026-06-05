@@ -842,69 +842,7 @@
                         </div>
                         <% } %>
 
-                            <!-- ── Multi-role notice: shown only when this account also holds other roles ── -->
-                            <% if (myOtherPortals && myOtherPortals.length> 0) { %>
-                                <div class="pd-multi-role">
-                                    <span class="pd-mr-icon">&#9888;</span>
-                                    <div class="pd-mr-body">
-                                        <p>
-                                            <strong>Your account has access to multiple portals.</strong>
-                                            You are currently in the <strong>
-                                                <%= roleName %>
-                                            </strong> portal — tasks here are specific to this role only.
-                                            Each role has its own URL and its own queue.
-                                        </p>
-                                        <div class="pd-mr-links">
-                                            <% myOtherPortals.forEach(p=> { %>
-                                                <a href="/portal/<%= p.slug %>/enter" class="pd-mr-link"
-                                                    style="border-left-color: <%= p.accentColor %>;">
-                                                    <span class="pd-mr-label" style="color: <%= p.accentColor %>;">
-                                                        <%= p.label %>
-                                                    </span>
-                                                    <span class="pd-mr-url">/portal/<%= p.slug %></span>
-                                                </a>
-                                                <% }) %>
-                                        </div>
-                                    </div>
-                                </div>
-                                <% } %>
-
-                                    <!-- ── HR: initiate banner ── -->
-                                    <% if (roleKey==='HR_INITIATOR' ) { %>
-                                        <div class="hr-initiate">
-                                            <p>Submit a new onboarding request for an incoming employee.</p>
-                                            <a href="<%= appUrl %>/api/onboarding/initiate" class="btn-initiate">+ New
-                                                Onboarding Request</a>
-                                        </div>
-                                        <% } %>
-
-                                            <!-- ── Stats ── -->
-                                            <div class="pd-stats">
-                                                <div class="pd-stat">
-                                                    <div class="s-val">
-                                                        <%= pendingCount %>
-                                                    </div>
-                                                    <div class="s-lbl">Total in queue</div>
-                                                </div>
-                                                <div class="pd-stat <%= actionCount > 0 ? 's-alert' : '' %>">
-                                                    <div class="s-val">
-                                                        <%= actionCount %>
-                                                    </div>
-                                                    <div class="s-lbl">Awaiting your action</div>
-                                                </div>
-                                                <div class="pd-stat">
-                                                    <div class="s-val">
-                                                        <%= history.length %>
-                                                    </div>
-                                                    <div class="s-lbl">Processed (history)</div>
-                                                </div>
-                                            </div>
-
-                                            <% // DCI Manager and DCI Implementer also see an "Offboarding" tab — the //
-                                                contents are fetched client-side via /api/offboarding/queue so we //
-                                                don't change the existing server-rendered onboarding pipeline. const
-                                                showOffboardingTab=(roleKey==='DCI_MANAGER' ||
-                                                roleKey==='DCI_IMPLEMENTER' ); %>
+                                            <% const showOffboardingTab=(roleKey==='DCI_MANAGER' || roleKey==='DCI_IMPLEMENTER'); %>
                                                 <!-- ── Tabs (JS-toggled) ── -->
                                                 <div class="pd-tabs">
                                                     <a class="pd-tab is-active" id="tab-pending" href="#"
@@ -958,8 +896,7 @@
                                                                                     </p>
                                                                                     <p class="req-sub">
                                                                                         <%= [r.designation,
-                                                                                            r.department].filter(Boolean).join('
-                                                                                            · ') || ' —' %>
+                                                                                            r.department].filter(Boolean).join(' · ') || ' —' %>
                                                                                             <% if (r.location) { %>
                                                                                                 &middot; <%= r.location
                                                                                                     %>
@@ -1134,7 +1071,7 @@
 
         // ── Offboarding queue loader ────────────────────────────────────
         // Fetched once on first tab switch and cached.
-        const PORTAL_ROLE_KEY = <% - JSON.stringify(roleKey) %>;
+        const PORTAL_ROLE_KEY = <%- JSON.stringify(roleKey) %>;
         let _offLoaded = false;
         async function loadOffboardingOnce() {
             if (_offLoaded) return;

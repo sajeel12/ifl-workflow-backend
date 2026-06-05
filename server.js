@@ -246,6 +246,12 @@ async function startServer() {
         // never has to remember a one-off migration step.
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeEmail', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'currentStageAssigneeUsername', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'workOrderPdfPath', 'STRING');
+        // DCI stage AD-provisioning fields (auto-fill + AD checks).
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'aliasName', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'mgLevel', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'adTitle', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'adDepartment', 'STRING');
 
         // WorkflowApproverConfig — six columns added with the delegation /
         // AD-username feature. The sequelize-cli migration covers four of
