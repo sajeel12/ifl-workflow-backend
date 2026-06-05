@@ -213,12 +213,6 @@
                                     <input type="text" value="<%= locDisplay %>" readonly style="background:#f1f5f9;" data-ifl-location="1">
                                 </div>
                             </div>
-
-                            <!-- Request details note -->
-                            <div style="display:flex;align-items:flex-start;gap:8px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:6px;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                                <span style="font-size:0.8rem;color:#92400e;line-height:1.5;">Describe what needs to be configured — services required, access levels, email setup, printer assignments, and any special permissions.</span>
-                            </div>
                         </div>
                     </div>
 
@@ -231,6 +225,22 @@
                             <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
                         <div class="form-section-body">
+                            <!-- Contact details (IT-assigned) -->
+                            <div class="grid-2" style="margin-bottom:14px;">
+                                <div class="form-group">
+                                    <label>Extension Number <span style="color:#dc2626;">*</span></label>
+                                    <input type="text" name="officeExtension" inputmode="numeric"
+                                        value="<%= val('officeExtension') %>" placeholder="e.g. 1234"
+                                        <%= servicesDisabled %> <%= role === 'IT' ? 'required' : '' %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>Mobile Number <span style="color:#dc2626;">*</span></label>
+                                    <input type="tel" name="mobilePhone" inputmode="tel"
+                                        value="<%= val('mobilePhone') %>" placeholder="e.g. 0300-1234567"
+                                        <%= servicesDisabled %> <%= role === 'IT' ? 'required' : '' %>>
+                                </div>
+                            </div>
+
                             <!-- Access & Email -->
                             <div class="grid-3" style="margin-bottom:10px;">
                                 <label class="checkbox-card" style="margin-bottom:0;">
@@ -239,19 +249,20 @@
                                     <span>Intranet Access <small style="color:#64748b;">(default)</small></span>
                                 </label>
                                 <label class="checkbox-card" style="margin-bottom:0;">
-                                    <input type="checkbox" name="emailIncoming" <%=chk('emailIncoming') %> <%= servicesDisabled %>>
+                                    <input type="checkbox" name="emailIncoming" <%=chk('emailIncoming') %> <%= servicesDisabled %> onchange="toggleEmailReason()">
                                     <span>Incoming Email</span>
                                 </label>
                                 <label class="checkbox-card" style="margin-bottom:0;">
-                                    <input type="checkbox" name="emailOutgoing" <%=chk('emailOutgoing') %> <%= servicesDisabled %>>
+                                    <input type="checkbox" name="emailOutgoing" <%=chk('emailOutgoing') %> <%= servicesDisabled %> onchange="toggleEmailReason()">
                                     <span>Outgoing Email</span>
                                 </label>
                             </div>
-                            <div class="form-group" style="margin-bottom:14px;">
-                                <label>Email Details</label>
-                                <textarea name="emailPurpose" rows="2"
-                                    placeholder="Specify what needs to be configured — recipients, limits, distribution lists, business justification."
-                                    <%=servicesDisabled %>><%= val('emailPurpose') %></textarea>
+                            <% const _showEmailReason = (chk('emailIncoming') || chk('emailOutgoing')); %>
+                            <div class="form-group" id="it-email-reason" style="margin-bottom:14px;<%= _showEmailReason ? '' : 'display:none;' %>">
+                                <label>Reason for Email Service <span style="color:#dc2626;">*</span></label>
+                                <textarea name="emailPurpose" id="it-email-reason-input" rows="2"
+                                    placeholder="Why is email access required for this employee (incoming, outgoing, or both)? State the business reason — e.g. corresponds with external vendors, receives system reports, etc."
+                                    <%= servicesDisabled %> <%= role === 'IT' ? 'data-it-required="1"' : '' %> <%= (_showEmailReason && role === 'IT') ? 'required' : '' %>><%= val('emailPurpose') %></textarea>
                             </div>
 
                             <!-- Printing -->
@@ -946,10 +957,26 @@
             }
         }
 
+        /* Show the "Reason for Email Service" field only when Incoming and/or
+           Outgoing email is selected, and make it required at the IT Ops stage. */
+        function toggleEmailReason() {
+            const inc   = document.querySelector('input[name="emailIncoming"]');
+            const out   = document.querySelector('input[name="emailOutgoing"]');
+            const wrap  = document.getElementById('it-email-reason');
+            const input = document.getElementById('it-email-reason-input');
+            if (!wrap || !input) return;
+            const show = (inc && inc.checked) || (out && out.checked);
+            wrap.style.display = show ? '' : 'none';
+            // Only enforce required on the editable IT Ops form (data flag set server-side).
+            if (input.dataset.itRequired === '1') input.required = show;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             // Set initial state for printer location fields
             togglePrinterLocation('laser');
             togglePrinterLocation('dotmatrix');
+            // Set initial visibility/required state for the email reason field
+            toggleEmailReason();
 
             // ── Employee ID auto-fill + state guard ────────────────────────
             // Runs on both "Get Employee Data" button click AND on field blur,

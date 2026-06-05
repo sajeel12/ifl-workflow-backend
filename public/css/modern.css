@@ -238,6 +238,8 @@ label {
 /* ── Input Fields (premium style) ─────────────────────── */
 input[type="text"],
 input[type="email"],
+input[type="tel"],
+input[type="number"],
 input[type="date"],
 input[type="file"],
 select,
