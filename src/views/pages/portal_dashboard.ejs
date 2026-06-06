@@ -470,6 +470,8 @@
         }
 
         .expanded-banner {
+            flex: 0 0 100%;
+            box-sizing: border-box;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -479,7 +481,7 @@
             font-weight: 600;
             padding: 7px 14px;
             border-radius: 5px 5px 0 0;
-            margin: -16px -18px 14px;
+            margin: -16px -18px 2px;
         }
 
         .expanded-banner span {
@@ -889,17 +891,17 @@
                                                                     %>
                                                                     <div class="req-card <%= r.canAct ? 'can-act' : 'read-only' %> <%= (expandId && r.id === expandId) ? 'is-expanded' : '' %>"
                                                                         id="req-<%= r.id %>">
+                                                                        <% if (expandId && r.id===expandId) { %>
+                                                                            <div class="expanded-banner"
+                                                                                style="background: <%= roleAccentColor %>;">
+                                                                                &#128279; <span>You are acting as
+                                                                                    <strong>
+                                                                                        <%= roleName %>
+                                                                                    </strong> — this request is
+                                                                                    assigned to you</span>
+                                                                            </div>
+                                                                            <% } %>
                                                                         <div class="req-info">
-                                                                            <% if (expandId && r.id===expandId) { %>
-                                                                                <div class="expanded-banner"
-                                                                                    style="background: <%= roleAccentColor %>;">
-                                                                                    &#128279; <span>You are acting as
-                                                                                        <strong>
-                                                                                            <%= roleName %>
-                                                                                        </strong> — this request is
-                                                                                        assigned to you</span>
-                                                                                </div>
-                                                                                <% } %>
                                                                                     <p class="req-name">#<%= r.id %> —
                                                                                             <%= r.fullName || '—' %>
                                                                                     </p>
