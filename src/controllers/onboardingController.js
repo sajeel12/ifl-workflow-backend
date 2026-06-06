@@ -707,7 +707,6 @@ const renderForm = async (req, res, token) => {
     const opsVerifierName = (req.user && (req.user.displayName || req.user.username)) || '';
     if (role === 'OPS') {
         const items = [];
-        if (request.intranetAccess) items.push('Configure Intranet Access');
         if (request.emailIncoming || request.emailOutgoing) items.push('Configure Outlook Email');
         if (request.deptSharePath) items.push(`Map Department Share (S:): ${request.deptSharePath}`);
         if (request.homeFolderPath) items.push(`Map Home Folder (Z:): ${request.homeFolderPath}`);
