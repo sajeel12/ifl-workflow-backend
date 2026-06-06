@@ -110,9 +110,6 @@
                         </div>
                         <div class="step-label"><%= s.label %></div>
                     </div>
-                    <% if (i < steps.length - 1) { %>
-                        <div class="step-separator <%= s.status === 'completed' ? 'completed' : '' %>"></div>
-                    <% } %>
                 <% }); %>
             </div>
             <div class="global-progress">
@@ -231,6 +228,30 @@
                             <svg class="form-section-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
                         <div class="form-section-body">
+                            <!-- Access & Email -->
+                            <div class="grid-3" style="margin-bottom:10px;">
+                                <label class="checkbox-card" style="margin-bottom:0;">
+                                    <input type="checkbox" name="intranetAccess"
+                                        <%= (request.intranetAccess === false) ? '' : 'checked' %> <%= servicesDisabled %>>
+                                    <span>Intranet Access <small style="color:#64748b;">(default)</small></span>
+                                </label>
+                                <label class="checkbox-card" style="margin-bottom:0;">
+                                    <input type="checkbox" name="emailIncoming" <%=chk('emailIncoming') %> <%= servicesDisabled %> onchange="toggleEmailReason()">
+                                    <span>Incoming-Email</span>
+                                </label>
+                                <label class="checkbox-card" style="margin-bottom:0;">
+                                    <input type="checkbox" name="emailOutgoing" <%=chk('emailOutgoing') %> <%= servicesDisabled %> onchange="toggleEmailReason()">
+                                    <span>Outgoing-Email</span>
+                                </label>
+                            </div>
+                            <% const _showEmailReason = (chk('emailIncoming') || chk('emailOutgoing')); %>
+                            <div class="form-group" id="it-email-reason" style="margin-bottom:14px;<%= _showEmailReason ? '' : 'display:none;' %>">
+                                <label>Reason for Email Service <span style="color:#dc2626;">*</span></label>
+                                <textarea name="emailPurpose" id="it-email-reason-input" rows="2"
+                                    placeholder="Why is email access required for this employee (incoming, outgoing, or both)? State the business reason — e.g. corresponds with external vendors, receives system reports, etc."
+                                    <%= servicesDisabled %> <%= role === 'IT' ? 'data-it-required="1"' : '' %> <%= (_showEmailReason && role === 'IT') ? 'required' : '' %>><%= val('emailPurpose') %></textarea>
+                            </div>
+
                             <!-- Contact details (IT-assigned) -->
                             <div class="grid-2" style="margin-bottom:14px;">
                                 <div class="form-group">
@@ -247,38 +268,14 @@
                                 </div>
                             </div>
 
-                            <!-- Access & Email -->
-                            <div class="grid-3" style="margin-bottom:10px;">
-                                <label class="checkbox-card" style="margin-bottom:0;">
-                                    <input type="checkbox" name="intranetAccess"
-                                        <%= (request.intranetAccess === false) ? '' : 'checked' %> <%= servicesDisabled %>>
-                                    <span>Intranet Access <small style="color:#64748b;">(default)</small></span>
-                                </label>
-                                <label class="checkbox-card" style="margin-bottom:0;">
-                                    <input type="checkbox" name="emailIncoming" <%=chk('emailIncoming') %> <%= servicesDisabled %> onchange="toggleEmailReason()">
-                                    <span>Incoming Email</span>
-                                </label>
-                                <label class="checkbox-card" style="margin-bottom:0;">
-                                    <input type="checkbox" name="emailOutgoing" <%=chk('emailOutgoing') %> <%= servicesDisabled %> onchange="toggleEmailReason()">
-                                    <span>Outgoing Email</span>
-                                </label>
-                            </div>
-                            <% const _showEmailReason = (chk('emailIncoming') || chk('emailOutgoing')); %>
-                            <div class="form-group" id="it-email-reason" style="margin-bottom:14px;<%= _showEmailReason ? '' : 'display:none;' %>">
-                                <label>Reason for Email Service <span style="color:#dc2626;">*</span></label>
-                                <textarea name="emailPurpose" id="it-email-reason-input" rows="2"
-                                    placeholder="Why is email access required for this employee (incoming, outgoing, or both)? State the business reason — e.g. corresponds with external vendors, receives system reports, etc."
-                                    <%= servicesDisabled %> <%= role === 'IT' ? 'data-it-required="1"' : '' %> <%= (_showEmailReason && role === 'IT') ? 'required' : '' %>><%= val('emailPurpose') %></textarea>
-                            </div>
-
                             <!-- Printing -->
                             <div class="grid-2" style="margin-bottom:12px;">
                                 <div style="display:flex;gap:8px;align-items:center;">
                                     <input type="checkbox" id="chk-laser" name="laserPrinter" <%=chk('laserPrinter') %>
                                         <%= servicesDisabled %> style="width:16px;height:16px;flex-shrink:0;"
                                         onchange="togglePrinterLocation('laser')">
-                                    <% if (printerLocations && printerLocations.length > 0 && !servicesDisabled) { %>
-                                        <select id="loc-laser" name="laserPrinterLocation" style="flex:1;">
+                                    <% if (printerLocations && printerLocations.length > 0) { %>
+                                        <select id="loc-laser" name="laserPrinterLocation" style="flex:1;" <%=servicesDisabled %>>
                                             <option value="">— Laser Printer —</option>
                                             <% printerLocations.filter(p => p.name && p.name.toLowerCase().includes('laser')).forEach(p => { %>
                                                 <option value="<%= p.location %>" <%= val('laserPrinterLocation') === p.location ? 'selected' : '' %>><%= p.name %></option>
@@ -293,8 +290,8 @@
                                     <input type="checkbox" id="chk-dotmatrix" name="dotMatrixPrinter" <%=chk('dotMatrixPrinter') %>
                                         <%= servicesDisabled %> style="width:16px;height:16px;flex-shrink:0;"
                                         onchange="togglePrinterLocation('dotmatrix')">
-                                    <% if (printerLocations && printerLocations.length > 0 && !servicesDisabled) { %>
-                                        <select id="loc-dotmatrix" name="dotMatrixPrinterLocation" style="flex:1;">
+                                    <% if (printerLocations && printerLocations.length > 0) { %>
+                                        <select id="loc-dotmatrix" name="dotMatrixPrinterLocation" style="flex:1;" <%=servicesDisabled %>>
                                             <option value="">— Dot Matrix —</option>
                                             <% printerLocations.filter(p => p.name && p.name.toLowerCase().includes('matrix')).forEach(p => { %>
                                                 <option value="<%= p.location %>" <%= val('dotMatrixPrinterLocation') === p.location ? 'selected' : '' %>><%= p.name %></option>
@@ -500,10 +497,12 @@
 
                             <div class="form-group"><label>Additional Access Requirements</label><textarea name="extraFacility" rows="2" <%=configDisabled %>><%= val('extraFacility') %></textarea></div>
 
+                            <% if (role === 'DCIManager' || val('dciRemarks')) { %>
                             <div class="form-group">
                                 <label>Provisioning Notes</label>
                                 <textarea name="dciRemarks" rows="3" <%=dciRemarksDisabled %>><%= val('dciRemarks') %></textarea>
                             </div>
+                            <% } %>
                         </div>
                         <script>
                             window.IFL_DCI = {
@@ -614,13 +613,13 @@
                     <ol class="wf-history-list">
                         <% 
                             const _historyRoleMap = {
-                                'HR': 'Request Submission',
-                                'IT': 'Service Review',
-                                'HOD': 'Head of Department Approval',
-                                'DCI': 'Access Configuration',
-                                'DCIManager': 'IAM Approval',
-                                'ITHOD': 'IT Governance Approval',
-                                'IT HOD': 'IT Governance Approval',
+                                'HR': ' HR Request Submission',
+                                'IT': 'IT OPS Review',
+                                'HOD': 'Employee HOD Approval',
+                                'DCI': 'Profile Configuration',
+                                'DCIManager': 'IT Manager Approval',
+                                'ITHOD': 'IT HOD Approval',
+                                'IT HOD': 'IT HOD Approval',
                                 'DCIImplementer': 'Account Provisioning',
                                 'DCI Implementer': 'Account Provisioning',
                                 'OPS': 'Compliance Verification'

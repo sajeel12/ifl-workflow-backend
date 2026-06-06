@@ -680,12 +680,12 @@ const renderForm = async (req, res, token) => {
 
     // Full workflow stepper — driven by request.status, not the viewer role.
     const WORKFLOW_STAGES = [
-        { label: 'Request Submission',      statusKey: null },
-        { label: 'Service Review',          statusKey: 'PendingIT' },
-        { label: 'Head Of Department Approval',        statusKey: 'PendingHOD' },
-        { label: 'Access Configuration',    statusKey: 'PendingDCI' },
-        { label: 'IAM Approval',            statusKey: 'PendingDCIManager' },
-        { label: 'IT Governance Approval',  statusKey: 'PendingITHOD' },
+        { label: 'HR Request Submission',      statusKey: null },
+        { label: 'IT OPS Review',          statusKey: 'PendingIT' },
+        { label: 'Employee HOD Approval',        statusKey: 'PendingHOD' },
+        { label: 'Profile Configuration',    statusKey: 'PendingDCI' },
+        { label: 'IT Manager Approval',            statusKey: 'PendingDCIManager' },
+        { label: 'IT HOD Approval',  statusKey: 'PendingITHOD' },
         { label: 'Account Provisioning',    statusKey: 'PendingDCIImplementation' },
         { label: 'Compliance Verification', statusKey: 'PendingOPSAction' },
         { label: 'Request Closed',          statusKey: 'Completed' },

@@ -871,6 +871,15 @@
                                                             <p>No pending requests in your queue.</p>
                                                         </div>
                                                         <% } else { %>
+                                                            <% const STAGE_OWNER = {
+                                                                PendingIT:                'With IT Operations',
+                                                                PendingOPSAction:         'With IT Operations',
+                                                                PendingHOD:               'With Department HOD',
+                                                                PendingITHOD:             'With IT HOD',
+                                                                PendingDCI:               'With DCI Team',
+                                                                PendingDCIManager:        'With DCI Manager',
+                                                                PendingDCIImplementation: 'With DCI Implementer',
+                                                            }; %>
                                                             <div class="req-list">
                                                                 <% pending.forEach(r=> {
                                                                     const stageAge = r.hrSubmittedAt ?
@@ -923,23 +932,12 @@
                                                                                                             %></span>
                                                                                                     <% } %>
                                                                                     </div>
-                                                                                    <% if (stageAge !==null) { %>
-                                                                                        <div
-                                                                                            class="req-timer <%= isStale ? 'stale' : '' %>">
-                                                                                            <%= isStale ? '&#9888; '
-                                                                                                : '&#9679; ' %>
-                                                                                                Stage open <%= stageAge
-                                                                                                    %>h<%= isStale
-                                                                                                        ? ' — PAST 48h'
-                                                                                                        : '' %>
-                                                                                        </div>
-                                                                                        <% } %>
                                                                         </div>
 
                                                                         <div class="req-actions">
                                                                             <% if (r.canAct && r.actionUrl) { %>
                                                                                 <a href="<%= r.actionUrl %>"
-                                                                                    class="btn-handle">Handle
+                                                                                    class="btn-handle">Proceed
                                                                                     &#8594;</a>
                                                                                 <% } else { %>
                                                                                     <a href="/api/onboarding/history/<%= r.id %>"
@@ -956,7 +954,7 @@
                                                                                                         r.currentStageAssigneeEmail.split('@')[0]
                                                                                                         %>
                                                                                                         <% } else { %>
-                                                                                                            Unassigned
+                                                                                                            <%= STAGE_OWNER[r.status] || 'Unassigned' %>
                                                                                                             <% } %>
                                                                                         </div>
                                                                         </div>

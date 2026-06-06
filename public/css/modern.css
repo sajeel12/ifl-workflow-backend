@@ -110,33 +110,27 @@ body {
 
 .steps-row {
     display: flex;
-    align-items: flex-start;
+    align-items: stretch;
     justify-content: space-between;
     padding-bottom: 16px;
-    gap: 4px;
+    gap: 8px;
 }
 
 .step-item {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: flex-start;
     gap: 8px;
     color: var(--text-muted);
-    flex: 1;
+    flex: 1 1 0;
     min-width: 0;
-}
-
-.step-separator {
-    height: 2px;
-    flex: 1;
-    min-width: 10px;
-    background: var(--border);
-    border-radius: 2px;
-    margin-top: 11px;
-}
-
-.step-separator.completed {
-    background: var(--primary);
+    min-height: 84px;
+    padding: 12px 8px;
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
 }
 
 .step-circle {
@@ -149,20 +143,28 @@ body {
 }
 
 .step-label {
-    font-size: 0.65rem; 
-    font-weight: 600; 
-    white-space: normal; 
+    font-size: 0.65rem;
+    font-weight: 600;
+    white-space: normal;
     word-break: normal;
     text-align: center;
     line-height: 1.3;
+    align-self: stretch;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
 }
 
+.step-item.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    box-shadow: 0 0 0 1px var(--primary);
+}
 .step-item.active .step-circle {
     border-color: var(--primary); color: var(--primary);
-    background: var(--primary-light);
+    background: #fff;
     animation: active-pulse 1.5s infinite;
 }
-.step-item.active .step-label { color: var(--primary); font-weight: 700; }
+.step-item.active .step-label { color: var(--primary); font-weight: 700; border-top-color: var(--primary); }
 
 @keyframes active-pulse {
     0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); }
@@ -170,10 +172,13 @@ body {
     100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
 }
 
+.step-item.completed {
+    border-color: var(--primary);
+}
 .step-item.completed .step-circle {
     background: var(--primary); border-color: var(--primary); color: #fff;
 }
-.step-item.completed .step-label { color: var(--primary); }
+.step-item.completed .step-label { color: var(--primary); border-top-color: var(--primary); }
 
 .global-progress {
     height: 8px;
@@ -339,6 +344,8 @@ textarea { resize: vertical; min-height: 72px; }
     transition: border-color 0.15s, background 0.15s;
     font-size: 0.86rem; color: var(--text-secondary);
     font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
 }
 .checkbox-card:hover { border-color: var(--primary); background: var(--primary-light); }
 
