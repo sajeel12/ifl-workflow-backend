@@ -215,6 +215,59 @@ async function resolveResendRecipient(status, roleKey, context) {
 // non-location-aware roles from the per-location editor.
 const LOCATION_AWARE_ROLES = new Set(['IT_OPS', 'HR_INITIATOR']);
 
+// Map a TimelineEvent actorRole -> approver roleKey, so admin-delete can notify
+// every stage owner that touched the request. Uses current configured emails —
+// not historical snapshots.
+const ACTOR_ROLE_TO_ROLE_KEY = {
+    IT:             'IT_OPS',
+    HOD:            'HOD',
+    DCI:            'DCI_TEAM',
+    DCIManager:     'DCI_MANAGER',
+    ITHOD:          'IT_HOD',
+    DCIImplementer: 'DCI_IMPLEMENTER',
+    OPS:            'IT_OPS',
+};
+
+// Gather every party to notify when an onboarding request is admin-deleted:
+// the requester, the live stage assignee, and the currently-configured approver
+// email for each role that has acted on the request (per its timeline).
+async function collectNotifyEmails(request) {
+    const emails = new Set();
+
+    if (request.requesterEmail) emails.add(request.requesterEmail.toLowerCase().trim());
+    if (request.currentStageAssigneeEmail) emails.add(request.currentStageAssigneeEmail.toLowerCase().trim());
+
+    let actorRoles = [];
+    try {
+        const events = await TimelineEvent.findAll({
+            where: { requestId: request.id },
+            attributes: ['actorRole']
+        });
+        actorRoles = [...new Set(events.map(e => e.actorRole).filter(r => r && r !== 'System' && r !== 'Admin' && r !== 'HR'))];
+    } catch (err) {
+        console.error('[Admin Delete] Could not load timeline actors:', err.message);
+    }
+
+    for (const actorRole of actorRoles) {
+        const roleKey = ACTOR_ROLE_TO_ROLE_KEY[actorRole];
+        if (!roleKey) continue;
+        try {
+            let cfg = null;
+            if (LOCATION_AWARE_ROLES.has(roleKey) && request.location) {
+                cfg = await WorkflowApproverLocationOverride.findOne({
+                    where: { roleKey, location: request.location, isActive: true }
+                });
+            }
+            if (!cfg) cfg = await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
+            if (cfg && cfg.approverEmail) emails.add(cfg.approverEmail.toLowerCase().trim());
+        } catch (err) {
+            console.error(`[Admin Delete] Could not resolve email for ${roleKey}:`, err.message);
+        }
+    }
+
+    return [...emails].filter(Boolean);
+}
+
 // State to remember current config (would usually be in DB)
 let currentCronConfig = {
     enabled: false,
