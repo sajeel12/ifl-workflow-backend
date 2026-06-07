@@ -108,12 +108,9 @@
                         <div class="step-circle">
                             <% if (s.status === 'completed') { %>&#10003;<% } else { %><%= i + 1 %><% } %>
                         </div>
-                        <div class="step-label"><%= s.label %></div>
+                        <div class="step-label" title="<%= s.label %>"><%= s.label %></div>
                     </div>
                 <% }); %>
-            </div>
-            <div class="global-progress">
-                <div class="global-progress-fill" style="width: <%= stepProgress %>%"></div>
             </div>
         </div>
 

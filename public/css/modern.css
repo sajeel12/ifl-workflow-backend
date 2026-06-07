@@ -101,8 +101,14 @@ body {
 }
 
 /* ── Step Progress Bar ─────────────────────────────────── */
+/* ── Onboarding stepper: refined "connector-rail" design ──────────
+   Circles threaded on a single horizontal rail that fills blue as
+   steps complete. Every label reserves the SAME two-line height so the
+   row stays perfectly symmetric no matter how long the wording is —
+   the pattern Material UI Stepper / Ant Design Steps use. Markup is
+   unchanged (.step-item.completed / .active). */
 .steps-container {
-    padding: 16px 28px 0;
+    padding: 24px 28px 18px;
     background: var(--bg-card);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -110,96 +116,139 @@ body {
 
 .steps-row {
     display: flex;
-    align-items: stretch;
-    gap: 0;
-    border: 1.5px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
+    align-items: flex-start;
+    position: relative;
 }
 
 .step-item {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
-    color: var(--text-muted);
-    flex: 1 1 0;
-    min-width: 0;
-    min-height: 84px;
-    padding: 12px 8px;
-    background: var(--bg-card);
-    transition: background 0.25s ease;
+    gap: 11px;
+    padding-top: 3px;
+    /* staggered entrance on load */
+    animation: step-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.step-item:nth-child(1) { animation-delay: 0.04s; }
+.step-item:nth-child(2) { animation-delay: 0.10s; }
+.step-item:nth-child(3) { animation-delay: 0.16s; }
+.step-item:nth-child(4) { animation-delay: 0.22s; }
+.step-item:nth-child(5) { animation-delay: 0.28s; }
+.step-item:nth-child(6) { animation-delay: 0.34s; }
+.step-item:nth-child(7) { animation-delay: 0.40s; }
+.step-item:nth-child(8) { animation-delay: 0.46s; }
+
+@keyframes step-in {
+    from { opacity: 0; transform: translateY(9px); }
+    to   { opacity: 1; transform: none; }
 }
 
-/* Single divider line between cells — like one table row, not boxed per step. */
-.step-item:not(:last-child) {
-    border-right: 1.5px solid var(--border);
+/* Rail geometry shared by the grey base (::after) and the blue
+   completed fill (::before, drawn on top and animated in). */
+.step-item:not(:last-child)::after,
+.step-item.completed:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 20px;            /* vertical centre of the 34px circle */
+    left: 50%;
+    width: 100%;
+    height: 2px;
+}
+.step-item:not(:last-child)::after {
+    background: var(--border-strong);
+    z-index: 0;
+}
+.step-item.completed:not(:last-child)::before {
+    background: linear-gradient(90deg, var(--primary), #3b82f6);
+    z-index: 1;
+    transform-origin: left center;
+    animation: rail-fill 0.55s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.step-item:nth-child(1)::before { animation-delay: 0.20s; }
+.step-item:nth-child(2)::before { animation-delay: 0.26s; }
+.step-item:nth-child(3)::before { animation-delay: 0.32s; }
+.step-item:nth-child(4)::before { animation-delay: 0.38s; }
+.step-item:nth-child(5)::before { animation-delay: 0.44s; }
+.step-item:nth-child(6)::before { animation-delay: 0.50s; }
+.step-item:nth-child(7)::before { animation-delay: 0.56s; }
+
+@keyframes rail-fill {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
 }
 
 .step-circle {
-    width: 24px; height: 24px; border-radius: 50%;
-    background: #fff; border: 2px solid var(--border);
+    position: relative;
+    z-index: 2;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: #fff; border: 2px solid var(--border-strong);
+    color: var(--text-faint);
     display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 10px;
-    transition: all 0.25s ease;
+    font-weight: 700; font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
 }
 
+/* Reserve a uniform two-line block + clamp overflow → no ragged rows.
+   The full text is exposed via a title="" tooltip in the markup. */
 .step-label {
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     font-weight: 600;
-    white-space: normal;
-    word-break: normal;
+    letter-spacing: 0.01em;
     text-align: center;
     line-height: 1.3;
-    align-self: stretch;
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
+    width: 100%;
+    padding: 0 4px;
+    color: var(--text-muted);
+    min-height: 2.6em;            /* exactly two lines */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: color 0.3s ease;
 }
 
-.step-item.active {
-    background: var(--primary-light);
-}
-.step-item.active .step-circle {
-    border-color: var(--primary); color: var(--primary);
-    background: #fff;
-    animation: active-pulse 1.5s infinite;
-}
-.step-item.active .step-label { color: var(--primary); font-weight: 700; border-top-color: var(--primary); }
-
-@keyframes active-pulse {
-    0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); }
-    70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
-}
-
+/* Completed — solid blue token, crisp check */
 .step-item.completed .step-circle {
-    background: var(--primary); border-color: var(--primary); color: #fff;
+    background: linear-gradient(135deg, var(--primary), #1e40af);
+    border-color: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.30);
 }
-.step-item.completed .step-label { color: var(--primary); border-top-color: var(--primary); }
+.step-item.completed .step-label { color: var(--text-secondary); }
 
-.global-progress {
-    height: 8px;
-    background: #e2e8f0;
-    border-radius: 8px;
-    margin: 16px 8px 8px 8px;
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+/* Active — soft halo + slow breathing ring (restrained) */
+.step-item.active .step-circle {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: #fff;
+    box-shadow: 0 0 0 4px var(--primary-ring), 0 2px 8px rgba(37, 99, 235, 0.18);
+    animation: step-breathe 2.6s ease-in-out infinite;
+}
+.step-item.active .step-label { color: var(--primary); font-weight: 700; }
+
+@keyframes step-breathe {
+    0%, 100% { box-shadow: 0 0 0 4px var(--primary-ring), 0 2px 8px rgba(37, 99, 235, 0.18); }
+    50%      { box-shadow: 0 0 0 7px rgba(37, 99, 235, 0.08), 0 2px 8px rgba(37, 99, 235, 0.18); }
 }
 
-.global-progress-fill {
-    height: 100%;
-    border-radius: 8px;
-    background: linear-gradient(90deg, var(--primary) 0%, #60a5fa 50%, var(--primary) 100%);
-    background-size: 200% 100%;
-    transition: width 0.4s ease;
-    animation: progress-burn 1.5s infinite linear;
-    box-shadow: 0 0 10px rgba(37, 99, 235, 0.6);
+@media (max-width: 640px) {
+    .step-circle { width: 30px; height: 30px; font-size: 12px; }
+    .step-item:not(:last-child)::after,
+    .step-item.completed:not(:last-child)::before { top: 18px; }
+    .step-label { font-size: 0.62rem; }
 }
 
-@keyframes progress-burn {
-    0% { background-position: 100% 0; }
-    100% { background-position: -100% 0; }
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .step-item,
+    .step-item.completed:not(:last-child)::before,
+    .step-item.active .step-circle { animation: none; }
 }
 
 /* ── Form scaffold (flex: fills remaining height) ──────── */
