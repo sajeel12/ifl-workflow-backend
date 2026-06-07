@@ -1,5 +1,9 @@
 <%- include('../partials/header', { title: 'IT Onboarding Workflow' }) %>
     <link rel="stylesheet" href="/css/modern.css">
+    <!-- Stepper display fonts (graceful fallback if the intranet blocks Google) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap">
 
     <%
     // When an action token is present (email-link click), the form must be
@@ -105,9 +109,7 @@
             <div class="steps-row">
                 <% steps.forEach((s, i) => { %>
                     <div class="step-item <%= s.status %>">
-                        <div class="step-circle">
-                            <% if (s.status === 'completed') { %>&#10003;<% } else { %><%= i + 1 %><% } %>
-                        </div>
+                        <div class="step-circle"><%= i + 1 %></div>
                         <div class="step-label" title="<%= s.label %>"><%= s.label %></div>
                     </div>
                 <% }); %>
