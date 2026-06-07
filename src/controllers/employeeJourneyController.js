@@ -220,10 +220,14 @@ export async function getEmployeeAdProfile(req, res) {
         }
 
         // Strategy 4: name search + username-part matching (last resort)
-        if (!raw && emp?.name) {
-            const dbUsername = (emp.email || '').toLowerCase().split('@')[0];
+        // Only run when the employee actually has an email — otherwise dbUsername
+        // is '' and would falsely match any AD account that also lacks a mail
+        // (this is how machine account "ALIMUHAMMADHP$" was attaching to an
+        // emailless employee whose first name appeared in its sAMAccountName).
+        if (!raw && emp?.name && emp?.email) {
+            const dbUsername = emp.email.toLowerCase().split('@')[0];
             const results    = await searchUsersByName(emp.name.split(' ')[0]);
-            const hit = results.find(u =>
+            const hit = dbUsername && results.find(u =>
                 (u.mail || u.email || '').toLowerCase().split('@')[0] === dbUsername
             );
             if (hit) raw = hit;

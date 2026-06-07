@@ -327,6 +327,15 @@
             background: #15803d;
         }
 
+        .pd-initiate-btn--off {
+            background: #ea580c;
+            margin-top: 8px;
+        }
+
+        .pd-initiate-btn--off:hover {
+            background: #c2410c;
+        }
+
         .pd-portal-link {
             display: flex;
             align-items: center;
@@ -778,6 +787,9 @@
                         <div class="pd-side-section-hd">Actions</div>
                         <a href="<%= appUrl %>/api/onboarding/initiate" class="pd-initiate-btn">
                             + New Onboarding Request
+                        </a>
+                        <a href="<%= appUrl %>/api/offboarding/initiate" class="pd-initiate-btn pd-initiate-btn--off">
+                            + New Offboarding Request
                         </a>
                     </div>
                     <% } %>

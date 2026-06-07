@@ -13,6 +13,15 @@ function _hmacHex(data) {
     return crypto.createHmac('sha256', SHARED_SECRET).update(data).digest('hex');
 }
 
+// Computer/machine accounts in AD have a sAMAccountName ending in '$' and are
+// objectClass=user (the computer class derives from user). They must never be
+// resolved as an employee. This is the Node-side backstop for the same exclusion
+// applied in adsearch.aspx (objectCategory=person) — it works even before the
+// IIS sidecar is redeployed.
+function _isComputerAccount(sam) {
+    return typeof sam === 'string' && sam.endsWith('$');
+}
+
 async function _lookupViaSidecar(email) {
     if (!ADLOOKUP_URL) return null;
     try {
@@ -259,7 +268,7 @@ export const findUserByEmail = async (email) => {
     }
 
     const results = await Promise.all(sources.map(({ client, label }) => searchOn(client, label)));
-    const found = results.find(r => r && r.sAMAccountName);
+    const found = results.find(r => r && r.sAMAccountName && !_isComputerAccount(r.sAMAccountName));
     if (found) {
         logger.info(`[ADService] findUserByEmail(${email}) → sAMAccountName=${found.sAMAccountName} via ${found._source}`);
         return found;
@@ -288,8 +297,15 @@ export const findUserByEmployeeIdViaSidecar = async (employeeId) => {
             logger.warn(`[ADSearch] HMAC mismatch for employeeId "${employeeId}"`);
             return null;
         }
-        logger.info(`[ADSearch] employeeId(${employeeId}) → ${data.results[0].sAMAccountName}`);
-        return data.results[0];
+        // Drop computer accounts — a machine object carrying this employeeID must
+        // not masquerade as the employee in the 360 profile.
+        const user = data.results.find(r => !_isComputerAccount(r.sAMAccountName));
+        if (!user) {
+            logger.warn(`[ADSearch] employeeId(${employeeId}) matched only computer accounts — ignored`);
+            return null;
+        }
+        logger.info(`[ADSearch] employeeId(${employeeId}) → ${user.sAMAccountName}`);
+        return user;
     } catch (e) {
         logger.warn(`[ADSearch] employeeId sidecar error: ${e.message}`);
         return null;
@@ -315,7 +331,9 @@ export const searchUsersByName = async (q) => {
             logger.warn(`[ADSearch] HMAC mismatch for query "${q}"`);
             return [];
         }
-        return data.results;
+        // Never surface computer/machine accounts (sAMAccountName ending in '$')
+        // in user search results — they are not employees or valid approvers.
+        return data.results.filter(r => !_isComputerAccount(r.sAMAccountName));
     } catch (e) {
         logger.warn(`[ADSearch] sidecar error: ${e.message}`);
         return [];
@@ -442,7 +460,7 @@ export const findUserByEmployeeId = async (employeeId) => {
 
     for (const { client, label } of sources) {
         const user = await _searchByFilter(client, filter, FULL_PROFILE_ATTRS, label);
-        if (user && user.sAMAccountName) {
+        if (user && user.sAMAccountName && !_isComputerAccount(user.sAMAccountName)) {
             logger.info(`[ADService] findUserByEmployeeId(${employeeId}) → ${user.sAMAccountName} via ${label}`);
             return user;
         }
