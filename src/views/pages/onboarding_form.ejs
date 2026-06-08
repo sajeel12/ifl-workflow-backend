@@ -969,7 +969,12 @@
             const chk = document.getElementById('chk-' + type);
             const loc = document.getElementById('loc-' + type);
             if (chk && loc) {
-                loc.disabled = !chk.checked;
+                // Respect the stage-level lock: if the checkbox itself is disabled
+                // (a future / read-only stage where servicesDisabled applies), keep
+                // the location dropdown disabled too — previously it was re-enabled
+                // here whenever the box was checked, leaking edit access. The DCI
+                // stage stays editable because there the checkbox is NOT disabled.
+                loc.disabled = chk.disabled || !chk.checked;
                 if (!chk.checked) loc.value = '';
                 loc.style.opacity = chk.checked ? '1' : '0.5';
             }

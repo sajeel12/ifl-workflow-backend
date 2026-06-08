@@ -165,7 +165,9 @@ async function loadEmployees() {
     limit: PAGE_SIZE, offset: ejPage * PAGE_SIZE,
     ...(search && { search }),
     ...(dept   && { department: dept }),
-    ...(status && { status })
+    // Always send status (even '' for All Statuses) so the backend doesn't
+    // fall back to its 'Active' default and silently hide terminated staff.
+    status
   });
 
   // For name searches only: parallel AD name search to populate "AD Only" section.
