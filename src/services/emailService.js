@@ -34,8 +34,13 @@ const transporter = nodemailer.createTransport(transporterOptions);
 
 export const sendApprovalEmail = async (toEmail, subject, requestDetails, approvalLink, requesterName, requesterEmail, displayOpts = {}) => {
     logger.info(`[Email] Sending approval email to ${toEmail}`);
-    // displayOpts.reqId   — request number shown large in the body (e.g. "42")
-    // displayOpts.stageName — stage label shown below the separator (e.g. "IT Configuration")
+    // displayOpts.reqId      — request number shown large in the body (e.g. "42")
+    // displayOpts.stageName  — stage label shown below the separator (e.g. "IT Configuration")
+    // displayOpts.brandTitle — header banner / adaptive-card title.
+    //                          Defaults to "New Employee Onboarding" for legacy
+    //                          callers. Offboarding callers pass
+    //                          "Employee Offboarding".
+    const brandTitle = displayOpts.brandTitle || 'New Employee Onboarding';
 
     const adaptiveCardPayload = {
         "type": "AdaptiveCard",
@@ -44,7 +49,7 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
         "body": [
             {
                 "type": "TextBlock",
-                "text": "New Employee Onboarding",
+                "text": brandTitle,
                 "weight": "Bolder",
                 "size": "Medium",
                 "color": "Accent"
@@ -117,7 +122,7 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
                         <!-- Header -->
                         <tr>
                             <td bgcolor="#0078D4" style="background-color:#0078D4;padding:18px 24px;text-align:center;">
-                                <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:600;font-family:'Segoe UI',Calibri,Arial,sans-serif;letter-spacing:0.01em;">New Employee Onboarding</h1>
+                                <h1 style="color:#ffffff;margin:0;font-size:18px;font-weight:600;font-family:'Segoe UI',Calibri,Arial,sans-serif;letter-spacing:0.01em;">${brandTitle}</h1>
                             </td>
                         </tr>
                         <!-- Content -->
@@ -620,10 +625,11 @@ export const sendOffboardingNotification = async (toEmail, request, actionLink, 
         return lines.join('\n');
     };
 
-    let subject, body;
+    let subject, body, stageName;
     switch (type) {
         case 'DCI_MANAGER_APPROVAL':
             subject = `Offboarding ${reqNo} — Manager Approval`;
+            stageName = 'Manager Approval';
             body = buildBullets(
                 'Review the user\'s granted privileges and approve or reject the revocation.',
                 'Approved → DCI Implementer for AD deletion.'
@@ -631,6 +637,7 @@ export const sendOffboardingNotification = async (toEmail, request, actionLink, 
             break;
         case 'DCI_IMPLEMENTER':
             subject = `Offboarding ${reqNo} — Account Revocation`;
+            stageName = 'Account Revocation';
             body = buildBullets(
                 'Delete AD account, confirm SmartX and door-access revocation.',
                 'Final notification will go to HOD and IT HOD on completion.'
@@ -638,9 +645,18 @@ export const sendOffboardingNotification = async (toEmail, request, actionLink, 
             break;
         default:
             subject = `Offboarding ${reqNo} — Action Required`;
+            stageName = 'Action Required';
             body = buildBullets('Your input is required.', 'Workflow will continue.');
     }
-    return sendApprovalEmail(toEmail, subject, body, actionLink, 'Offboarding Workflow', '');
+    return sendApprovalEmail(
+        toEmail, subject, body, actionLink,
+        'Offboarding Workflow', '',
+        {
+            brandTitle: 'Employee Offboarding',
+            reqId:      request.id,
+            stageName
+        }
+    );
 };
 
 // Final offboarding-completed notification (no action link — informational only).
