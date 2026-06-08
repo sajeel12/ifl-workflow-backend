@@ -254,7 +254,7 @@ const renderForm = async (req, res, token) => {
             try {
                 privileges = await OnboardingRequest.findOne({
                     where: { employeeId: request.employeeId, status: 'Completed' },
-                    order: [['completedAt', 'DESC']]
+                    order: [['opsCompletedAt', 'DESC']]
                 });
             } catch (e) {
                 logger.warn(`[Offboarding] Could not load privileges for ${request.employeeId}: ${e.message}`);
