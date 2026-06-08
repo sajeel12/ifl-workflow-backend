@@ -352,10 +352,11 @@ export const sendRequesterNotification = async (toEmail, subject, message, reque
                                 ` : ''}
                             </td>
                         </tr>
-                        <!-- Footer -->
+                        <!-- Footer — matches the IGC SharePoint Portal branding used by sendApprovalEmail
+                             so every workflow email (stage notifications + status updates + completion) reads the same. -->
                         <tr>
-                            <td bgcolor="#f3f2f1" style="background-color:#f3f2f1;padding:15px;text-align:center;color:#605e5c;font-size:12px;font-family:Arial,sans-serif;">
-                                <p style="margin:0;">This is an automated notification from the IFL Workflow System.<br>Please do not reply to this email.</p>
+                            <td bgcolor="#eef0f3" style="background-color:#eef0f3;padding:12px 24px;text-align:center;border-top:1px solid #d0d5de;">
+                                <p style="margin:0;color:#6b7280;font-size:11px;font-family:'Segoe UI',Calibri,Arial,sans-serif;line-height:1.5;">This is an automated notification from the IGC SharePoint Portal.</p>
                             </td>
                         </tr>
                     </table>
