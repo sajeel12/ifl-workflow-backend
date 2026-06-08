@@ -63,9 +63,8 @@
       <div id="adminActionsBar" style="display:none; padding:12px 24px; border-bottom:1px solid var(--a-border); background:#fffbeb; gap:10px; align-items:center; flex-wrap:wrap;">
         <div style="flex:1; min-width:240px;">
           <div style="font-size:.8rem; font-weight:600; color:#854d0e; margin-bottom:2px;">Recovery Action</div>
-          <div style="font-size:.75rem; color:#a16207;" id="adminActionsHint">If the original recipient deleted their action email, re-send it using the same token.</div>
+          <div style="font-size:.75rem; color:#a16207;" id="adminActionsHint">Re-send the action email to the person currently responsible for this stage. You'll see who receives it before it sends.</div>
         </div>
-        <input type="email" id="resendOverrideEmail" class="a-input" placeholder="Override email (optional)" style="max-width:240px;">
         <button id="btnResendEmail" class="a-btn" style="background:#0078D4; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:600;" onclick="resendStageEmail()">
           ✉ Resend Action Email
         </button>
@@ -391,17 +390,34 @@ async function promptDeleteRequest() {
 
 async function resendStageEmail() {
   if (!currentModalRequestId) return;
+  const id = currentModalRequestId;
   const btn = document.getElementById('btnResendEmail');
-  const overrideEl = document.getElementById('resendOverrideEmail');
-  const overrideEmail = overrideEl ? overrideEl.value.trim() : '';
   const original = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Sending…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Checking…'; }
 
   try {
-    const res = await window.iflFetch(`/admin/onboarding/${currentModalRequestId}/resend-email`, {
+    // 1) Resolve who currently owns this stage so we can show it before sending.
+    const pres = await window.iflFetch(`/admin/onboarding/${id}/resend-preview`);
+    const pj = await pres.json();
+    if (!pres.ok || !pj.success) {
+      IflDialog.error(pj.error || 'Could not resolve the current recipient.');
+      return;
+    }
+    const who = pj.name ? `${pj.name} (${pj.email})` : pj.email;
+
+    // 2) Confirm with the admin, naming the recipient + role.
+    const ok = await IflDialog.confirm(
+      `This stage (${pj.role}) is currently assigned to:\n\n${who}\n\nResend the action email to them? They will be set as the active assignee.`,
+      { title: 'Resend action email', okText: 'Resend' }
+    );
+    if (!ok) return;
+
+    // 3) Send (no override — backend uses the configured approver).
+    if (btn) btn.innerHTML = 'Sending…';
+    const res = await window.iflFetch(`/admin/onboarding/${id}/resend-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(overrideEmail ? { toEmail: overrideEmail } : {})
+      body: '{}'
     });
     const json = await res.json();
     if (!res.ok || !json.success) {
@@ -409,9 +425,8 @@ async function resendStageEmail() {
       return;
     }
     IflDialog.success(json.message || 'Action email re-sent successfully.');
-    if (overrideEl) overrideEl.value = '';
     // Refresh the modal so the new "Email Regenerated" timeline event appears
-    await loadTimeline(currentModalRequestId);
+    await loadTimeline(id);
   } catch (e) {
     console.error(e);
     IflDialog.error('Network error while resending email.');

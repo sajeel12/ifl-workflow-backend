@@ -1,5 +1,9 @@
 <%- include('../partials/header', { title: 'IT Onboarding Workflow' }) %>
     <link rel="stylesheet" href="/css/modern.css">
+    <!-- Stepper display fonts (graceful fallback if the intranet blocks Google) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap">
 
     <%
     // When an action token is present (email-link click), the form must be
@@ -102,13 +106,11 @@
 
         <!-- ── Step Progress Bar (always visible) ── -->
         <div class="steps-container">
-            <div class="steps" style="--step-progress: <%= stepProgress %>%">
+            <div class="steps-row">
                 <% steps.forEach((s, i) => { %>
                     <div class="step-item <%= s.status %>">
-                        <div class="step-circle">
-                            <% if (s.status === 'completed') { %>&#10003;<% } else { %><%= i + 1 %><% } %>
-                        </div>
-                        <div class="step-label"><%= s.label %></div>
+                        <div class="step-circle"><%= i + 1 %></div>
+                        <div class="step-label" title="<%= s.label %>"><%= s.label %></div>
                     </div>
                 <% }); %>
             </div>
@@ -213,12 +215,6 @@
                                     <input type="text" value="<%= locDisplay %>" readonly style="background:#f1f5f9;" data-ifl-location="1">
                                 </div>
                             </div>
-
-                            <!-- Request details note -->
-                            <div style="display:flex;align-items:flex-start;gap:8px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:6px;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                                <span style="font-size:0.8rem;color:#92400e;line-height:1.5;">Describe what needs to be configured — services required, access levels, email setup, printer assignments, and any special permissions.</span>
-                            </div>
                         </div>
                     </div>
 
@@ -239,19 +235,36 @@
                                     <span>Intranet Access <small style="color:#64748b;">(default)</small></span>
                                 </label>
                                 <label class="checkbox-card" style="margin-bottom:0;">
-                                    <input type="checkbox" name="emailIncoming" <%=chk('emailIncoming') %> <%= servicesDisabled %>>
-                                    <span>Incoming Email</span>
+                                    <input type="checkbox" name="emailIncoming" <%=chk('emailIncoming') %> <%= servicesDisabled %> onchange="toggleEmailReason()">
+                                    <span>Incoming-Email</span>
                                 </label>
                                 <label class="checkbox-card" style="margin-bottom:0;">
-                                    <input type="checkbox" name="emailOutgoing" <%=chk('emailOutgoing') %> <%= servicesDisabled %>>
-                                    <span>Outgoing Email</span>
+                                    <input type="checkbox" name="emailOutgoing" <%=chk('emailOutgoing') %> <%= servicesDisabled %> onchange="toggleEmailReason()">
+                                    <span>Outgoing-Email</span>
                                 </label>
                             </div>
-                            <div class="form-group" style="margin-bottom:14px;">
-                                <label>Email Details</label>
-                                <textarea name="emailPurpose" rows="2"
-                                    placeholder="Specify what needs to be configured — recipients, limits, distribution lists, business justification."
-                                    <%=servicesDisabled %>><%= val('emailPurpose') %></textarea>
+                            <% const _showEmailReason = (chk('emailIncoming') || chk('emailOutgoing')); %>
+                            <div class="form-group" id="it-email-reason" style="margin-bottom:14px;<%= _showEmailReason ? '' : 'display:none;' %>">
+                                <label>Reason for Email Service <span style="color:#dc2626;">*</span></label>
+                                <textarea name="emailPurpose" id="it-email-reason-input" rows="2"
+                                    placeholder="Why is email access required for this employee (incoming, outgoing, or both)? State the business reason — e.g. corresponds with external vendors, receives system reports, etc."
+                                    <%= servicesDisabled %> <%= role === 'IT' ? 'data-it-required="1"' : '' %> <%= (_showEmailReason && role === 'IT') ? 'required' : '' %>><%= val('emailPurpose') %></textarea>
+                            </div>
+
+                            <!-- Contact details (IT-assigned) -->
+                            <div class="grid-2" style="margin-bottom:14px;">
+                                <div class="form-group">
+                                    <label>Extension Number <span style="color:#dc2626;">*</span></label>
+                                    <input type="text" name="officeExtension" inputmode="numeric"
+                                        value="<%= val('officeExtension') %>" placeholder="e.g. 1234"
+                                        <%= servicesDisabled %> <%= role === 'IT' ? 'required' : '' %>>
+                                </div>
+                                <div class="form-group">
+                                    <label>Mobile Number <span style="color:#dc2626;">*</span></label>
+                                    <input type="tel" name="mobilePhone" inputmode="tel"
+                                        value="<%= val('mobilePhone') %>" placeholder="e.g. 0300-1234567"
+                                        <%= servicesDisabled %> <%= role === 'IT' ? 'required' : '' %>>
+                                </div>
                             </div>
 
                             <!-- Printing -->
@@ -260,8 +273,8 @@
                                     <input type="checkbox" id="chk-laser" name="laserPrinter" <%=chk('laserPrinter') %>
                                         <%= servicesDisabled %> style="width:16px;height:16px;flex-shrink:0;"
                                         onchange="togglePrinterLocation('laser')">
-                                    <% if (printerLocations && printerLocations.length > 0 && !servicesDisabled) { %>
-                                        <select id="loc-laser" name="laserPrinterLocation" style="flex:1;">
+                                    <% if (printerLocations && printerLocations.length > 0) { %>
+                                        <select id="loc-laser" name="laserPrinterLocation" style="flex:1;" <%=servicesDisabled %>>
                                             <option value="">— Laser Printer —</option>
                                             <% printerLocations.filter(p => p.name && p.name.toLowerCase().includes('laser')).forEach(p => { %>
                                                 <option value="<%= p.location %>" <%= val('laserPrinterLocation') === p.location ? 'selected' : '' %>><%= p.name %></option>
@@ -276,8 +289,8 @@
                                     <input type="checkbox" id="chk-dotmatrix" name="dotMatrixPrinter" <%=chk('dotMatrixPrinter') %>
                                         <%= servicesDisabled %> style="width:16px;height:16px;flex-shrink:0;"
                                         onchange="togglePrinterLocation('dotmatrix')">
-                                    <% if (printerLocations && printerLocations.length > 0 && !servicesDisabled) { %>
-                                        <select id="loc-dotmatrix" name="dotMatrixPrinterLocation" style="flex:1;">
+                                    <% if (printerLocations && printerLocations.length > 0) { %>
+                                        <select id="loc-dotmatrix" name="dotMatrixPrinterLocation" style="flex:1;" <%=servicesDisabled %>>
                                             <option value="">— Dot Matrix —</option>
                                             <% printerLocations.filter(p => p.name && p.name.toLowerCase().includes('matrix')).forEach(p => { %>
                                                 <option value="<%= p.location %>" <%= val('dotMatrixPrinterLocation') === p.location ? 'selected' : '' %>><%= p.name %></option>
@@ -391,7 +404,7 @@
                             <!-- NT login name with AD availability check -->
                             <div class="grid-3">
                                 <div class="form-group">
-                                    <label>NT User Name (Login)</label>
+                                    <label>AD Username (Login)</label>
                                     <div style="display:flex;gap:8px;align-items:center;">
                                         <input type="text" id="dciNtName" name="ntUserName" value="<%= val('ntUserName') %>" <%=configDisabled %> style="flex:1 1 auto;">
                                         <% if (dciEditable) { %>
@@ -401,7 +414,7 @@
                                     <div id="dciNtStatus" style="font-size:0.78rem;margin-top:5px;min-height:16px;"></div>
                                 </div>
                                 <div class="form-group">
-                                    <label>Exchange Display Name</label>
+                                    <label>Display Name</label>
                                     <input type="text" id="dciDisplayName" name="exchangeDisplayName" value="<%= val('exchangeDisplayName') %>" <%=configDisabled %>>
                                 </div>
                                 <div class="form-group">
@@ -425,7 +438,7 @@
                                     </select>
                                 </div>
                                 <div class="form-group" style="grid-column:span 2;">
-                                    <label>SMTP Address</label>
+                                    <label>Primary Email Address</label>
                                     <input type="text" id="dciSmtp" name="smtpAddress" value="<%= val('smtpAddress') %>" <%=configDisabled %>>
                                 </div>
                             </div>
@@ -453,7 +466,7 @@
 
                             <!-- Member Of — AD group multi-select (load-once dropdown) -->
                             <div class="form-group">
-                                <label>Member Of <span style="color:#9ca3af;font-weight:400;text-transform:none;">(AD groups — select one or more)</span></label>
+                                <label>Security Groups <span style="color:#9ca3af;font-weight:400;text-transform:none;">(AD groups — select one or more)</span></label>
                                 <input type="hidden" id="dciMemberOf" name="memberOf" value="<%= val('memberOf') %>">
                                 <% if (dciEditable) { %>
                                     <div style="position:relative;">
@@ -476,17 +489,19 @@
 
                             <!-- Mailbox limits -->
                             <div class="grid-3">
-                                <div class="form-group"><label>Mail Size</label><input type="text" name="mailSizeLimit" value="<%= val('mailSizeLimit') %>" <%=configDisabled %>></div>
-                                <div class="form-group"><label>Recipient Limit</label><input type="text" name="recipientLimit" value="<%= val('recipientLimit') %>" <%=configDisabled %>></div>
-                                <div class="form-group"><label>Storage Limit</label><input type="text" name="mailboxStorageLimit" value="<%= val('mailboxStorageLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>Mailbox Quota</label><input type="text" name="mailSizeLimit" value="<%= val('mailSizeLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>Mail Flow Limit</label><input type="text" name="recipientLimit" value="<%= val('recipientLimit') %>" <%=configDisabled %>></div>
+                                <div class="form-group"><label>OneDrive / Home Drive Quota</label><input type="text" name="mailboxStorageLimit" value="<%= val('mailboxStorageLimit') %>" <%=configDisabled %>></div>
                             </div>
 
-                            <div class="form-group"><label>Extra Facility</label><textarea name="extraFacility" rows="2" <%=configDisabled %>><%= val('extraFacility') %></textarea></div>
+                            <div class="form-group"><label>Additional Access Requirements</label><textarea name="extraFacility" rows="2" <%=configDisabled %>><%= val('extraFacility') %></textarea></div>
 
+                            <% if (role === 'DCIManager' || val('dciRemarks')) { %>
                             <div class="form-group">
-                                <label>DCI Remarks / Instructions</label>
+                                <label>Provisioning Notes</label>
                                 <textarea name="dciRemarks" rows="3" <%=dciRemarksDisabled %>><%= val('dciRemarks') %></textarea>
                             </div>
+                            <% } %>
                         </div>
                         <script>
                             window.IFL_DCI = {
@@ -595,10 +610,24 @@
                 <div class="wf-history-card">
                     <div class="wf-history-title">Workflow Progress</div>
                     <ol class="wf-history-list">
+                        <% 
+                            const _historyRoleMap = {
+                                'HR': ' HR Request Submission',
+                                'IT': 'IT OPS Review',
+                                'HOD': 'Employee HOD Approval',
+                                'DCI': 'Profile Configuration',
+                                'DCIManager': 'IT Manager Approval',
+                                'ITHOD': 'IT HOD Approval',
+                                'IT HOD': 'IT HOD Approval',
+                                'DCIImplementer': 'Account Provisioning',
+                                'DCI Implementer': 'Account Provisioning',
+                                'OPS': 'Compliance Verification'
+                            };
+                        %>
                         <% timeline.forEach((ev, i) => { %>
                             <li class="wf-step <%= i === timeline.length - 1 ? 'is-last' : '' %>">
                                 <span class="wf-dot"><%= i + 1 %></span>
-                                <div class="wf-role"><%= ev.actorRole || '—' %></div>
+                                <div class="wf-role"><%= _historyRoleMap[ev.actorRole] || ev.actorRole || '—' %></div>
                                 <div class="wf-time"><%= new Date(ev.timestamp).toLocaleString() %></div>
                             </li>
                         <% }) %>
@@ -821,6 +850,25 @@
                         // Run native validation first; if it fails, don't lock the buttons.
                         if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
 
+                        // DCI stage: the NT User Name is auto-filled, so require an explicit
+                        // AD availability check (the "Check" button) before forwarding to the
+                        // Manager. The gate is only defined on the editable DCI form.
+                        if (typeof window.__dciNtGate === 'function' && form.querySelector('#dciNtName')) {
+                            const gate = window.__dciNtGate();
+                            if (!gate.ok) {
+                                e.preventDefault();
+                                const ntEl = form.querySelector('#dciNtName');
+                                if (ntEl) {
+                                    const sec = document.getElementById('sec-dci');
+                                    if (sec && sec.classList.contains('is-collapsed')) iflToggleSection(sec.querySelector('.form-section-hd'));
+                                    ntEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    ntEl.focus();
+                                }
+                                IflDialog.alert(gate.message, { title: 'AD check required' });
+                                return;
+                            }
+                        }
+
                         const submitter = e.submitter || form.querySelector('button[type="submit"]:focus') || form.querySelector('button[type="submit"]');
 
                         // Pin the action value into a hidden mirror field immediately — before any
@@ -927,10 +975,26 @@
             }
         }
 
+        /* Show the "Reason for Email Service" field only when Incoming and/or
+           Outgoing email is selected, and make it required at the IT Ops stage. */
+        function toggleEmailReason() {
+            const inc   = document.querySelector('input[name="emailIncoming"]');
+            const out   = document.querySelector('input[name="emailOutgoing"]');
+            const wrap  = document.getElementById('it-email-reason');
+            const input = document.getElementById('it-email-reason-input');
+            if (!wrap || !input) return;
+            const show = (inc && inc.checked) || (out && out.checked);
+            wrap.style.display = show ? '' : 'none';
+            // Only enforce required on the editable IT Ops form (data flag set server-side).
+            if (input.dataset.itRequired === '1') input.required = show;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             // Set initial state for printer location fields
             togglePrinterLocation('laser');
             togglePrinterLocation('dotmatrix');
+            // Set initial visibility/required state for the email reason field
+            toggleEmailReason();
 
             // ── Employee ID auto-fill + state guard ────────────────────────
             // Runs on both "Get Employee Data" button click AND on field blur,
@@ -1181,6 +1245,10 @@
             // ── NT name AD availability check ─────────────────────────────────────
             const statusEl = $('dciNtStatus');
             const checkBtn = $('dciCheckNtBtn');
+            // The NT name string last confirmed AVAILABLE in AD via the Check button.
+            // Forwarding to the Manager is blocked until the current value matches this,
+            // so the auto-filled name can never be submitted without an explicit AD check.
+            let ntVerifiedValue = null;
             const setStatus = (html, color) => {
                 if (statusEl) { statusEl.innerHTML = html; statusEl.style.color = color || '#64748b'; }
             };
@@ -1193,20 +1261,34 @@
                     const res  = await fetch('/api/onboarding/check-ntname?name=' + encodeURIComponent(name));
                     const data = await res.json();
                     if (data.available) {
+                        ntVerifiedValue = name;
                         setStatus('✓ Available — this NT name is free to use.', '#16a34a');
                     } else {
+                        ntVerifiedValue = null;
                         const who = data.match && (data.match.displayName || data.match.sAMAccountName);
                         setStatus('✕ Name already exists' + (who ? ' (' + who + ')' : '') + ' — please change it and check again.', '#dc2626');
                     }
                 } catch (_) {
+                    ntVerifiedValue = null;
                     setStatus('Could not reach AD to verify. Try again.', '#b45309');
                 } finally {
                     if (checkBtn) { checkBtn.disabled = false; checkBtn.textContent = 'Check'; }
                 }
             };
-            if (checkBtn) checkBtn.addEventListener('click', runNtCheck);
-            // Re-derive display name spaces hint when NT changes (display keeps spaces; left to DCI)
-            ntEl.addEventListener('input', () => setStatus('', '#64748b'));
+            if (checkBtn) {
+                checkBtn.addEventListener('click', runNtCheck);
+                // Gate consumed by the form-submit handler before forwarding to the Manager.
+                // Only registered on the editable DCI form (Check button is DCI-only), so
+                // other roles' submits are unaffected.
+                window.__dciNtGate = () => {
+                    const cur = (ntEl.value || '').trim();
+                    if (!cur) return { ok: false, message: 'Enter the NT User Name and press "Check" to verify it in AD before forwarding.' };
+                    if (ntVerifiedValue !== cur) return { ok: false, message: 'Press "Check" next to the NT User Name and confirm it is available in AD before forwarding to the Manager.' };
+                    return { ok: true };
+                };
+            }
+            // Any edit invalidates the prior AD check — the new value must be re-checked.
+            ntEl.addEventListener('input', () => { ntVerifiedValue = null; setStatus('', '#64748b'); });
 
             // ── Member Of: load-once AD group dropdown (multi-select) ─────────────
             const toggleBtn   = $('dciGroupToggle');

@@ -51,7 +51,11 @@
             // Only accounts that have had employeeID set (via Set-ADUser -EmployeeID)
             // will be found this way.
             string esc = EscLdap(employeeId);
-            filter = "(&(objectClass=user)(employeeID=" + esc + "))";
+            // objectCategory=person excludes COMPUTER accounts (which are also
+            // objectClass=user in AD — the computer class derives from user).
+            // Without this a machine account like HOSTNAME$ that happens to carry
+            // an employeeID would be returned as if it were the employee.
+            filter = "(&(objectCategory=person)(objectClass=user)(employeeID=" + esc + "))";
             sigKey = employeeId;
         } else {
             // ── Name/email path (existing behaviour) ─────────────────────────────
@@ -61,7 +65,10 @@
                 return;
             }
             string esc = EscLdap(q);
-            filter = "(&(objectClass=user)"
+            // objectCategory=person keeps COMPUTER accounts out of name/email
+            // search results — they are objectClass=user too, so a substring like
+            // "muhammad" would otherwise match a machine account "ALIMUHAMMADHP$".
+            filter = "(&(objectCategory=person)(objectClass=user)"
                    +   "(!(userAccountControl:1.2.840.113556.1.4.803:=2))"
                    +   "(|(displayName=*" + esc + "*)"
                    +     "(sAMAccountName=*" + esc + "*)"

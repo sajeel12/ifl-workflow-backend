@@ -378,13 +378,8 @@ function renderCenter({ employee, summary, recentRequests }, ad) {
     ? `<span class="badge badge--${ad.accountEnabled ? 'green' : 'red'}">${ad.accountStatus}</span>`
     : '';
 
-  // AD groups — show top 5, collapse rest
-  const groups = ad?.groups || [];
-  const groupsHtml = groups.length
-    ? groups.slice(0, 5).map(g =>
-        `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:.7rem;padding:1px 7px;border-radius:10px;margin:2px 2px 2px 0;">${escHtml(g)}</span>`
-      ).join('') + (groups.length > 5 ? `<span style="font-size:.7rem;color:var(--a-text-muted);margin-left:4px;">+${groups.length - 5} more</span>` : '')
-    : '<span style="font-size:.78rem;color:var(--a-text-muted);">No groups</span>';
+  // AD groups — show all, with the overflow behind an expandable toggle
+  const groupsHtml = groupChips(ad?.groups || []);
 
   const adPanel = ad ? `
     <div style="flex:1;min-width:220px;">
@@ -676,11 +671,7 @@ async function showAdOnly(idx) {
   const groups  = (ad.memberOf || []).map(dn => {
     const m = String(dn).match(/^CN=([^,]+)/i); return m ? m[1] : dn;
   }).filter(Boolean);
-  const groupsHtml = groups.length
-    ? groups.slice(0,5).map(g =>
-        `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:.7rem;padding:1px 7px;border-radius:10px;margin:2px 2px 2px 0;">${escHtml(g)}</span>`
-      ).join('') + (groups.length > 5 ? `<span style="font-size:.7rem;color:var(--a-text-muted);">+${groups.length-5} more</span>` : '')
-    : '<span style="font-size:.78rem;color:var(--a-text-muted);">No groups</span>';
+  const groupsHtml = groupChips(groups);
 
   document.getElementById('journeyCenter').innerHTML = `
     <div class="ej-emp-hd">
@@ -739,6 +730,29 @@ function escHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+// AD group chips — shows the first few inline and makes the rest expandable via
+// a clickable "+N more / show less" toggle so every group a person belongs to
+// can be seen in the 360 profile (the old "+N more" was static, not clickable).
+function groupChips(groups) {
+  groups = (groups || []).filter(Boolean);
+  if (!groups.length)
+    return '<span style="font-size:.78rem;color:var(--a-text-muted);">No groups</span>';
+  const chip = g =>
+    `<span style="display:inline-block;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:.7rem;padding:1px 7px;border-radius:10px;margin:2px 2px 2px 0;">${escHtml(g)}</span>`;
+  const SHOWN = 8;
+  const count = `<div style="font-size:.66rem;color:var(--a-text-muted);margin-bottom:3px;">${groups.length} group${groups.length === 1 ? '' : 's'}</div>`;
+  const head  = groups.slice(0, SHOWN).map(chip).join('');
+  if (groups.length <= SHOWN) return `<div>${count}${head}</div>`;
+  const rest   = groups.slice(SHOWN).map(chip).join('');
+  const hidden = groups.length - SHOWN;
+  const toggle = "(function(b){var r=b.parentNode.querySelector('.ej-grp-rest');"
+               + "var open=r.style.display!=='none';r.style.display=open?'none':'inline';"
+               + "b.textContent=open?('+'+" + hidden + "+' more'):'show less';})(this)";
+  return `<div>${count}${head}`
+       + `<span class="ej-grp-rest" style="display:none;">${rest}</span>`
+       + `<span class="ej-grp-toggle" onclick="${toggle}" style="cursor:pointer;font-size:.7rem;color:#0369a1;font-weight:600;margin-left:4px;text-decoration:underline;white-space:nowrap;">+${hidden} more</span>`
+       + `</div>`;
 }
 function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-GB', {

@@ -175,7 +175,7 @@ export const sendApprovalEmail = async (toEmail, subject, requestDetails, approv
                         <!-- Footer -->
                         <tr>
                             <td bgcolor="#eef0f3" style="background-color:#eef0f3;padding:12px 24px;text-align:center;border-top:1px solid #d0d5de;">
-                                <p style="margin:0;color:#6b7280;font-size:11px;font-family:'Segoe UI',Calibri,Arial,sans-serif;line-height:1.5;">This is an automated notification from the IGCPortal Workflow System.</p>
+                                <p style="margin:0;color:#6b7280;font-size:11px;font-family:'Segoe UI',Calibri,Arial,sans-serif;line-height:1.5;">This is an automated notification from the IGC SharePoint Portal.</p>
                             </td>
                         </tr>
                     </table>

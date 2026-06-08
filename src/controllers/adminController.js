@@ -15,6 +15,8 @@ import * as emailService from '../services/emailService.js';
 import RecipientService from '../services/recipientService.js';
 import { humanizeAction, humanizeDetails, humanizeDetailsHTML } from '../utils/historyFormatter.js';
 import { findUserByEmployeeIdViaSidecar } from '../services/adService.js';
+import { resolveStageRecipient } from '../utils/resolveStageRecipient.js';
+import { emailsMatch } from '../utils/emailMatch.js';
 
 // Map workflow status -> the role currently responsible
 const STATUS_TO_RESEND = {
@@ -26,6 +28,13 @@ const STATUS_TO_RESEND = {
     PendingDCIImplementation: { roleKey: 'DCI_IMPLEMENTER', type: 'DCI_IMPLEMENTATION' },
     // Step 12 routes back to IT_OPS — same group as Step 2 per client requirement.
     PendingOPSAction: { roleKey: 'IT_OPS', type: 'OPS_ACTION' }
+};
+
+// Map the current pending OFFBOARDING status → role + email type. Shared by the
+// offboarding resend preview + send handlers.
+const OFFBOARDING_STAGE_MAP = {
+    PendingDCIManager: { roleKey: 'DCI_MANAGER', type: 'DCI_MANAGER_APPROVAL' },
+    PendingDCIImplementation: { roleKey: 'DCI_IMPLEMENTER', type: 'DCI_IMPLEMENTER' }
 };
 
 // Notification email type → portal entry slug. HOD_REVIEW has no portal.
@@ -131,10 +140,133 @@ async function rebindInFlightToDelegate({
     return count;
 }
 
+// Stage-owner roles (NOT the temporary-delegation roles DCI_MANAGER / IT_HOD) and
+// the pending statuses they own. When their approver changes — global config OR a
+// per-location override — every in-flight request at these statuses is re-pointed
+// to the newly configured person and re-emailed, mirroring the delegation roles.
+const REBIND_STAGE_ROLE_TO_STATUSES = {
+    IT_OPS:          ['PendingIT', 'PendingOPSAction'],
+    DCI_TEAM:        ['PendingDCI'],
+    DCI_IMPLEMENTER: ['PendingDCIImplementation'],
+};
+
+// Re-resolve the currently configured recipient for every in-flight request owned
+// by `roleKey` and, where it changed, update currentStageAssignee*, clear any
+// delegationEvent (this is a permanent person change, not a temporary delegation —
+// important because PendingDCIImplementation is in DELEGATION_REVERT_STATUSES and a
+// stray delegationEvent would auto-revert after the timeout), log a timeline entry,
+// and re-send the stage action email. Re-resolving per request makes location scope
+// automatic: a global-config change only moves requests whose location has no
+// override; an override change only moves that location's requests. Idempotent —
+// unchanged requests are skipped, so editing only the secondary slot sends nothing.
+// Covers both onboarding and offboarding tables. Returns the count rebound.
+async function rebindStageToCurrentRecipient({ roleKey }) {
+    const statuses = REBIND_STAGE_ROLE_TO_STATUSES[roleKey];
+    if (!statuses) return 0;
+    let count = 0;
+
+    const TABLES = [
+        { model: OnboardingRequest, kind: 'onboarding' },
+        { model: OffboardingRequest, kind: 'offboarding' }
+    ];
+
+    for (const status of statuses) {
+        for (const { model, kind } of TABLES) {
+            const inFlight = await model.findAll({
+                where: { status, currentStageToken: { [Op.ne]: null } }
+            });
+            for (const r of inFlight) {
+                const recipient = await resolveStageRecipient(status, r.location);
+                if (!recipient || !recipient.email) continue;
+                if (emailsMatch(r.currentStageAssigneeEmail, recipient.email)) continue; // unchanged
+
+                await r.update({
+                    currentStageAssigneeEmail:    recipient.email,
+                    currentStageAssigneeUsername: recipient.username || null,
+                    delegationEvent:              null
+                });
+                await TimelineEvent.create({
+                    requestId: r.id,
+                    action:    'Stage Reassigned (Approver Changed)',
+                    actorRole: 'Admin',
+                    details:   `${recipient.role || roleKey} reassigned to ${recipient.email}. Portal access, action gate, and notification updated.`,
+                    timestamp: new Date()
+                });
+                await sendDelegationNotification(r, recipient.email, kind);
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+// Resolve who should receive a resend for an in-flight stage: the configured
+// approver (primary/secondary, location-aware) via resolveStageRecipient, falling
+// back to RecipientService.get for config-less roles (HOD = HRMS manager lookup).
+async function resolveResendRecipient(status, roleKey, context) {
+    const r = await resolveStageRecipient(status, context.location || null);
+    if (r && r.email) return { role: r.role, name: r.name || '', email: r.email, username: r.username || null };
+    const email = await RecipientService.get(roleKey, context);
+    return { role: (r && r.role) || roleKey, name: '', email: email || '', username: null };
+}
+
 // Per client policy, only the IT Operations role is split by location.
 // All other roles use the global default everywhere. The admin UI hides
 // non-location-aware roles from the per-location editor.
 const LOCATION_AWARE_ROLES = new Set(['IT_OPS', 'HR_INITIATOR']);
+
+// Map a TimelineEvent actorRole -> approver roleKey, so admin-delete can notify
+// every stage owner that touched the request. Uses current configured emails —
+// not historical snapshots.
+const ACTOR_ROLE_TO_ROLE_KEY = {
+    IT:             'IT_OPS',
+    HOD:            'HOD',
+    DCI:            'DCI_TEAM',
+    DCIManager:     'DCI_MANAGER',
+    ITHOD:          'IT_HOD',
+    DCIImplementer: 'DCI_IMPLEMENTER',
+    OPS:            'IT_OPS',
+};
+
+// Gather every party to notify when an onboarding request is admin-deleted:
+// the requester, the live stage assignee, and the currently-configured approver
+// email for each role that has acted on the request (per its timeline).
+async function collectNotifyEmails(request) {
+    const emails = new Set();
+
+    if (request.requesterEmail) emails.add(request.requesterEmail.toLowerCase().trim());
+    if (request.currentStageAssigneeEmail) emails.add(request.currentStageAssigneeEmail.toLowerCase().trim());
+
+    let actorRoles = [];
+    try {
+        const events = await TimelineEvent.findAll({
+            where: { requestId: request.id },
+            attributes: ['actorRole']
+        });
+        actorRoles = [...new Set(events.map(e => e.actorRole).filter(r => r && r !== 'System' && r !== 'Admin' && r !== 'HR'))];
+    } catch (err) {
+        console.error('[Admin Delete] Could not load timeline actors:', err.message);
+    }
+
+    for (const actorRole of actorRoles) {
+        const roleKey = ACTOR_ROLE_TO_ROLE_KEY[actorRole];
+        if (!roleKey) continue;
+        try {
+            let cfg = null;
+            if (LOCATION_AWARE_ROLES.has(roleKey) && request.location) {
+                cfg = await WorkflowApproverLocationOverride.findOne({
+                    where: { roleKey, location: request.location, isActive: true }
+                });
+            }
+            if (!cfg) cfg = await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
+            if (cfg && cfg.approverEmail) emails.add(cfg.approverEmail.toLowerCase().trim());
+        } catch (err) {
+            console.error(`[Admin Delete] Could not resolve email for ${roleKey}:`, err.message);
+        }
+    }
+
+    return [...emails].filter(Boolean);
+}
 
 // State to remember current config (would usually be in DB)
 let currentCronConfig = {
@@ -681,11 +813,15 @@ class AdminController {
             // No useful override content → drop any existing row.
             if (!approverEmail && !approverName && !secondaryEmail && !secondaryName && !approverUsername && !secondaryUsername) {
                 const deleted = await WorkflowApproverLocationOverride.destroy({ where: { roleKey, location: location.trim() } });
+                // Clearing an override sends this location's in-flight requests back
+                // to the global default person — re-point and re-email them.
+                const rebound = deleted ? await rebindStageToCurrentRecipient({ roleKey }) : 0;
                 return res.json({
                     success: true,
-                    message: deleted
+                    message: (deleted
                         ? `Cleared override for "${roleKey}" at "${location}". Will use global default.`
-                        : `No override existed for "${roleKey}" at "${location}".`,
+                        : `No override existed for "${roleKey}" at "${location}".`)
+                        + (rebound > 0 ? ` ${rebound} in-flight request(s) rebound.` : ''),
                     deleted: !!deleted
                 });
             }
@@ -730,9 +866,14 @@ class AdminController {
                 await row.update(fields);
             }
 
+            // Re-point + re-email every in-flight request at this location's
+            // stage(s) to the newly configured override person.
+            const rebound = await rebindStageToCurrentRecipient({ roleKey });
+
             return res.json({
                 success: true,
-                message: `${created ? 'Created' : 'Updated'} approver override for "${roleKey}" at "${location}".`,
+                message: `${created ? 'Created' : 'Updated'} approver override for "${roleKey}" at "${location}".`
+                    + (rebound > 0 ? ` ${rebound} in-flight request(s) rebound.` : ''),
                 data: row
             });
         } catch (error) {
@@ -814,8 +955,16 @@ class AdminController {
                 isRevert: false
             });
 
-            const msg = rebound > 0
-                ? `Approver "${config.label}" updated. ${rebound} in-flight request(s) rebound to new delegate.`
+            // Non-delegation stage roles (IT Ops, DCI Team, DCI Implementer) re-point
+            // and re-email their in-flight requests too — same outcome as the
+            // delegation roles above, just resolved per request via live config.
+            const stageRebound = REBIND_STAGE_ROLE_TO_STATUSES[config.roleKey]
+                ? await rebindStageToCurrentRecipient({ roleKey: config.roleKey })
+                : 0;
+
+            const totalRebound = rebound + stageRebound;
+            const msg = totalRebound > 0
+                ? `Approver "${config.label}" updated. ${totalRebound} in-flight request(s) rebound to the new person.`
                 : `Approver "${config.label}" updated successfully`;
             res.json({ success: true, message: msg, data: config });
         } catch (error) {
@@ -1136,11 +1285,34 @@ class AdminController {
      * Useful when the original recipient deleted or lost the email.
      * Reuses the existing currentStageToken — no new token is issued.
      */
+    // GET /admin/onboarding/:id/resend-preview
+    // Returns who the resend would go to (the live configured approver), so the
+    // History UI can show a confirmation before actually sending. No side effects.
+    async resendStagePreview(req, res) {
+        try {
+            const { id } = req.params;
+            const request = await OnboardingRequest.findByPk(id);
+            if (!request) return res.status(404).json({ success: false, error: 'Request not found' });
+            if (!request.currentStageToken) {
+                return res.status(400).json({ success: false, error: `Request is in a closed state (${request.status}); no active stage to resend.` });
+            }
+            const map = STATUS_TO_RESEND[request.status];
+            if (!map) return res.status(400).json({ success: false, error: `No resend handler for status "${request.status}"` });
+
+            const recipient = await resolveResendRecipient(request.status, map.roleKey, { location: request.location, employeeId: request.employeeId });
+            if (!recipient.email) {
+                return res.status(400).json({ success: false, error: `No approver is configured for this stage (${request.status}). Set one in Workflow Approvers first.` });
+            }
+            return res.json({ success: true, role: recipient.role, name: recipient.name, email: recipient.email });
+        } catch (error) {
+            console.error('Error previewing resend recipient:', error);
+            return res.status(500).json({ success: false, error: 'Failed to resolve recipient', details: error.message });
+        }
+    }
+
     async resendStageEmail(req, res) {
         try {
             const { id } = req.params;
-            const overrideEmail = (req.body && req.body.toEmail) ? String(req.body.toEmail).trim() : null;
-
             const request = await OnboardingRequest.findByPk(id);
             if (!request) return res.status(404).json({ success: false, error: 'Request not found' });
 
@@ -1151,29 +1323,37 @@ class AdminController {
             const map = STATUS_TO_RESEND[request.status];
             if (!map) return res.status(400).json({ success: false, error: `No resend handler for status "${request.status}"` });
 
-            const recipientEmail =
-                overrideEmail ||
-                await RecipientService.get(map.roleKey, { employeeId: request.employeeId });
-
-            if (!recipientEmail) {
-                return res.status(400).json({ success: false, error: `No recipient email could be resolved for role ${map.roleKey}` });
+            // Resolve the person currently responsible for this stage (primary or
+            // secondary, location-aware). No admin-typed override — the configured
+            // approver is the single source of truth.
+            const recipient = await resolveResendRecipient(request.status, map.roleKey, { location: request.location, employeeId: request.employeeId });
+            if (!recipient.email) {
+                return res.status(400).json({ success: false, error: `No approver is configured for this stage (${request.status}). Set one in Workflow Approvers first.` });
             }
+
+            // Re-point the request to that person so the portal queue (canAct) and
+            // the POST action gate match who actually receives the email.
+            await request.update({
+                currentStageAssigneeEmail:    recipient.email,
+                currentStageAssigneeUsername: recipient.username || null
+            });
 
             const portalSlug = EMAIL_TYPE_TO_PORTAL_SLUG[map.type];
             const actionLink = portalSlug
                 ? `${process.env.APP_URL}/portal/${portalSlug}/enter?action=${request.currentStageToken}`
                 : `${process.env.APP_URL}/api/onboarding/handle?token=${request.currentStageToken}`;
-            await emailService.sendOnboardingNotification(recipientEmail, request, actionLink, map.type);
+            await emailService.sendOnboardingNotification(recipient.email, request, actionLink, map.type);
 
             await TimelineEvent.create({
                 requestId: request.id,
                 action: 'Email Regenerated',
                 actorRole: 'Admin',
-                details: `Action email re-sent to ${recipientEmail} for stage ${request.status} using existing token.`,
+                details: `Action email re-sent to ${recipient.email} (${recipient.role}) for stage ${request.status}; stage assignee refreshed. Existing token reused.`,
                 timestamp: new Date()
             });
 
-            return res.json({ success: true, message: `Action email re-sent to ${recipientEmail}` });
+            const who = recipient.name ? `${recipient.name} (${recipient.email})` : recipient.email;
+            return res.json({ success: true, message: `Action email re-sent to ${who}` });
         } catch (error) {
             console.error('Error resending stage email:', error);
             return res.status(500).json({ success: false, error: 'Failed to resend stage email', details: error.message });
@@ -1184,16 +1364,38 @@ class AdminController {
      * API: Resend the active stage email for an OFFBOARDING request.
      * Mirrors resendStageEmail but targets OffboardingRequest + the
      * offboarding email types. Reuses the existing currentStageToken so
-     * any prior link is still valid.
+     * any prior link is still valid. Recipient is always the configured
+     * approver (no admin override); the request is re-pointed to them.
      *
      * POST /admin/offboarding/:id/resend-email
-     * Body (optional): { toEmail }  — override recipient
      */
+
+    // GET /admin/offboarding/:id/resend-preview — see resendStagePreview.
+    async resendOffboardingStagePreview(req, res) {
+        try {
+            const { id } = req.params;
+            const request = await OffboardingRequest.findByPk(id);
+            if (!request) return res.status(404).json({ success: false, error: 'Offboarding request not found' });
+            if (!request.currentStageToken) {
+                return res.status(400).json({ success: false, error: `Request is in a closed state (${request.status}); no active stage to resend.` });
+            }
+            const map = OFFBOARDING_STAGE_MAP[request.status];
+            if (!map) return res.status(400).json({ success: false, error: `No resend handler for status "${request.status}"` });
+
+            const recipient = await resolveResendRecipient(request.status, map.roleKey, { location: request.location, employeeId: request.employeeId });
+            if (!recipient.email) {
+                return res.status(400).json({ success: false, error: `No approver is configured for this stage (${request.status}). Set one in Workflow Approvers first.` });
+            }
+            return res.json({ success: true, role: recipient.role, name: recipient.name, email: recipient.email });
+        } catch (error) {
+            console.error('Error previewing offboarding resend recipient:', error);
+            return res.status(500).json({ success: false, error: 'Failed to resolve recipient', details: error.message });
+        }
+    }
+
     async resendOffboardingStageEmail(req, res) {
         try {
             const { id } = req.params;
-            const overrideEmail = (req.body && req.body.toEmail) ? String(req.body.toEmail).trim() : null;
-
             const request = await OffboardingRequest.findByPk(id);
             if (!request) return res.status(404).json({ success: false, error: 'Offboarding request not found' });
 
@@ -1204,46 +1406,35 @@ class AdminController {
                 });
             }
 
-            // Map the current pending status → role + email type.
-            const OFFBOARDING_STAGE_MAP = {
-                PendingDCIManager: { roleKey: 'DCI_MANAGER', type: 'DCI_MANAGER_APPROVAL' },
-                PendingDCIImplementation: { roleKey: 'DCI_IMPLEMENTER', type: 'DCI_IMPLEMENTER' }
-            };
             const map = OFFBOARDING_STAGE_MAP[request.status];
             if (!map) return res.status(400).json({ success: false, error: `No resend handler for status "${request.status}"` });
 
-            // Prefer the override; else the request's stamped assignee; else
-            // re-resolve via RecipientService (which honours delegation).
-            const recipientEmail =
-                overrideEmail ||
-                request.currentStageAssigneeEmail ||
-                (await RecipientService.get(map.roleKey, {
-                    location: request.location,
-                    employeeId: request.employeeId
-                }));
-
-            if (!recipientEmail) {
-                return res.status(400).json({ success: false, error: `No recipient email could be resolved for role ${map.roleKey}` });
+            // Resolve the person currently responsible for this stage (primary or
+            // secondary). No admin-typed override.
+            const recipient = await resolveResendRecipient(request.status, map.roleKey, { location: request.location, employeeId: request.employeeId });
+            if (!recipient.email) {
+                return res.status(400).json({ success: false, error: `No approver is configured for this stage (${request.status}). Set one in Workflow Approvers first.` });
             }
+
+            // Re-point so the portal queue + POST guard match who receives the email.
+            await request.update({
+                currentStageAssigneeEmail:    recipient.email,
+                currentStageAssigneeUsername: recipient.username || null
+            });
 
             const actionLink = `${process.env.APP_URL}/api/offboarding/handle?token=${request.currentStageToken}`;
-            await emailService.sendOffboardingNotification(recipientEmail, request, actionLink, map.type);
-
-            // If admin used the override, re-stamp the assignee so the
-            // forwarded-email guard at POST accepts the new recipient.
-            if (overrideEmail) {
-                await request.update({ currentStageAssigneeEmail: overrideEmail });
-            }
+            await emailService.sendOffboardingNotification(recipient.email, request, actionLink, map.type);
 
             await TimelineEvent.create({
                 requestId: request.id,
                 action: 'Email Regenerated',
                 actorRole: 'Admin',
-                details: `Offboarding action email re-sent to ${recipientEmail} for stage ${request.status} using existing token.`,
+                details: `Offboarding action email re-sent to ${recipient.email} (${recipient.role}) for stage ${request.status}; stage assignee refreshed. Existing token reused.`,
                 timestamp: new Date()
             });
 
-            return res.json({ success: true, message: `Action email re-sent to ${recipientEmail}` });
+            const who = recipient.name ? `${recipient.name} (${recipient.email})` : recipient.email;
+            return res.json({ success: true, message: `Action email re-sent to ${who}` });
         } catch (error) {
             console.error('Error resending offboarding stage email:', error);
             return res.status(500).json({ success: false, error: 'Failed to resend stage email', details: error.message });

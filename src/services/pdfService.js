@@ -129,37 +129,38 @@ export const generateOnboardingPDF = async (request, outputPath) => {
             width: titleW, align: 'center'
         });
 
-        // Top-right "Request Initiated On" field
-        let y = titleY + 30;
-        const initLabelW = 110;
-        labelText('Request Initiated On:', M + W - 230, y + 3);
-        fieldBox(M + W - 230 + initLabelW, y, 110, 16, fmtDateTime(request.hrSubmittedAt));
-
         // ─── Applicant fields (2-column grid) ───────────────────────────
         const colLeftX = M + 8;
         const colRightX = M + W / 2 + 4;
         const colWidth = W / 2 - 12;
 
+        // Applicant name (left) + Request Initiated On (right)
+        let y = titleY + 30;
+        const initLabelW = 110;
+        labeledField('Employee Name', colLeftX, y, 90, 195, 16, request.fullName);
+        labelText('Request Initiated On:', M + W - 230, y + 3);
+        fieldBox(M + W - 230 + initLabelW, y, 110, 16, fmtDateTime(request.hrSubmittedAt));
+
         y += 22;
         labeledField('Employee Number', colLeftX, y, 95, colWidth - 100, 16, request.employeeId);
-        labeledField('Department',      colRightX, y, 70, colWidth - 75,  16, request.department);
+        labeledField('Department',      colRightX, y, 70, colWidth - 75,  16, request.adDepartment || request.department);
 
         y += 22;
         labeledField('Request Initator Name', colLeftX, y, 110, colWidth - 115, 16, request.requesterName);
         labeledField('Project / Unit',         colRightX, y, 70,  colWidth - 75,  16, request.location || 'Head Office');
 
         y += 22;
-        labeledField('Designation', colLeftX, y, 65, colWidth - 70, 16, request.designation);
+        labeledField('Designation', colLeftX, y, 65, colWidth - 70, 16, request.adTitle || request.designation);
         labeledField('Joining Date', colRightX, y, 65, colWidth - 70, 16,
             request.joiningDate ? fmt(request.joiningDate) : 'N/A');
 
-        // Office Ext / Home / Mobile (3 fields on one row)
+        // Office Ext / Sub-Dept / Mobile (3 fields on one row)
         y += 22;
         labelText('Office Extension:', colLeftX, y + 3);
         fieldBox(colLeftX + 88, y, 50, 16, request.officeExtension);
         text('-', colLeftX + 142, y + 3);
-        labelText('Home Phone #:', colLeftX + 165, y + 3);
-        fieldBox(colLeftX + 235, y, 45, 16, request.homePhone);
+        labelText('Sub-Dept:', colLeftX + 165, y + 3);
+        fieldBox(colLeftX + 218, y, 62, 16, request.subDepartment);
         text('-', colLeftX + 282, y + 3);
         labelText('Mobile #:', colLeftX + 305, y + 3);
         fieldBox(colLeftX + 350, y, M + W - colLeftX - 350 - 8, 16, request.mobilePhone);
@@ -170,18 +171,6 @@ export const generateOnboardingPDF = async (request, outputPath) => {
 
         y += 18;
         checkbox('Intranet', colLeftX, y, request.intranetAccess);
-        labelText('Internet Facility:', colLeftX + 130, y + 3);
-        checkbox('General Browsing', colLeftX + 210, y, request.internetAccess);
-        checkbox('Specific WebSites', colLeftX + 340, y, request.specificWebsites);
-
-        y += 22;
-        labelText('Purpose of Use: (Please Specify)', colLeftX, y);
-        const purposeRule1 = colLeftX + 170;
-        horizontalRule(purposeRule1, M + W - 8, y + 9);
-        doc.font('Helvetica').fontSize(9);
-        text(fmt(request.internetPurpose), purposeRule1 + 3, y + 1, {
-            width: M + W - 8 - purposeRule1 - 3, ellipsis: true, lineBreak: false
-        });
 
         // ─── External Email Services ────────────────────────────────────
         y += 22;
@@ -223,8 +212,7 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         labeledField('Home Folder (Z:)', colRightX, y, 90, colWidth - 95, 16, request.homeFolderPath);
 
         y += 18;
-        labeledField('Terminal User (T:)',   colLeftX, y, 90, colWidth - 95, 16, '');
-        labeledField('IFL-Portal Site Link', colRightX, y, 90, colWidth - 95, 16, request.iflPortalLink);
+        labeledField('IFL-Portal Site Link', colLeftX, y, 90, colWidth - 95, 16, request.iflPortalLink);
 
         // ─── NOTE block — flows naturally below the file share section ─
         y += 22;
@@ -284,26 +272,30 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         const titleW2 = doc.widthOfString('For System Infrastructure Team Only');
         horizontalRule(colLeftX, colLeftX + titleW2, sysTop + 21);
 
-        let sy = sysTop + 32;
+        let sy = sysTop + 30;
 
-        // 4-row 2-column grid for the DCI fields
+        // 2-column grid for the DCI / AD provisioning fields
         labeledField('NT User Name',    colLeftX, sy, 80, colWidth - 85, 16, request.ntUserName);
         labeledField('MG Level',        colRightX, sy, 80, colWidth - 85, 16, request.mgLevel);
 
-        sy += 22;
+        sy += 20;
         labeledField('Ex.Display Name', colLeftX, sy, 80, colWidth - 85, 16, request.exchangeDisplayName);
         labeledField('Mail Size Limit', colRightX, sy, 80, colWidth - 85, 16, request.mailSizeLimit);
 
-        sy += 22;
+        sy += 20;
         labeledField('SMTP',            colLeftX, sy, 80, colWidth - 85, 16, request.smtpAddress);
         labeledField('Recipent Limit',  colRightX, sy, 80, colWidth - 85, 16, request.recipientLimit || '15 / 15');
 
-        sy += 22;
+        sy += 20;
+        labeledField('Alias Name',      colLeftX, sy, 80, colWidth - 85, 16, request.aliasName);
+        labeledField('SharePoint Role', colRightX, sy, 80, colWidth - 85, 16, request.sharepointRole);
+
+        sy += 20;
         labeledField('Member of (if any)',   colLeftX, sy, 95, colWidth - 100, 16, request.memberOf);
         labeledField('Mailbox Storage Limit', colRightX, sy, 105, colWidth - 110, 16, request.mailboxStorageLimit || '250 MB');
 
         // ─── Group Policy Level ─────────────────────────────────────────
-        sy += 22;
+        sy += 20;
         sectionLabel('Group Policy Level:', colLeftX, sy);
 
         sy += 14;
@@ -316,28 +308,25 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         labeledField('HighlyManagedUsers', colLeftX, sy, 110, colWidth - 115, 16, highlyVal);
         labeledField('LightlyManagUser',   colRightX, sy, 95, colWidth - 100, 16, lightlyVal);
 
-        // ─── New / Previous Facilities ──────────────────────────────────
+        // ─── Provisioning Notes (DCI Manager) ───────────────────────────
         sy += 20;
-        labelText('New / Previous Facilities ( if any )', colLeftX, sy + 3);
-        const newPrevX = colLeftX + 175;
-        horizontalRule(newPrevX, M + W - 8, sy + 12);
+        labelText('Provisioning Notes:', colLeftX, sy + 3);
+        const provX = colLeftX + 95;
+        horizontalRule(provX, M + W - 8, sy + 12);
+        doc.font('Helvetica').fontSize(8.5).fillColor('#000');
+        text(fmt(request.dciRemarks), provX + 3, sy + 1, {
+            width: M + W - 8 - provX - 3, ellipsis: true, lineBreak: false
+        });
 
-        // ─── Extra Facility / Allegations / Comments / Malfunctioning ───
-        sy += 16;
-        labelText('Extra Facility / Allegations / Comments / Malfunctioning ( if any )', colLeftX, sy + 3);
-        const extraStartX = colLeftX + 290;
+        // ─── Extra Facility / Comments ──────────────────────────────────
+        sy += 18;
+        labelText('Extra Facility / Comments ( if any ):', colLeftX, sy + 3);
+        const extraStartX = colLeftX + 175;
         horizontalRule(extraStartX, M + W - 8, sy + 12);
-        // Two extra free-text lines underneath
-        sy += 14;
-        const extraLine1Y = sy - 5;
-        horizontalRule(colLeftX, M + W - 8, sy + 8);
-        sy += 12;
-        horizontalRule(colLeftX, M + W - 8, sy + 8);
-        // Render the extra facility text on the lines below the label
         if (request.extraFacility) {
             doc.font('Helvetica').fontSize(8.5).fillColor('#000');
-            doc.text(String(request.extraFacility), colLeftX + 2, extraLine1Y, {
-                width: W - 16, height: 22, lineGap: 4, ellipsis: true
+            text(fmt(request.extraFacility), extraStartX + 3, sy + 1, {
+                width: M + W - 8 - extraStartX - 3, ellipsis: true, lineBreak: false
             });
         }
 

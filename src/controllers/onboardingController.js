@@ -9,6 +9,7 @@ import { humanizeDetails, humanizeDetailsHTML, humanizeAction, narrate } from '.
 import { labelFor as statusLabelFor, ownerFor as statusOwnerFor, colorFor as statusColorFor } from '../utils/workflowLabels.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
+import { resolveStageRecipient, STATUS_TO_ROLE, LOCATION_AWARE_ROLE_KEYS } from '../utils/resolveStageRecipient.js';
 import { emailsMatch } from '../utils/emailMatch.js';
 import { LOCATION_GROUPS, groupByKey, groupLabel } from '../utils/locationGroups.js';
 import { checkAccountNameExists, searchADGroups, getAllADGroups } from '../services/adService.js';
@@ -72,53 +73,11 @@ async function resolveHRGroupForEmail(email, username = '') {
     return null;
 }
 
-// Map workflow status -> the role currently responsible for it
-const STATUS_TO_ROLE = {
-    PendingIT: { key: 'IT_OPS', label: 'IT Operations' },
-    PendingHOD: { key: 'HOD', label: 'Head of Department' },
-    PendingDCI: { key: 'DCI_TEAM', label: 'DCI Team' },
-    PendingDCIManager: { key: 'DCI_MANAGER', label: 'DCI Manager' },
-    PendingITHOD: { key: 'IT_HOD', label: 'IT HOD' },
-    PendingDCIImplementation: { key: 'DCI_IMPLEMENTER', label: 'DCI Implementer' },
-    // Step 12 owner is IT Operations (same group as Step 2) per client requirement.
-    PendingOPSAction: { key: 'IT_OPS', label: 'IT Operations' },
-    Completed: { key: null, label: 'Completed' },
-    Rejected: { key: null, label: 'Closed (Rejected)' }
-};
-
-// IT_OPS and HR_INITIATOR are split by location group; all other roles use a
-// single global config row. Mirrors the same constant in recipientService.js.
-const LOCATION_AWARE_ROLE_KEYS = new Set(['IT_OPS', 'HR_INITIATOR']);
-
-// Resolve who is currently configured for a given workflow status, optionally
-// scoped by location for location-aware roles (IT_OPS). Checks the per-location
-// override first, then falls back to the global config row.
-const resolveCurrentRecipient = async (status, location = null) => {
-    const map = STATUS_TO_ROLE[status];
-    if (!map) return { role: status, name: '', email: '' };
-    if (!map.key) return { role: map.label, name: '', email: '' };
-    try {
-        let cfg = null;
-        if (location && LOCATION_AWARE_ROLE_KEYS.has(map.key)) {
-            cfg = await WorkflowApproverLocationOverride.findOne({
-                where: { roleKey: map.key, location, isActive: true }
-            });
-        }
-        if (!cfg) {
-            cfg = await WorkflowApproverConfig.findOne({ where: { roleKey: map.key, isActive: true } });
-        }
-        if (!cfg) return { role: map.label, name: '', email: '', username: '' };
-        const usingSecondary = cfg.primaryExpiredAt && cfg.secondaryEmail;
-        return {
-            role:     map.label + (usingSecondary ? ' (Secondary)' : ''),
-            name:     usingSecondary ? cfg.secondaryName     : cfg.approverName,
-            email:    usingSecondary ? cfg.secondaryEmail    : cfg.approverEmail,
-            username: usingSecondary ? (cfg.secondaryUsername || '') : (cfg.approverUsername || '')
-        };
-    } catch {
-        return { role: map.label, name: '', email: '' };
-    }
-};
+// STATUS_TO_ROLE, LOCATION_AWARE_ROLE_KEYS and the recipient resolver now live in
+// src/utils/resolveStageRecipient.js so the admin resend + rebind flows share the
+// exact same resolution logic as the approval form gate. Kept under the original
+// local name to avoid churn at the call sites below.
+const resolveCurrentRecipient = resolveStageRecipient;
 
 // Given a location-aware roleKey and the signed-in user's identity, return the
 // location group key the user belongs to. Mirrors the rowMatchesPrimary /
@@ -721,15 +680,15 @@ const renderForm = async (req, res, token) => {
 
     // Full workflow stepper — driven by request.status, not the viewer role.
     const WORKFLOW_STAGES = [
-        { label: 'HR Initiation',  statusKey: null },
-        { label: 'IT Operations',  statusKey: 'PendingIT' },
-        { label: 'HOD Approval',   statusKey: 'PendingHOD' },
-        { label: 'DCI Input',      statusKey: 'PendingDCI' },
-        { label: 'DCI Manager',    statusKey: 'PendingDCIManager' },
-        { label: 'IT HOD',         statusKey: 'PendingITHOD' },
-        { label: 'DCI Implement',  statusKey: 'PendingDCIImplementation' },
-        { label: 'OPS Action',     statusKey: 'PendingOPSAction' },
-        { label: 'Completed',      statusKey: 'Completed' },
+        { label: 'HR Request Submission',      statusKey: null },
+        { label: 'IT OPS Review',          statusKey: 'PendingIT' },
+        { label: 'Employee HOD Approval',        statusKey: 'PendingHOD' },
+        { label: 'Profile Configuration',    statusKey: 'PendingDCI' },
+        { label: 'IT Manager Approval',            statusKey: 'PendingDCIManager' },
+        { label: 'IT HOD Approval',  statusKey: 'PendingITHOD' },
+        { label: 'Account Provisioning',    statusKey: 'PendingDCIImplementation' },
+        { label: 'Compliance Verification', statusKey: 'PendingOPSAction' },
+        { label: 'Request Closed',          statusKey: 'Completed' },
     ];
     const requestStatus = request && request.status;
     let activeStepIdx = 0;
@@ -748,7 +707,6 @@ const renderForm = async (req, res, token) => {
     const opsVerifierName = (req.user && (req.user.displayName || req.user.username)) || '';
     if (role === 'OPS') {
         const items = [];
-        if (request.intranetAccess) items.push('Configure Intranet Access');
         if (request.emailIncoming || request.emailOutgoing) items.push('Configure Outlook Email');
         if (request.deptSharePath) items.push(`Map Department Share (S:): ${request.deptSharePath}`);
         if (request.homeFolderPath) items.push(`Map Home Folder (Z:): ${request.homeFolderPath}`);

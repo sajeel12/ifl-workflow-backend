@@ -5,15 +5,20 @@ import { jest, describe, test, expect, afterEach } from '@jest/globals';
  *
  * Business rules under test (updateWorkflowApprover):
  *  - When DCI_MANAGER config is updated, all PendingDCIManager requests have
- *    currentStageAssigneeEmail / currentStageAssigneeUsername updated immediately.
+ *    currentStageAssigneeEmail / currentStageAssigneeUsername updated immediately
+ *    (temporary-delegation path: rebindInFlightToDelegate).
  *  - When IT_HOD config is updated, all PendingITHOD requests are rebound.
  *  - A System timeline event is written for each rebound request.
- *  - Non-delegation roles (IT_OPS, DCI_TEAM, DCI_IMPLEMENTER) do NOT trigger
- *    any request rebinding.
- *  - If the new approverEmail is null/empty, no rebinding happens.
+ *  - Non-delegation stage roles (IT_OPS, DCI_TEAM, DCI_IMPLEMENTER) ALSO rebind
+ *    their in-flight requests now — re-resolved via resolveStageRecipient and
+ *    re-emailed (rebindStageToCurrentRecipient). 'Stage Reassigned (Approver
+ *    Changed)' timeline event per request.
+ *  - If the new approverEmail is null/empty, the delegation path does no rebind.
  *
- * resendStageEmail uses the portal entry link (not the generic handle endpoint)
- * for every status that has a portal slug.
+ * resendStageEmail/resendOffboardingStageEmail no longer accept a typed override:
+ * they resolve the configured approver (resolveStageRecipient), re-point the
+ * request (currentStageAssignee*), and use the portal entry link (not the generic
+ * handle endpoint) for every status that has a portal slug.
  */
 
 afterEach(() => {
@@ -78,6 +83,21 @@ async function loadController({ config, inFlightRequests = [], allRequests = inF
             findAll:   jest.fn().mockResolvedValue(inFlightRequests),
             findByPk:  jest.fn().mockResolvedValue(allRequests[0] || null)
         }
+    }));
+    // Offboarding table — rebindInFlightToDelegate + rebindStageToCurrentRecipient
+    // walk this too. Empty here so onboarding assertions stay isolated.
+    await jest.unstable_mockModule('../src/models/OffboardingRequest.js', () => ({
+        default: { findAll: jest.fn().mockResolvedValue([]), findByPk: jest.fn().mockResolvedValue(null) }
+    }));
+    // Stage recipient resolver — used by the non-delegation-role rebind. Returns a
+    // fixed "new" person so rebind assertions are deterministic.
+    await jest.unstable_mockModule('../src/utils/resolveStageRecipient.js', () => ({
+        resolveStageRecipient: jest.fn().mockResolvedValue({ role: 'IT Operations', name: 'New ITOps', email: 'new.itops@ifl.com', username: 'new.itops' }),
+        STATUS_TO_ROLE: {},
+        LOCATION_AWARE_ROLE_KEYS: new Set(['IT_OPS', 'HR_INITIATOR'])
+    }));
+    await jest.unstable_mockModule('../src/utils/emailMatch.js', () => ({
+        emailsMatch: (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase()
     }));
     await jest.unstable_mockModule('../src/models/TimelineEvent.js', () => ({
         default: { create: timelineCreate, findAll: jest.fn().mockResolvedValue([]) }
@@ -218,23 +238,39 @@ describe('Admin delegation rebind — updateWorkflowApprover', () => {
         );
     });
 
-    test('non-delegation role (IT_OPS) does NOT trigger any request rebinding or emails', async () => {
+    test('non-delegation role (IT_OPS) NOW rebinds its in-flight requests to the newly configured person', async () => {
         const config = makeConfig({ roleKey: 'IT_OPS', label: 'IT Operations' });
+        const request = makeRequest({ status: 'PendingIT', currentStageToken: 'tok-itops', currentStageAssigneeEmail: 'old.itops@ifl.com' });
         const { adminController, timelineCreate, sendOnboardingNotification } = await loadController({
-            config, inFlightRequests: []
+            config, inFlightRequests: [request]
         });
 
         const req = {
             params: { id: '1' },
-            body: { approverEmail: 'itops@ifl.com', approverUsername: 'itops', approverName: 'IT Ops', isActive: true }
+            body: { approverEmail: 'new.itops@ifl.com', approverUsername: 'new.itops', approverName: 'IT Ops', isActive: true }
         };
         const res = mockRes();
         await adminController.updateWorkflowApprover(req, res);
 
-        expect(timelineCreate).not.toHaveBeenCalled();
-        expect(sendOnboardingNotification).not.toHaveBeenCalled();
+        // Re-pointed to the resolved current person (from resolveStageRecipient mock)
+        expect(request.update).toHaveBeenCalledWith(
+            expect.objectContaining({
+                currentStageAssigneeEmail:    'new.itops@ifl.com',
+                currentStageAssigneeUsername: 'new.itops'
+            })
+        );
+        // Stage-reassignment timeline event + action email (portal it-ops link) to the new person
+        expect(timelineCreate).toHaveBeenCalledWith(
+            expect.objectContaining({ action: 'Stage Reassigned (Approver Changed)', actorRole: 'Admin' })
+        );
+        expect(sendOnboardingNotification).toHaveBeenCalledWith(
+            'new.itops@ifl.com',
+            expect.objectContaining({ id: 42 }),
+            expect.stringContaining('/portal/it-ops/enter?action=tok-itops'),
+            'IT_OPS'
+        );
         expect(res.json).toHaveBeenCalledWith(
-            expect.objectContaining({ message: expect.stringContaining('updated successfully') })
+            expect.objectContaining({ success: true, message: expect.stringContaining('rebound') })
         );
     });
 
@@ -437,6 +473,17 @@ describe('revertDelegation', () => {
                 findByPk: jest.fn().mockResolvedValue(inFlightRequests[0] || null)
             }
         }));
+        await jest.unstable_mockModule('../src/models/OffboardingRequest.js', () => ({
+            default: { findAll: jest.fn().mockResolvedValue([]), findByPk: jest.fn().mockResolvedValue(null) }
+        }));
+        await jest.unstable_mockModule('../src/utils/resolveStageRecipient.js', () => ({
+            resolveStageRecipient: jest.fn().mockResolvedValue({ role: 'DCI Manager', name: 'Resolved', email: 'resolved@ifl.com', username: 'resolved' }),
+            STATUS_TO_ROLE: {},
+            LOCATION_AWARE_ROLE_KEYS: new Set(['IT_OPS', 'HR_INITIATOR'])
+        }));
+        await jest.unstable_mockModule('../src/utils/emailMatch.js', () => ({
+            emailsMatch: (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase()
+        }));
         await jest.unstable_mockModule('../src/models/TimelineEvent.js', () => ({
             default: { create: timelineCreate, findAll: jest.fn().mockResolvedValue([]) }
         }));
@@ -608,6 +655,7 @@ describe('resendStageEmail portal link format', () => {
             status: 'PendingDCIManager',
             currentStageToken: 'tok-resend',
             currentStageAssigneeEmail: 'mgr@ifl.com',
+            update: jest.fn().mockResolvedValue(undefined),
             ...requestOverrides
         };
 
@@ -632,6 +680,18 @@ describe('resendStageEmail portal link format', () => {
         }));
         await jest.unstable_mockModule('../src/models/OnboardingRequest.js', () => ({
             default: { findByPk: jest.fn().mockResolvedValue(request), findAll: jest.fn().mockResolvedValue([]) }
+        }));
+        await jest.unstable_mockModule('../src/models/OffboardingRequest.js', () => ({
+            default: { findByPk: jest.fn().mockResolvedValue(null), findAll: jest.fn().mockResolvedValue([]) }
+        }));
+        // Resend resolves the recipient via this util (primary/secondary, location).
+        await jest.unstable_mockModule('../src/utils/resolveStageRecipient.js', () => ({
+            resolveStageRecipient: jest.fn().mockResolvedValue({ role: 'Stage Owner', name: 'Configured Person', email: 'mgr@ifl.com', username: 'mgr' }),
+            STATUS_TO_ROLE: {},
+            LOCATION_AWARE_ROLE_KEYS: new Set(['IT_OPS', 'HR_INITIATOR'])
+        }));
+        await jest.unstable_mockModule('../src/utils/emailMatch.js', () => ({
+            emailsMatch: (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase()
         }));
         await jest.unstable_mockModule('../src/models/TimelineEvent.js', () => ({
             default: { create: timelineCreate, findAll: jest.fn().mockResolvedValue([]) }

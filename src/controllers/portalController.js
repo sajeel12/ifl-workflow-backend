@@ -86,7 +86,7 @@ const ROLE_META = {
 };
 
 const LOCATION_AWARE   = new Set(['IT_OPS', 'HR_INITIATOR']);
-const TERMINAL_STATUSES = ['Completed', 'Rejected'];
+const TERMINAL_STATUSES = ['Completed', 'Rejected', 'AdminDeleted'];
 
 const STATUS_TO_SLUG = {
     PendingIT:                'it-ops',

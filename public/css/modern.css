@@ -101,63 +101,165 @@ body {
 }
 
 /* ── Step Progress Bar ─────────────────────────────────── */
+/* ── Onboarding stepper: Figma "circle-rail" design ───────────────
+   Faithful port of the approved Figma mock (48px round nodes on a thin
+   rail, Bebas Neue numbers, DM Sans titles, #2D67F1 / #B6CCE6 blues,
+   white active node with a blue drop-glow). Scaled to flex columns so
+   all nine workflow stages fit one row. Markup unchanged. */
 .steps-container {
-    padding: 14px 28px;
+    --step-blue:      #2D67F1;   /* completed / active accent */
+    --step-blue-soft: #B6CCE6;   /* upcoming nodes & rail        */
+    padding: 26px 28px 20px;
     background: var(--bg-card);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
 
-.steps {
+.steps-row {
     display: flex;
-    justify-content: space-between;
+    align-items: flex-start;
     position: relative;
-    max-width: 100%;
-    margin: 0 auto;
-}
-
-.steps::before {
-    content: '';
-    position: absolute; top: 10px;
-    left: 0; right: 0; height: 2px;
-    background: var(--border); z-index: 1;
-}
-.steps::after {
-    content: '';
-    position: absolute; top: 10px; left: 0;
-    width: var(--step-progress, 0%); height: 2px;
-    background: var(--primary); z-index: 1;
-    transition: width 0.4s ease;
 }
 
 .step-item {
-    position: relative; z-index: 2;
-    background: var(--bg-card);
-    padding: 0 4px; text-align: center;
-    color: var(--text-muted);
-    flex: 1; display: flex; flex-direction: column; align-items: center;
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+    /* staggered entrance on load */
+    animation: step-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
+.step-item:nth-child(1) { animation-delay: 0.04s; }
+.step-item:nth-child(2) { animation-delay: 0.10s; }
+.step-item:nth-child(3) { animation-delay: 0.16s; }
+.step-item:nth-child(4) { animation-delay: 0.22s; }
+.step-item:nth-child(5) { animation-delay: 0.28s; }
+.step-item:nth-child(6) { animation-delay: 0.34s; }
+.step-item:nth-child(7) { animation-delay: 0.40s; }
+.step-item:nth-child(8) { animation-delay: 0.46s; }
+.step-item:nth-child(9) { animation-delay: 0.52s; }
+
+@keyframes step-in {
+    from { opacity: 0; transform: translateY(9px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* The rail: thin line through the node centres. Soft-blue by default;
+   completed AND active outgoing segments turn solid blue (per Figma). */
+.step-item:not(:last-child)::after,
+.step-item.completed:not(:last-child)::before,
+.step-item.active:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 28px;            /* vertical centre of the 48px node */
+    left: 50%;
+    width: 100%;
+    height: 2px;
+}
+.step-item:not(:last-child)::after {
+    background: var(--step-blue-soft);
+    z-index: 0;
+}
+.step-item.completed:not(:last-child)::before,
+.step-item.active:not(:last-child)::before {
+    background: var(--step-blue);
+    z-index: 1;
+    transform-origin: left center;
+    animation: rail-fill 0.55s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.step-item:nth-child(1)::before { animation-delay: 0.20s; }
+.step-item:nth-child(2)::before { animation-delay: 0.26s; }
+.step-item:nth-child(3)::before { animation-delay: 0.32s; }
+.step-item:nth-child(4)::before { animation-delay: 0.38s; }
+.step-item:nth-child(5)::before { animation-delay: 0.44s; }
+.step-item:nth-child(6)::before { animation-delay: 0.50s; }
+.step-item:nth-child(7)::before { animation-delay: 0.56s; }
+.step-item:nth-child(8)::before { animation-delay: 0.62s; }
+
+@keyframes rail-fill {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+
+/* Node: 48px round, Bebas Neue numeral. Upcoming = soft-blue fill. */
 .step-circle {
-    width: 20px; height: 20px; border-radius: 50%;
-    background: #fff; border: 2px solid var(--border);
+    position: relative;
+    z-index: 2;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--step-blue-soft);
+    border: 1px solid #fff;
+    color: #fff;
     display: flex; align-items: center; justify-content: center;
-    margin: 0 auto 5px; font-weight: 700; font-size: 9px;
-    transition: all 0.25s ease; flex-shrink: 0;
+    font-family: 'Bebas Neue', 'Oswald', 'Segoe UI', sans-serif;
+    font-weight: 400; font-size: 28px; line-height: 1;
+    letter-spacing: -0.04em;
+    padding-top: 2px;            /* optical centring of Bebas glyphs */
+    transition: background 0.3s ease, box-shadow 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    flex-shrink: 0;
 }
+
+/* Title: DM Sans, two-line reserved block keeps every column symmetric.
+   Full label exposed via title="" tooltip in the markup. */
 .step-label {
-    font-size: 0.58rem; font-weight: 500; line-height: 1.25;
-    max-width: 60px; word-break: break-word; text-align: center;
+    font-family: 'DM Sans', 'Segoe UI', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    text-align: center;
+    line-height: 1.25;
+    width: 100%;
+    padding: 0 4px;
+    color: #111827;
+    min-height: 2.5em;           /* exactly two lines → no ragged rows */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: color 0.3s ease;
 }
-.step-item.active .step-circle {
-    border-color: var(--primary); color: var(--primary);
-    background: var(--primary-light);
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
-}
-.step-item.active .step-label { color: var(--primary); font-weight: 700; }
+
+/* Completed — solid blue node, blue title */
 .step-item.completed .step-circle {
-    background: var(--primary); border-color: var(--primary); color: #fff;
+    background: var(--step-blue);
+    border-color: var(--step-blue);
+    color: #fff;
 }
-.step-item.completed .step-label { color: var(--primary); }
+.step-item.completed .step-label {
+    color: var(--step-blue);
+    font-weight: 600;
+}
+
+/* Active — white node, blue ring, blue numeral, blue drop-glow (Figma) */
+.step-item.active .step-circle {
+    background: #fff;
+    border: 1px solid var(--step-blue);
+    color: var(--step-blue);
+    box-shadow: 0 10px 10px rgba(46, 103, 246, 0.5);
+}
+.step-item.active .step-label {
+    color: var(--step-blue);
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .step-circle { width: 40px; height: 40px; font-size: 23px; }
+    .step-item:not(:last-child)::after,
+    .step-item.completed:not(:last-child)::before,
+    .step-item.active:not(:last-child)::before { top: 24px; }
+    .step-item.active .step-circle { box-shadow: 0 7px 8px rgba(46, 103, 246, 0.45); }
+    .step-label { font-size: 0.7rem; }
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .step-item,
+    .step-item.completed:not(:last-child)::before,
+    .step-item.active:not(:last-child)::before { animation: none; }
+}
 
 /* ── Form scaffold (flex: fills remaining height) ──────── */
 .onb-form {
@@ -238,6 +340,8 @@ label {
 /* ── Input Fields (premium style) ─────────────────────── */
 input[type="text"],
 input[type="email"],
+input[type="tel"],
+input[type="number"],
 input[type="date"],
 input[type="file"],
 select,
@@ -298,6 +402,8 @@ textarea { resize: vertical; min-height: 72px; }
     transition: border-color 0.15s, background 0.15s;
     font-size: 0.86rem; color: var(--text-secondary);
     font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
 }
 .checkbox-card:hover { border-color: var(--primary); background: var(--primary-light); }
 

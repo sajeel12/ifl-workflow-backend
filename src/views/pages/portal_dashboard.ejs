@@ -327,6 +327,15 @@
             background: #15803d;
         }
 
+        .pd-initiate-btn--off {
+            background: #ea580c;
+            margin-top: 8px;
+        }
+
+        .pd-initiate-btn--off:hover {
+            background: #c2410c;
+        }
+
         .pd-portal-link {
             display: flex;
             align-items: center;
@@ -470,6 +479,8 @@
         }
 
         .expanded-banner {
+            flex: 0 0 100%;
+            box-sizing: border-box;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -479,7 +490,7 @@
             font-weight: 600;
             padding: 7px 14px;
             border-radius: 5px 5px 0 0;
-            margin: -16px -18px 14px;
+            margin: -16px -18px 2px;
         }
 
         .expanded-banner span {
@@ -777,6 +788,9 @@
                         <a href="<%= appUrl %>/api/onboarding/initiate" class="pd-initiate-btn">
                             + New Onboarding Request
                         </a>
+                        <a href="<%= appUrl %>/api/offboarding/initiate" class="pd-initiate-btn pd-initiate-btn--off">
+                            + New Offboarding Request
+                        </a>
                     </div>
                     <% } %>
 
@@ -871,6 +885,15 @@
                                                             <p>No pending requests in your queue.</p>
                                                         </div>
                                                         <% } else { %>
+                                                            <% const STAGE_OWNER = {
+                                                                PendingIT:                'With IT Operations',
+                                                                PendingOPSAction:         'With IT Operations',
+                                                                PendingHOD:               'With Department HOD',
+                                                                PendingITHOD:             'With IT HOD',
+                                                                PendingDCI:               'With DCI Team',
+                                                                PendingDCIManager:        'With DCI Manager',
+                                                                PendingDCIImplementation: 'With DCI Implementer',
+                                                            }; %>
                                                             <div class="req-list">
                                                                 <% pending.forEach(r=> {
                                                                     const stageAge = r.hrSubmittedAt ?
@@ -880,17 +903,17 @@
                                                                     %>
                                                                     <div class="req-card <%= r.canAct ? 'can-act' : 'read-only' %> <%= (expandId && r.id === expandId) ? 'is-expanded' : '' %>"
                                                                         id="req-<%= r.id %>">
+                                                                        <% if (expandId && r.id===expandId) { %>
+                                                                            <div class="expanded-banner"
+                                                                                style="background: <%= roleAccentColor %>;">
+                                                                                &#128279; <span>You are acting as
+                                                                                    <strong>
+                                                                                        <%= roleName %>
+                                                                                    </strong> — this request is
+                                                                                    assigned to you</span>
+                                                                            </div>
+                                                                            <% } %>
                                                                         <div class="req-info">
-                                                                            <% if (expandId && r.id===expandId) { %>
-                                                                                <div class="expanded-banner"
-                                                                                    style="background: <%= roleAccentColor %>;">
-                                                                                    &#128279; <span>You are acting as
-                                                                                        <strong>
-                                                                                            <%= roleName %>
-                                                                                        </strong> — this request is
-                                                                                        assigned to you</span>
-                                                                                </div>
-                                                                                <% } %>
                                                                                     <p class="req-name">#<%= r.id %> —
                                                                                             <%= r.fullName || '—' %>
                                                                                     </p>
@@ -923,23 +946,12 @@
                                                                                                             %></span>
                                                                                                     <% } %>
                                                                                     </div>
-                                                                                    <% if (stageAge !==null) { %>
-                                                                                        <div
-                                                                                            class="req-timer <%= isStale ? 'stale' : '' %>">
-                                                                                            <%= isStale ? '&#9888; '
-                                                                                                : '&#9679; ' %>
-                                                                                                Stage open <%= stageAge
-                                                                                                    %>h<%= isStale
-                                                                                                        ? ' — PAST 48h'
-                                                                                                        : '' %>
-                                                                                        </div>
-                                                                                        <% } %>
                                                                         </div>
 
                                                                         <div class="req-actions">
                                                                             <% if (r.canAct && r.actionUrl) { %>
                                                                                 <a href="<%= r.actionUrl %>"
-                                                                                    class="btn-handle">Handle
+                                                                                    class="btn-handle">Proceed
                                                                                     &#8594;</a>
                                                                                 <% } else { %>
                                                                                     <a href="/api/onboarding/history/<%= r.id %>"
@@ -956,7 +968,7 @@
                                                                                                         r.currentStageAssigneeEmail.split('@')[0]
                                                                                                         %>
                                                                                                         <% } else { %>
-                                                                                                            Unassigned
+                                                                                                            <%= STAGE_OWNER[r.status] || 'Unassigned' %>
                                                                                                             <% } %>
                                                                                         </div>
                                                                         </div>

@@ -53,7 +53,9 @@ router.get('/ej/employees/:employeeNumber', ...guard, ejController.getEmployeeDe
 router.get('/ej/employees/:employeeNumber/ad-profile', ...guard, ejController.getEmployeeAdProfile);
 router.get('/ej/requests/:requestId/timeline', ...guard, ejController.getRequestTimeline);
 router.post('/system-config/update', ...guard, adminController.updateSystemConfig);
+router.get('/onboarding/:id/resend-preview', ...guard, adminController.resendStagePreview);
 router.post('/onboarding/:id/resend-email', ...guard, adminController.resendStageEmail);
+router.get('/offboarding/:id/resend-preview', ...guard, adminController.resendOffboardingStagePreview);
 router.post('/offboarding/:id/resend-email', ...guard, adminController.resendOffboardingStageEmail);
 router.delete('/onboarding/:id', ...guard, adminController.adminDeleteRequest);
 
