@@ -54,7 +54,8 @@
 </div>
 <% } %>
 
-<%- include('../partials/portal_shell') %>
+<%# Queue sidebar removed per Israr (6 Jun 2026): the queue belongs in the
+    standalone portal view (/portal/dci-manager), not next to the form. %>
 
 <style>
     .off-card {
@@ -395,8 +396,9 @@
 
 </div>
 
-<%- include('../partials/portal_close') %>
-<%- include('../partials/portal_scripts') %>
+<%# portal_close + portal_scripts dropped together with portal_shell above —
+    no queue sidebar on this form. The standalone portal at /portal/dci-manager
+    is the single source for the queue view. %>
 
 <script>
     // ── Verification cloak — hides the page until the SSO user is confirmed

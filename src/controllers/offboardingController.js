@@ -280,16 +280,9 @@ const renderForm = async (req, res, token) => {
         else                              step.status = 'pending';
     });
 
-    // Portal-shell context — show the sidebar when the role is portal-eligible.
-    const PORTAL_ROLE_KEYS = {
-        DCIManager:     'DCI_MANAGER',
-        DCIImplementer: 'DCI_IMPLEMENTER'
-    };
-    const PORTAL_ROLE_LABELS = {
-        DCIManager:     'DCI Manager',
-        DCIImplementer: 'DCI Implementer'
-    };
-    const showPortal = !!(token && PORTAL_ROLE_KEYS[role]);
+    // Queue sidebar removed per Israr (6 Jun 2026) — the queue lives on
+    // /portal/dci-manager only. The form is a clean form. No portal_shell
+    // locals are needed here anymore.
 
     return res.render('pages/offboarding_status', {
         request,
@@ -302,13 +295,7 @@ const renderForm = async (req, res, token) => {
         // Used by the client-side cloak in offboarding_status.ejs to verify
         // the SSO user matches the assignee before lifting the page. If null
         // (no token / no assignee), the cloak lifts immediately.
-        expectedAssigneeEmail: (token && request.currentStageAssigneeEmail) || null,
-        // Sidebar context — reused from the shared portal partial.
-        showPortal,
-        roleKey:    PORTAL_ROLE_KEYS[role] || null,
-        roleLabel:  PORTAL_ROLE_LABELS[role] || role,
-        portalCurrentRequestId: request.id || null,
-        portalRequestType: 'offboarding'
+        expectedAssigneeEmail: (token && request.currentStageAssigneeEmail) || null
     });
 };
 
