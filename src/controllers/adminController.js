@@ -1536,6 +1536,16 @@ class AdminController {
         }
     }
 
+    async whoamiAdmin(req, res) {
+        // adminApiGuard already gated this — if we got here, the user IS admin.
+        res.json({
+            success:  true,
+            isAdmin:  true,
+            username: (req.user && req.user.username) || null,
+            email:    (req.user && req.user.email)    || null,
+        });
+    }
+
 }
 
 export default new AdminController();

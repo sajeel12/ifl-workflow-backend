@@ -26,6 +26,11 @@ router.get('/employee-journey', adminPageGuard, adminController.renderEmployeeJo
 // login popup for every fetch() call, which breaks the admin page JS.
 const guard = [adminApiGuard];
 
+// Lightweight self-check used by the admin-shell cloak. Returns 200 if the
+// caller is in the admin allow-list (the guard already enforces this), 403
+// otherwise. The cloak treats those two cases as "lift" vs "deny".
+router.get('/whoami', ...guard, adminController.whoamiAdmin);
+
 router.get('/employees', ...guard, adminController.searchEmployees);
 router.get('/employee/:id', ...guard, adminController.getEmployeeDetails);
 router.put('/employee/:id', ...guard, adminController.updateEmployeeDetails);

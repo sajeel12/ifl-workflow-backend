@@ -11,7 +11,113 @@
     .modal-overlay.active, .a-overlay--open { opacity: 1; pointer-events: auto; }
     .a-nav__icon, .a-header__logo svg, .a-nav svg { width: 18px; height: 18px; flex-shrink: 0; }
     .a-page, .a-shell { visibility: visible; }
+
+    /* ── Verifying-access cloak (mirrors the form-page pattern) ─────────────
+       Hide the admin page until /admin/whoami confirms the SSO user is in the
+       admin allow-list. Server-side adminPageGuard is still the real security
+       boundary — this is UX polish so the in-flight moment is consistent. */
+    html.ifl-is-verifying body, body.ifl-is-verifying .a-page { visibility: hidden; }
+    body.ifl-is-verifying { overflow: hidden; }
+    .iflv-overlay {
+        position: fixed; inset: 0; z-index: 9000;
+        display: flex; align-items: center; justify-content: center;
+        background: #fff;
+        transition: opacity 0.24s ease;
+        font-family: 'Segoe UI', Tahoma, sans-serif;
+    }
+    .iflv-overlay.is-fading-out { opacity: 0; pointer-events: none; }
+    .iflv-card  { text-align: center; max-width: 360px; padding: 0 24px; }
+    .iflv-spin  {
+        width: 36px; height: 36px; border-radius: 50%;
+        border: 3px solid #e2e8f0; border-top-color: #0078D4;
+        margin: 0 auto 14px; animation: iflv-spin 0.8s linear infinite;
+    }
+    @keyframes iflv-spin { to { transform: rotate(360deg); } }
+    .iflv-title { font-size: 1rem;   font-weight: 700; color: #0f172a; margin: 0 0 4px; }
+    .iflv-sub   { font-size: 0.86rem; color: #64748b;  margin: 0; }
 </style>
+
+<script>
+    document.documentElement.classList.add('ifl-is-verifying');
+</script>
+
+<div id="iflVerifyOverlay" class="iflv-overlay" role="status" aria-live="polite">
+    <div class="iflv-card">
+        <div class="iflv-spin"></div>
+        <p class="iflv-title">Verifying your access</p>
+        <p class="iflv-sub">Please wait while we confirm you are authorised to use the admin portal.</p>
+    </div>
+</div>
+
+<script>
+    // Ensure the body also carries the cloak class (the inline script above
+    // runs before <body> exists, so it can only tag <html>).
+    document.addEventListener('DOMContentLoaded', () => {
+        document.body.classList.add('ifl-is-verifying');
+    });
+
+    (async () => {
+        const lift = () => {
+            document.documentElement.classList.remove('ifl-is-verifying');
+            if (document.body) document.body.classList.remove('ifl-is-verifying');
+            const overlay = document.getElementById('iflVerifyOverlay');
+            if (overlay) {
+                overlay.classList.add('is-fading-out');
+                setTimeout(() => overlay.remove(), 260);
+            }
+        };
+        const deny = (username) => {
+            document.documentElement.classList.remove('ifl-is-verifying');
+            if (document.body) document.body.classList.remove('ifl-is-verifying');
+            const overlay = document.getElementById('iflVerifyOverlay');
+            if (overlay) overlay.remove();
+            const showCard = () => {
+                document.body.innerHTML = `
+                  <div style="max-width:560px;margin:80px auto;padding:36px;background:#fff;border:1px solid #fee2e2;border-radius:14px;text-align:center;font-family:'Segoe UI',Tahoma,sans-serif;box-shadow:0 12px 40px -8px rgba(220,38,38,.18);">
+                    <div style="width:72px;height:72px;border-radius:50%;background:#fee2e2;color:#b91c1c;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 18px;">&#9940;</div>
+                    <h2 style="color:#b91c1c;margin:0 0 14px;font-size:1.15rem;">Admin Access Denied</h2>
+                    <p style="color:#475569;line-height:1.55;margin:0 0 14px;">
+                      Account <strong>${username || 'this user'}</strong> is not configured as an administrator.
+                    </p>
+                    <p style="color:#64748b;font-size:.9rem;">If you need admin access, contact the workflow administrator to be added to the admin list.</p>
+                  </div>`;
+            };
+            if (document.body) showCard();
+            else document.addEventListener('DOMContentLoaded', showCard);
+        };
+
+        // Wait for iflFetch/iflGetUser (from header.ejs) to be available so the
+        // sidecar token is attached on the whoami call.
+        const waitFor = (pred, timeoutMs = 4000) => new Promise((resolve) => {
+            const start = Date.now();
+            (function tick() {
+                if (pred()) return resolve(true);
+                if (Date.now() - start > timeoutMs) return resolve(false);
+                setTimeout(tick, 50);
+            })();
+        });
+
+        try {
+            await waitFor(() => typeof window.iflFetch === 'function');
+            const fetcher = (typeof window.iflFetch === 'function')
+                ? window.iflFetch
+                : (u, o) => fetch(u, o);
+            const r = await fetcher('/admin/whoami');
+            if (r && r.ok) { lift(); return; }
+            // 403 path — surface the username from iflGetUser for the rejection card.
+            let username = '';
+            try {
+                const u = typeof window.iflGetUser === 'function' ? await window.iflGetUser() : null;
+                username = (u && (u.email || u.username)) || '';
+            } catch (_) { /* swallow */ }
+            deny(username);
+        } catch (e) {
+            // Network failure — fail open (server-side guard is still in force).
+            console.warn('[Admin cloak] check failed:', e && e.message);
+            lift();
+        }
+    })();
+</script>
 
 <div class="a-page">
 
