@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import OnboardingRequest from '../models/OnboardingRequest.js';
+import OffboardingRequest from '../models/OffboardingRequest.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import { issueToken, validateToken } from '../services/portalTokenService.js';
@@ -96,6 +97,28 @@ const STATUS_TO_SLUG = {
     PendingDCIImplementation: 'dci-implementer',
     PendingOPSAction:         'it-ops',
 };
+
+// Offboarding has its own (smaller) status → portal-slug map. DCI Manager
+// + DCI Implementer are the only emailed stages; the initiation step is
+// triggered from the standalone /api/offboarding/initiate form, not email.
+const OFFBOARDING_STATUS_TO_SLUG = {
+    PendingDCIManager:        'dci-manager',
+    PendingDCIImplementation: 'dci-implementer',
+};
+
+// Look up an action token across BOTH onboarding and offboarding stage-token
+// columns. Email links carry the same kind of token, but the request itself
+// could live in either table. Returns { kind: 'onboarding'|'offboarding', request }
+// or null if no match. Onboarding is checked first because that's the high-
+// volume table.
+async function findRequestByActionToken(actionToken) {
+    if (!actionToken) return null;
+    const on = await OnboardingRequest.findOne({ where: { currentStageToken: actionToken } });
+    if (on) return { kind: 'onboarding', request: on };
+    const off = await OffboardingRequest.findOne({ where: { currentStageToken: actionToken } });
+    if (off) return { kind: 'offboarding', request: off };
+    return null;
+}
 
 // ── Identity helpers ───────────────────────────────────────────────────────────
 
@@ -214,13 +237,17 @@ export async function apiPortalAuth(req, res) {
 
     try {
         let expandId   = null;
+        let expandKind = null;      // 'onboarding' | 'offboarding' | null
         let targetSlug = roleSlug;
 
         if (actionToken) {
-            const request = await OnboardingRequest.findOne({ where: { currentStageToken: actionToken } });
-            if (request) {
-                expandId = request.id;
-                const expectedSlug = STATUS_TO_SLUG[request.status];
+            const found = await findRequestByActionToken(actionToken);
+            if (found) {
+                const { kind, request } = found;
+                expandId   = request.id;
+                expandKind = kind;
+                const statusMap = kind === 'offboarding' ? OFFBOARDING_STATUS_TO_SLUG : STATUS_TO_SLUG;
+                const expectedSlug = statusMap[request.status];
                 if (expectedSlug && expectedSlug !== roleSlug) {
                     // Request moved to a different stage — authenticate for the correct portal.
                     targetSlug = expectedSlug;
@@ -231,8 +258,9 @@ export async function apiPortalAuth(req, res) {
                     }
                     const m2    = ROLE_META[correctKey];
                     const tok2  = issueToken({ roleKey: correctKey, username, email: e2, accesses: a2, roleName: m2.label });
-                    logger.info(`[Portal] Sidecar auth (auto-corrected) → ${username} for ${correctKey} req#${expandId}`);
-                    return res.json({ redirect: `/portal/${targetSlug}/view?token=${tok2}&expand=${expandId}` });
+                    logger.info(`[Portal] Sidecar auth (auto-corrected) → ${username} for ${correctKey} ${expandKind} req#${expandId}`);
+                    const qs = `&expand=${expandId}` + (expandKind === 'offboarding' ? '&expandKind=offboarding' : '');
+                    return res.json({ redirect: `/portal/${targetSlug}/view?token=${tok2}${qs}` });
                 }
             }
             // actionToken not found in DB — treat as expired (let dashboard redirect handle it)
@@ -252,8 +280,11 @@ export async function apiPortalAuth(req, res) {
             tokenPayload.delegateEmail = delegatorInfo.delegateEmail;
         }
         const token = issueToken(tokenPayload);
-        logger.info(`[Portal] Sidecar auth${delegatorInfo ? ' (original delegator, read-only)' : ''} → ${username} for ${roleKey}${expandId ? ` req#${expandId}` : ''}`);
-        const redirect = `/portal/${roleSlug}/view?token=${token}${expandId ? `&expand=${expandId}` : ''}`;
+        logger.info(`[Portal] Sidecar auth${delegatorInfo ? ' (original delegator, read-only)' : ''} → ${username} for ${roleKey}${expandId ? ` ${expandKind} req#${expandId}` : ''}`);
+        const expandQs = expandId
+            ? (`&expand=${expandId}` + (expandKind === 'offboarding' ? '&expandKind=offboarding' : ''))
+            : '';
+        const redirect = `/portal/${roleSlug}/view?token=${token}${expandQs}`;
         return res.json({ redirect });
 
     } catch (err) {
@@ -315,14 +346,21 @@ export async function enterViaActionToken(req, res) {
     if (!roleKey || !actionToken) return res.redirect(`/portal/${roleSlug || ''}`);
 
     try {
-        const request = await OnboardingRequest.findOne({ where: { currentStageToken: actionToken } });
-        if (!request) return res.redirect(`/portal/${roleSlug}?expired=1`);
+        const found = await findRequestByActionToken(actionToken);
+        if (!found) return res.redirect(`/portal/${roleSlug}?expired=1`);
+        const { kind, request } = found;
 
         // Auto-correct slug if the request has moved to a different stage.
-        const expectedSlug = STATUS_TO_SLUG[request.status];
+        const statusMap   = kind === 'offboarding' ? OFFBOARDING_STATUS_TO_SLUG : STATUS_TO_SLUG;
+        const expectedSlug = statusMap[request.status];
         if (expectedSlug && expectedSlug !== roleSlug) {
             return res.redirect(`/portal/${expectedSlug}/enter?action=${actionToken}`);
         }
+
+        // Build the expand-query suffix once — offboarding cards live in a
+        // separate id namespace, so we pass kind alongside the id so the
+        // dashboard knows which tab to open and which DOM id to target.
+        const expandQs = `&expand=${request.id}` + (kind === 'offboarding' ? '&expandKind=offboarding' : '');
 
         // Fast path: X-Auth-User present.
         const username = stripDomain(req.headers['x-auth-user'] || '');
@@ -338,8 +376,8 @@ export async function enterViaActionToken(req, res) {
                         tokenPayload.delegateEmail = delegatorInfo.delegateEmail;
                     }
                     const token = issueToken(tokenPayload);
-                    logger.info(`[Portal] Enter via action token (X-Auth-User)${delegatorInfo ? ' (original delegator, read-only)' : ''} → ${username} for ${roleKey} req#${request.id}`);
-                    return res.redirect(`/portal/${roleSlug}/view?token=${token}&expand=${request.id}`);
+                    logger.info(`[Portal] Enter via action token (X-Auth-User)${delegatorInfo ? ' (original delegator, read-only)' : ''} → ${username} for ${roleKey} ${kind} req#${request.id}`);
+                    return res.redirect(`/portal/${roleSlug}/view?token=${token}${expandQs}`);
                 }
             } catch (_) { /* fall through to sidecar path */ }
         }
@@ -508,8 +546,13 @@ export async function showDashboard(req, res) {
             ? ['All Locations']
             : [...new Set(accesses.map(a => a.location))].map(k => groupLabel(k) || k);
 
-        const isPrimary = accesses.some(a => a.isPrimary);
-        const expandId  = parseInt(req.query.expand, 10) || null;
+        const isPrimary  = accesses.some(a => a.isPrimary);
+        const expandId   = parseInt(req.query.expand, 10) || null;
+        // 'offboarding' switches the dashboard to the offboarding tab and
+        // looks for an "off-req-<id>" card; anything else (including missing)
+        // is treated as onboarding for back-compat.
+        const expandKind = ((req.query.expandKind || '').toString().toLowerCase() === 'offboarding')
+            ? 'offboarding' : 'onboarding';
 
         // Discover every OTHER portal this user's account is configured for.
         // Both tables are tiny (<20 rows each) so two findAll calls are cheap.
@@ -549,6 +592,7 @@ export async function showDashboard(req, res) {
             actionCount:      pending.filter(r => r.canAct).length,
             myOtherPortals,
             expandId,
+            expandKind,
             token:            req.query.token,
             appUrl:           process.env.APP_URL,
         });

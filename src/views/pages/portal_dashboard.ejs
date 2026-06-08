@@ -1083,7 +1083,10 @@
 
         // ── Offboarding queue loader ────────────────────────────────────
         // Fetched once on first tab switch and cached.
-        const PORTAL_ROLE_KEY = <%- JSON.stringify(roleKey) %>;
+        const PORTAL_ROLE_KEY    = <%- JSON.stringify(roleKey) %>;
+        const PORTAL_EXPAND_ID   = <%- JSON.stringify(expandId || null) %>;
+        const PORTAL_EXPAND_KIND = <%- JSON.stringify((typeof expandKind !== 'undefined' && expandKind) ? expandKind : 'onboarding') %>;
+        const PORTAL_ACCENT      = <%- JSON.stringify(roleAccentColor || '#0078D4') %>;
         let _offLoaded = false;
         async function loadOffboardingOnce() {
             if (_offLoaded) return;
@@ -1103,9 +1106,14 @@
                     return;
                 }
                 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                // Tag each card with id="off-req-<id>" so the expand-and-scroll
+                // logic below can target the right card when the user lands here
+                // from an emailed offboarding action link.
                 listEl.innerHTML = rows.map(row => {
                     const subBits = [row.designation, row.department].filter(Boolean).map(esc).join(' · ');
-                    return '<div class="req-card can-act">' +
+                    const isExpanded = (PORTAL_EXPAND_KIND === 'offboarding' && PORTAL_EXPAND_ID === row.requestId);
+                    return '<div class="req-card can-act ' + (isExpanded ? 'is-expanded' : '') + '" id="off-req-' + row.requestId + '">' +
+                        (isExpanded ? '<div class="expanded-banner" style="background:' + PORTAL_ACCENT + ';">&#128279; <span>This offboarding request is assigned to you</span></div>' : '') +
                         '<div class="req-info">' +
                         '<p class="req-name">#' + row.requestId + ' — ' + esc(row.fullName || '—') + '</p>' +
                         '<p class="req-sub">' + (subBits || '—') + '</p>' +
@@ -1115,17 +1123,33 @@
                         '</div>' +
                         '</div>';
                 }).join('');
+                // If we landed here with an offboarding expand request, scroll
+                // the now-rendered card into view (the queue is async-loaded so
+                // we have to do this AFTER innerHTML is set, not at page-load).
+                if (PORTAL_EXPAND_KIND === 'offboarding' && PORTAL_EXPAND_ID) {
+                    const card = document.getElementById('off-req-' + PORTAL_EXPAND_ID);
+                    if (card) setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                }
             } catch (e) {
                 listEl.innerHTML = '<div class="pd-empty" style="color:#dc2626;"><p>Could not load offboarding queue: ' + (e.message || '') + '</p></div>';
             }
         }
 
-        const expandId = <%= expandId ?expandId: 'null' %>;
-        if (expandId) {
-            const card = document.getElementById('req-' + expandId);
-            if (card) {
-                switchTab('pending');
-                setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+        // expand-and-scroll dispatcher. Onboarding cards live in the
+        // "pending" tab with id="req-<id>"; offboarding cards live in the
+        // "offboarding" tab with id="off-req-<id>" and are async-loaded
+        // (their scroll-into-view fires from inside loadOffboardingOnce).
+        if (PORTAL_EXPAND_ID) {
+            if (PORTAL_EXPAND_KIND === 'offboarding') {
+                // Triggers loadOffboardingOnce(), which handles scroll once
+                // the queue is fetched and the card has been rendered.
+                switchTab('offboarding');
+            } else {
+                const card = document.getElementById('req-' + PORTAL_EXPAND_ID);
+                if (card) {
+                    switchTab('pending');
+                    setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+                }
             }
         }
     </script>

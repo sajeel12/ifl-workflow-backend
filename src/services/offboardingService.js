@@ -6,14 +6,32 @@ import RecipientService from './recipientService.js';
 import HRMSService from './hrmsService.js';
 import logger from '../utils/logger.js';
 
+// Map each offboarding email type → the portal slug we want to bounce the
+// recipient through. Mirrors EMAIL_TYPE_TO_PORTAL_SLUG in onboardingService.
+// The portal slug is responsible for verifying the user's identity, then
+// redirecting into /portal/<slug>/view with the matching request expanded.
+const OFFBOARDING_TYPE_TO_PORTAL_SLUG = {
+    DCI_MANAGER_APPROVAL: 'dci-manager',
+    DCI_IMPLEMENTER:      'dci-implementer',
+};
+
 // Generic stage-email helper — wraps emailService and logs success/failure.
+// Action links route through the portal (matching the onboarding flow per
+// Israr's request): click email → /portal/<slug>/enter?action=TOKEN → portal
+// dashboard with this request highlighted/expanded → Review & Act opens the
+// form. Falls back to the direct form URL only if no portal slug is mapped
+// (e.g. completion notifications which are read-only).
 const sendStageEmail = async (email, request, token, type) => {
     if (!email) {
         logger.warn(`[Offboarding] No recipient resolved for ${type} (request #${request.id}); skipping email.`);
         return;
     }
     try {
-        const actionLink = `${process.env.APP_URL || 'http://localhost:3000'}/api/offboarding/handle?token=${token}`;
+        const base = process.env.APP_URL || 'http://localhost:3000';
+        const slug = OFFBOARDING_TYPE_TO_PORTAL_SLUG[type];
+        const actionLink = slug
+            ? `${base}/portal/${slug}/enter?action=${token}`
+            : `${base}/api/offboarding/handle?token=${token}`;
         await emailService.sendOffboardingNotification(email, request, actionLink, type);
         logger.info(`[Offboarding] Sent ${type} email to ${email}`);
     } catch (err) {
