@@ -175,7 +175,16 @@
             } catch (err) {
                 console.warn('[Portal]', err && err.message);
                 if (currentTab === tab) {
-                    renderState('<div style="color:#dc2626;">Could not load tasks.<br><span style="font-size:.78rem;">' + escapeHTML(err && err.message || '') + '</span></div>');
+                    // 401 here means the iflFetch retry path also failed —
+                    // a session-expired event has already been dispatched and
+                    // the IflDialog will prompt a reload. Show a friendly
+                    // placeholder instead of the scary "queue 401" string.
+                    const msg = err && err.message || '';
+                    if (/^queue\s+401$/i.test(msg)) {
+                        renderState('<div style="color:#dc2626;">Session expired. Reopening…</div>');
+                    } else {
+                        renderState('<div style="color:#dc2626;">Could not load tasks.<br><span style="font-size:.78rem;">' + escapeHTML(msg) + '</span></div>');
+                    }
                 }
             }
         }

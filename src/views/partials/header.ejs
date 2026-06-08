@@ -499,10 +499,38 @@
             // to intercept and show a login popup — broken UX on every API call.
             // Exception: fetch('/token.aspx') here must stay plain (it bootstraps
             // the token). Open/unguarded routes are also fine with plain fetch.
-            window.iflFetch = async (url, opts = {}) => {
-                const token = await getToken();
+            //
+            // Idle-tab self-healing: on a 401 we ASSUME the cached token went
+            // stale (a tab left open >5 min hits the server's 300s window). We
+            // bust the cache, force a fresh /token.aspx round-trip, and re-issue
+            // the request exactly once. If that still 401s we give up and let
+            // the IflDialog session-expired listener prompt a reload.
+            const issueRequest = (url, opts, token) => {
                 const headers = Object.assign({}, opts.headers || {}, { 'x-sidecar-token': token });
                 return fetch(url, Object.assign({ credentials: 'include' }, opts, { headers }));
+            };
+            window.iflFetch = async (url, opts = {}) => {
+                let token = await getToken();
+                let res   = await issueRequest(url, opts, token);
+                if (res.status !== 401) return res;
+                // Stale-token recovery — one shot, no loops.
+                try {
+                    sessionStorage.removeItem(TOKEN_KEY);
+                    sessionStorage.removeItem(TOKEN_TS_KEY);
+                } catch (_) { /* private mode / quota — ignore */ }
+                try {
+                    token = await fetchFreshToken();
+                } catch (e) {
+                    console.warn('[SSO] Fresh token fetch failed during 401 recovery:', e && e.message);
+                    try { window.dispatchEvent(new CustomEvent('ifl:session-expired')); } catch (_) {}
+                    return res;
+                }
+                const retry = await issueRequest(url, opts, token);
+                if (retry.status === 401) {
+                    console.warn('[SSO] Retry still 401 after fresh token — dispatching session-expired');
+                    try { window.dispatchEvent(new CustomEvent('ifl:session-expired')); } catch (_) {}
+                }
+                return retry;
             };
             window.iflGetToken = getToken;
             window.iflGetUser = async () => {
@@ -513,6 +541,33 @@
                     return (j && j.user) ? j.user : null;
                 } catch (_) { return null; }
             };
+
+            // ─── Visibility pre-warmer ────────────────────────────────────────
+            // When the user comes back to a long-idle tab, fetch a fresh token
+            // in the background BEFORE they click anything — so the first click
+            // hits a warm cache instead of taking the silent-retry path.
+            // Guarded by an in-flight flag so rapid focus/blur events don't
+            // stack /token.aspx calls.
+            let __tokenWarmInFlight = false;
+            const warmTokenIfStale = () => {
+                if (__tokenWarmInFlight) return;
+                let needsWarm = true;
+                try {
+                    const ts = parseInt(sessionStorage.getItem(TOKEN_TS_KEY) || '0', 10);
+                    // 30s headroom: warm if we're within 30s of the 4-min TTL
+                    // expiring, so a click landing right after focus still finds
+                    // a fresh token in cache.
+                    needsWarm = !ts || (Date.now() - ts) > (TOKEN_TTL_MS - 30000);
+                } catch (_) { /* assume warm needed */ }
+                if (!needsWarm) return;
+                __tokenWarmInFlight = true;
+                fetchFreshToken()
+                    .catch(e => console.warn('[SSO] Background token warm failed:', e && e.message))
+                    .finally(() => { __tokenWarmInFlight = false; });
+            };
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') warmTokenIfStale();
+            });
 
             (async () => {
                 try {
@@ -659,5 +714,21 @@
             // is left as the browser default — confirm sites must migrate to
             // IflDialog.confirm explicitly because the new API is async.
             window.alert = (msg) => { IflDialog.alert(msg); };
+
+            // ─── Session-expired handler ──────────────────────────────────────
+            // Fired by iflFetch when even a fresh-token retry hits 401 — i.e.
+            // /token.aspx itself is broken (Kerberos / IIS / SPN issue). Prompt
+            // the user to reload; that's the only honest recovery path. The
+            // shownOnce guard prevents repeat dialogs if multiple in-flight
+            // requests all 401 at the same time.
+            let __sessionExpiredShown = false;
+            window.addEventListener('ifl:session-expired', () => {
+                if (__sessionExpiredShown) return;
+                __sessionExpiredShown = true;
+                IflDialog.alert(
+                    'Your session has been idle and your authentication token has expired. The page will refresh now.',
+                    { title: 'Session refresh required', variant: 'warning' }
+                ).then(() => { try { location.reload(); } catch (_) {} });
+            });
         })();
     </script>
