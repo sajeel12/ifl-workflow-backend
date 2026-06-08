@@ -1,5 +1,9 @@
 <%- include('../partials/header', { title: 'Offboarding Status' }) %>
 <link rel="stylesheet" href="/css/modern.css">
+<!-- Stepper display fonts (graceful fallback if the intranet blocks Google) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap">
 
 <header class="app-header">
     <div class="brand-section">
@@ -58,6 +62,23 @@
     standalone portal view (/portal/dci-manager), not next to the form. %>
 
 <style>
+    /* modern.css styles .app-container as the onboarding "app shell": a fixed
+       calc(100vh) flex card with overflow:hidden, which relies on an inner
+       .form-scroll region to scroll. This offboarding page is a naturally
+       flowing stack of .off-card panels with no such inner scroller, so that
+       shell clips the content and kills scrolling. Opt this page out: let the
+       container size to its content and the page scroll normally. The .off-card
+       panels supply their own card chrome, so the container itself is bare. */
+    .app-container {
+        height: auto;
+        min-height: 0;
+        overflow: visible;
+        display: block;
+        background: transparent;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
     .off-card {
         background: #ffffff;
         border-radius: 12px;
@@ -65,6 +86,14 @@
         padding: 28px;
         margin-bottom: 24px;
         border: 1px solid #e2e8f0;
+    }
+    /* Match the stepper bar to the .off-card chrome so it reads as a card on the
+       flowing page rather than a bare full-width strip. */
+    .steps-container {
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        border-bottom: 1px solid #e2e8f0;
+        box-shadow: 0 6px 18px -10px rgba(15,23,42,0.18);
     }
     .off-card h2 {
         margin: 0 0 16px;
@@ -146,13 +175,15 @@
 
 <div class="app-container" style="max-width: 1000px; margin: 30px auto; padding: 0 20px;">
 
-    <!-- Stepper -->
+    <!-- Stepper — shares the Figma connector-rail styling in modern.css with
+         the onboarding form. The flex row + rail rules target .steps-row, so the
+         wrapper must be .steps-row (not .steps) for the layout to apply. -->
     <div class="steps-container" style="margin-bottom: 28px;">
-        <div class="steps">
+        <div class="steps-row">
             <% steps.forEach((s, i) => { %>
                 <div class="step-item <%= s.status %>">
                     <div class="step-circle"><%= i + 1 %></div>
-                    <div class="step-label"><%= s.label %></div>
+                    <div class="step-label" title="<%= s.label %>"><%= s.label %></div>
                 </div>
             <% }); %>
         </div>
