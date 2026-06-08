@@ -35,8 +35,19 @@ async function resolveInitiatorGroupForEmail(email, roleKey) {
     return null;
 }
 
+// Map a form role (initiator / approver) to the sidebar/portal slug + label
+// that the success screen uses to render the "Return to <role> Portal" button
+// and the 10-second auto-redirect countdown. Mirrors the onboarding pattern in
+// onboardingController.js (FORM_ROLE_TO_PORTAL).
+const OFF_ROLE_TO_PORTAL = {
+    HR:             { key: 'HR_INITIATOR',    label: 'HR' },
+    IT:             { key: 'IT_OPS',          label: 'IT Operations' },
+    DCIManager:     { key: 'DCI_MANAGER',     label: 'DCI Manager' },
+    DCIImplementer: { key: 'DCI_IMPLEMENTER', label: 'DCI Implementer' }
+};
+
 const renderSuccess = (res, title, message, next = {}) => {
-    return res.render('pages/message', {
+    const view = {
         title: 'Success',
         heading: title,
         message,
@@ -47,7 +58,15 @@ const renderSuccess = (res, title, message, next = {}) => {
         nextStatus: next.statusLabel,
         nextOwner:  next.statusOwner,
         nextStatusColor: next.statusColor
-    });
+    };
+    const portal = next.actorRole && OFF_ROLE_TO_PORTAL[next.actorRole];
+    if (portal) {
+        view.roleKey   = portal.key;
+        view.roleLabel = portal.label;
+        view.showPortal = false;
+    }
+    if (next.portalToken) view.portalToken = next.portalToken;
+    return res.render('pages/message', view);
 };
 const renderError = (res, message, status = 400) => {
     return res.status(status).render('pages/message', {
@@ -115,6 +134,9 @@ const handleSubmission = async (req, res, token) => {
             if (initiatorGroup) data.location = initiatorGroup;
 
             const created = await offboardingService.createRequest(data, req.user);
+            // Pick the initiator's role for the success-screen portal button.
+            // HR takes precedence if both lists match (typical case is exactly one).
+            const initiatorActorRole = hrGroup ? 'HR' : (itOpsGroup ? 'IT' : null);
             return renderSuccess(
                 res,
                 'Offboarding Initiated',
@@ -123,7 +145,9 @@ const handleSubmission = async (req, res, token) => {
                     requestId:    created && created.id,
                     statusLabel:  'Pending DCI Manager Approval',
                     statusOwner:  'DCI Manager',
-                    statusColor:  'warning'
+                    statusColor:  'warning',
+                    actorRole:    initiatorActorRole,
+                    portalToken:  data.pt || req.query.pt || null
                 }
             );
         }
@@ -158,19 +182,28 @@ const handleSubmission = async (req, res, token) => {
             }
         }
 
+        // Portal token (from the email-link or the form's hidden field) used by
+        // the success screen's "Return to Portal" button so the destination page
+        // can re-validate the session without bouncing through SSO again.
+        const portalToken = data.pt || req.query.pt || null;
+
         if (role === 'DCIManager') {
             const { action, managerRemarks } = data;
             const updated = await offboardingService.handleManagerApproval(token, action || 'Approve', managerRemarks);
             if (action === 'Reject') {
                 return renderSuccess(res, 'Offboarding Rejected', 'The offboarding request has been rejected and closed.', {
-                    requestId: updated.id, statusLabel: 'Rejected', statusOwner: '—', statusColor: 'danger'
+                    requestId: updated.id, statusLabel: 'Rejected', statusOwner: '—', statusColor: 'danger',
+                    actorRole: 'DCIManager', portalToken
                 });
             }
             return renderSuccess(
                 res,
                 'Approved — Forwarded to DCI Implementer',
                 'AD/SmartX/Door-access revocation has been routed to the DCI Implementer team.',
-                { requestId: updated.id, statusLabel: 'Pending DCI Implementation', statusOwner: 'DCI Implementer', statusColor: 'warning' }
+                {
+                    requestId: updated.id, statusLabel: 'Pending DCI Implementation', statusOwner: 'DCI Implementer', statusColor: 'warning',
+                    actorRole: 'DCIManager', portalToken
+                }
             );
         }
 
@@ -182,7 +215,10 @@ const handleSubmission = async (req, res, token) => {
                 res,
                 'Offboarding Completed',
                 'AD account deleted; SmartX and door-access revocations recorded. The employee\'s HOD and IT HOD have been notified.',
-                { requestId: updated.id, statusLabel: 'Completed', statusOwner: '—', statusColor: 'success' }
+                {
+                    requestId: updated.id, statusLabel: 'Completed', statusOwner: '—', statusColor: 'success',
+                    actorRole: 'DCIImplementer', portalToken
+                }
             );
         }
 
