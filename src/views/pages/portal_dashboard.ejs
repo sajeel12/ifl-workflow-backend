@@ -781,18 +781,23 @@
                     </button>
                 </div>
 
-                <!-- HR: new request -->
-                <% if (roleKey==='HR_INITIATOR' ) { %>
-                    <div class="pd-side-section">
-                        <div class="pd-side-section-hd">Actions</div>
+                <!-- New-request actions. HR sees Onboarding + Offboarding;
+                     every portal role sees the Internet Browsing entry point so
+                     they can self-initiate (any logged-in employee can submit). -->
+                <div class="pd-side-section">
+                    <div class="pd-side-section-hd">Actions</div>
+                    <% if (roleKey==='HR_INITIATOR' ) { %>
                         <a href="<%= appUrl %>/api/onboarding/initiate" class="pd-initiate-btn">
                             + New Onboarding Request
                         </a>
                         <a href="<%= appUrl %>/api/offboarding/initiate" class="pd-initiate-btn pd-initiate-btn--off">
                             + New Offboarding Request
                         </a>
-                    </div>
                     <% } %>
+                    <a href="<%= appUrl %>/api/internet-browsing/initiate" class="pd-initiate-btn pd-initiate-btn--off">
+                        + New Internet Browsing Request
+                    </a>
+                </div>
 
                         <!-- Other portals this user can access -->
                         <% if (myOtherPortals && myOtherPortals.length> 0) { %>
@@ -857,6 +862,15 @@
                         <% } %>
 
                                             <% const showOffboardingTab=(roleKey==='DCI_MANAGER' || roleKey==='DCI_IMPLEMENTER'); %>
+                                            <%
+                                                // Internet Browsing tab visibility:
+                                                // - Approvers/implementers see it on their stage's queue.
+                                                // - NETWORK_VALIDATOR + NETWORK_IMPLEMENTER are IBR-only roles,
+                                                //   so the IBR tab is shown for them and becomes the default.
+                                                const IBR_ROLES = ['IT_OPS', 'IT_OPS_MGR', 'IT_HOD',
+                                                                   'NETWORK_VALIDATOR', 'NETWORK_IMPLEMENTER'];
+                                                const showIBRTab = IBR_ROLES.includes(roleKey);
+                                            %>
                                                 <!-- ── Tabs (JS-toggled) ── -->
                                                 <div class="pd-tabs">
                                                     <a class="pd-tab is-active" id="tab-pending" href="#"
@@ -870,6 +884,12 @@
                                                             Offboarding <span id="off-tab-count"></span>
                                                         </a>
                                                         <% } %>
+                                                    <% if (showIBRTab) { %>
+                                                        <a class="pd-tab" id="tab-internet-browsing" href="#"
+                                                            onclick="switchTab('internet-browsing'); return false;">
+                                                            Internet Browsing <span id="ibr-tab-count"></span>
+                                                        </a>
+                                                    <% } %>
                                                             <a class="pd-tab" id="tab-history" href="#"
                                                                 onclick="switchTab('history'); return false;">
                                                                 History <% if (history.length> 0) { %>(<%=
@@ -1065,6 +1085,19 @@
                                                     </div>
                                                     <% } %>
 
+                                                <!-- ── Internet Browsing tab ── -->
+                                                <% if (showIBRTab) { %>
+                                                    <div class="pd-section" id="pane-internet-browsing" style="display:none;">
+                                                        <div id="ibr-list" class="req-list">
+                                                            <div class="pd-empty" id="ibr-loading">
+                                                                <div class="em"
+                                                                    style="font-size: 1.5rem; opacity: 0.5;">⏳</div>
+                                                                <p>Loading Internet Browsing queue…</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <% } %>
+
                 </div>
             </main>
 
@@ -1076,9 +1109,12 @@
         function switchTab(name) {
             document.querySelectorAll('.pd-tab').forEach(t => t.classList.remove('is-active'));
             document.querySelectorAll('[id^="pane-"]').forEach(p => p.style.display = 'none');
-            document.getElementById('tab-' + name).classList.add('is-active');
-            document.getElementById('pane-' + name).style.display = '';
-            if (name === 'offboarding') loadOffboardingOnce();
+            const tabEl  = document.getElementById('tab-' + name);
+            const paneEl = document.getElementById('pane-' + name);
+            if (tabEl)  tabEl.classList.add('is-active');
+            if (paneEl) paneEl.style.display = '';
+            if (name === 'offboarding')        loadOffboardingOnce();
+            if (name === 'internet-browsing')  loadInternetBrowsingOnce();
         }
 
         // ── Offboarding queue loader ────────────────────────────────────
@@ -1135,15 +1171,63 @@
             }
         }
 
+        // ── Internet Browsing queue loader ────────────────────────────
+        // Same pattern as loadOffboardingOnce; fetched once on first tab
+        // switch and cached. Cards get id="ibr-req-<id>" so the expand-and-
+        // scroll dispatcher below can target them.
+        let _ibrLoaded = false;
+        async function loadInternetBrowsingOnce() {
+            if (_ibrLoaded) return;
+            _ibrLoaded = true;
+            const listEl = document.getElementById('ibr-list');
+            if (!listEl) return;
+            try {
+                const fetcher = (typeof window.iflFetch === 'function') ? window.iflFetch : (u, o) => fetch(u, o);
+                const r = await fetcher('/api/internet-browsing/queue?role=' + encodeURIComponent(PORTAL_ROLE_KEY) + '&type=pending');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                const rows = (j.success && Array.isArray(j.data)) ? j.data : [];
+                const countEl = document.getElementById('ibr-tab-count');
+                if (countEl) countEl.textContent = rows.length ? '(' + rows.length + ')' : '';
+                if (!rows.length) {
+                    listEl.innerHTML = '<div class="pd-empty"><div class="em">&#10003;</div><p>No pending Internet Browsing requests for your role.</p></div>';
+                    return;
+                }
+                const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                listEl.innerHTML = rows.map(row => {
+                    const subBits = [row.designation, row.department].filter(Boolean).map(esc).join(' · ');
+                    const isExpanded = (PORTAL_EXPAND_KIND === 'internet-browsing' && PORTAL_EXPAND_ID === row.requestId);
+                    return '<div class="req-card can-act ' + (isExpanded ? 'is-expanded' : '') + '" id="ibr-req-' + row.requestId + '">' +
+                        (isExpanded ? '<div class="expanded-banner" style="background:' + PORTAL_ACCENT + ';">&#128279; <span>This Internet Browsing request is assigned to you</span></div>' : '') +
+                        '<div class="req-info">' +
+                        '<p class="req-name">#' + row.requestId + ' — ' + esc(row.fullName || '—') + '</p>' +
+                        '<p class="req-sub">' + (subBits || '—') + '</p>' +
+                        '</div>' +
+                        '<div class="req-action">' +
+                        '<a href="' + esc(row.url) + '" class="btn-view">Review &amp; Act</a>' +
+                        '</div>' +
+                        '</div>';
+                }).join('');
+                if (PORTAL_EXPAND_KIND === 'internet-browsing' && PORTAL_EXPAND_ID) {
+                    const card = document.getElementById('ibr-req-' + PORTAL_EXPAND_ID);
+                    if (card) setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                }
+            } catch (e) {
+                listEl.innerHTML = '<div class="pd-empty" style="color:#dc2626;"><p>Could not load Internet Browsing queue: ' + (e.message || '') + '</p></div>';
+            }
+        }
+
         // expand-and-scroll dispatcher. Onboarding cards live in the
         // "pending" tab with id="req-<id>"; offboarding cards live in the
-        // "offboarding" tab with id="off-req-<id>" and are async-loaded
-        // (their scroll-into-view fires from inside loadOffboardingOnce).
+        // "offboarding" tab with id="off-req-<id>"; IBR cards live in the
+        // "internet-browsing" tab with id="ibr-req-<id>". The latter two
+        // are async-loaded so their scroll-into-view fires from inside
+        // loadOffboardingOnce / loadInternetBrowsingOnce.
         if (PORTAL_EXPAND_ID) {
             if (PORTAL_EXPAND_KIND === 'offboarding') {
-                // Triggers loadOffboardingOnce(), which handles scroll once
-                // the queue is fetched and the card has been rendered.
                 switchTab('offboarding');
+            } else if (PORTAL_EXPAND_KIND === 'internet-browsing') {
+                switchTab('internet-browsing');
             } else {
                 const card = document.getElementById('req-' + PORTAL_EXPAND_ID);
                 if (card) {
@@ -1152,6 +1236,16 @@
                 }
             }
         }
+
+        // For IBR-only roles, default the dashboard to the IBR tab on load.
+        (function defaultIBRTabForIBROnlyRoles() {
+            const IBR_ONLY = ['NETWORK_VALIDATOR', 'NETWORK_IMPLEMENTER'];
+            if (IBR_ONLY.includes(PORTAL_ROLE_KEY) && !PORTAL_EXPAND_ID) {
+                // Defer to the next tick so the initial pending tab DOM is in
+                // place before we swap it out.
+                setTimeout(() => switchTab('internet-browsing'), 0);
+            }
+        })();
     </script>
 
     <%- include('../partials/footer') %>

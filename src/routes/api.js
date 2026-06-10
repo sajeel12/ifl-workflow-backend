@@ -7,6 +7,7 @@ import * as workflowTestController from '../controllers/workflowTestController.j
 import { ssoMiddleware } from '../middleware/ssoMiddleware.js';
 import * as authController from '../controllers/authController.js';
 import * as offboardingController from '../controllers/offboardingController.js';
+import * as internetBrowsingController from '../controllers/internetBrowsingController.js';
 import * as portalController from '../controllers/portalController.js';
 import * as employeeJourneyController from '../controllers/employeeJourneyController.js';
 
@@ -196,5 +197,21 @@ router.get('/offboarding/lookup', offboardingController.lookupExistingRequest);
 // token in the body becomes visible — same gotcha as onboarding upload-proof.
 router.get('/offboarding/handle', (req, res) => offboardingController.handleRequest(req, res));
 router.post('/offboarding/handle', upload.array('dciProof', 5), ssoMiddleware, (req, res) => offboardingController.handleRequest(req, res));
+
+// ─── Internet Browsing Request (IBR) ─────────────────────────────────────
+// Any logged-in employee can self-initiate; no HR/IT Ops gate. The form
+// pre-fills from HRMS using the SSO identity.
+router.get('/internet-browsing/initiate', ssoMiddleware, internetBrowsingController.handleRequest);
+router.post('/internet-browsing/initiate', ssoMiddleware, internetBrowsingController.handleRequest);
+// Role-scoped queue for the portal dashboard (IT Ops, FMS, IT Ops Mgr, IT HOD,
+// Network Implementer). SSO-gated like the offboarding queue.
+router.get('/internet-browsing/queue', ssoMiddleware, internetBrowsingController.getRoleQueue);
+// Per-request history page (open — used from email links + portal).
+router.get('/internet-browsing/history/:id', internetBrowsingController.renderHistory);
+// Token-based handle for stages 2–7. Multer runs first on POST so multipart
+// proof uploads land in req.files and the sidecar token in the body becomes
+// visible before ssoMiddleware reads it.
+router.get('/internet-browsing/handle', (req, res) => internetBrowsingController.handleRequest(req, res));
+router.post('/internet-browsing/handle', upload.array('ibrProof', 5), ssoMiddleware, (req, res) => internetBrowsingController.handleRequest(req, res));
 
 export default router;

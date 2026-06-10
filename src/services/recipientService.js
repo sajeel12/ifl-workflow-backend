@@ -12,10 +12,15 @@ const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 // are ignored even if rows exist — keeps the model honest.
 const LOCATION_AWARE_ROLES = new Set(['IT_OPS', 'HR_INITIATOR']);
 
-// Only these three roles participate in the 2-day primary→secondary expiry
-// timer. DCI_MANAGER and IT_HOD are "delegation" roles — the admin reassigns
-// them directly from the approver dashboard; no automatic expiry applies.
-const FALLBACK_TIMER_ROLES = new Set(['IT_OPS', 'DCI_TEAM', 'DCI_IMPLEMENTER']);
+// Roles that participate in the 2-day primary→secondary expiry timer.
+// DCI_MANAGER and IT_HOD are "delegation" roles — the admin reassigns them
+// directly from the approver dashboard; no automatic expiry applies.
+// NETWORK_VALIDATOR + NETWORK_IMPLEMENTER are small global teams attached
+// to the Internet Browsing flow; same fallback semantics as DCI_*.
+const FALLBACK_TIMER_ROLES = new Set([
+    'IT_OPS', 'DCI_TEAM', 'DCI_IMPLEMENTER',
+    'NETWORK_VALIDATOR', 'NETWORK_IMPLEMENTER'
+]);
 
 /**
  * Resolve the per-(role, location) approver row, or return null if no
@@ -64,12 +69,14 @@ const RecipientService = {
                     source = override ? `DB_LOC[${context.location}]` : 'DB';
                 } else {
                     const envFallbacks = {
-                        IT_OPS:          process.env.EMAIL_IT_OPS,
-                        DCI_TEAM:        process.env.EMAIL_DCI_TEAM,
-                        OPS_TEAM:        process.env.EMAIL_OPS_TEAM,
-                        DCI_MANAGER:     process.env.EMAIL_DCI_MANAGER,
-                        IT_HOD:          process.env.EMAIL_IT_HOD,
-                        DCI_IMPLEMENTER: process.env.EMAIL_DCI_IMPLEMENTER,
+                        IT_OPS:              process.env.EMAIL_IT_OPS,
+                        DCI_TEAM:            process.env.EMAIL_DCI_TEAM,
+                        OPS_TEAM:            process.env.EMAIL_OPS_TEAM,
+                        DCI_MANAGER:         process.env.EMAIL_DCI_MANAGER,
+                        IT_HOD:              process.env.EMAIL_IT_HOD,
+                        DCI_IMPLEMENTER:     process.env.EMAIL_DCI_IMPLEMENTER,
+                        NETWORK_VALIDATOR:   process.env.EMAIL_NETWORK_VALIDATOR,
+                        NETWORK_IMPLEMENTER: process.env.EMAIL_NETWORK_IMPLEMENTER,
                     };
                     recipientEmail = envFallbacks[roleKey] || null;
                     source = recipientEmail ? 'ENV' : 'NONE';

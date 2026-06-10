@@ -1,0 +1,298 @@
+<%- include('../partials/header', { title: 'Internet Browsing Request' }) %>
+<link rel="stylesheet" href="/css/modern.css">
+
+<header class="app-header">
+    <div class="brand-section">
+        <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+        <div class="app-title">
+            <h1>Internet Browsing Request</h1>
+            <p>Ibrahim Fibres Limited — Self-service Internet Access</p>
+        </div>
+    </div>
+</header>
+
+<style>
+    .ibr-card { max-width: 860px; margin: 32px auto; padding: 0 20px; }
+    .ibr-card .panel {
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+        padding: 30px; box-shadow: 0 8px 18px -10px rgba(15,23,42,0.18);
+    }
+    .ibr-card h2 { margin: 0 0 8px; font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+    .ibr-card p.sub { margin: 0 0 22px; color: #475569; font-size: 0.92rem; }
+    .ibr-section-title {
+        font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase;
+        letter-spacing: 0.08em; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;
+    }
+    .ibr-card .form-row { margin-bottom: 14px; }
+    .ibr-card label {
+        display: block; font-weight: 600; font-size: 0.78rem; color: #475569;
+        text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;
+    }
+    .ibr-card input, .ibr-card select, .ibr-card textarea {
+        width: 100%; padding: 10px 12px; border-radius: 6px;
+        border: 1px solid #cbd5e1; font-size: 0.95rem; font-family: inherit;
+        background: #fff;
+    }
+    .ibr-card input[readonly] { background: #f1f5f9; cursor: not-allowed; color: #334155; }
+    .ibr-card .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .ibr-card .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .ibr-radio-row {
+        display: flex; flex-wrap: wrap; gap: 14px; margin-top: 4px;
+    }
+    .ibr-radio {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 9px 14px; border: 1px solid #cbd5e1; border-radius: 8px;
+        cursor: pointer; user-select: none; font-size: 0.92rem;
+        background: #fff; transition: background 0.12s, border-color 0.12s;
+    }
+    .ibr-radio:hover { border-color: #94a3b8; }
+    .ibr-radio input { width: auto; margin: 0; }
+    .ibr-radio input:checked + span { font-weight: 600; color: #0078D4; }
+    .ibr-actions {
+        display: flex; gap: 12px; margin-top: 22px;
+        padding-top: 18px; border-top: 1px solid #e2e8f0;
+    }
+    .ibr-actions .submit-btn {
+        flex: 1; padding: 13px; font-size: 1rem; background: #0078D4;
+        color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;
+    }
+    .ibr-actions .submit-btn:hover:not(:disabled) { background: #005fa8; }
+    .ibr-actions .cancel-btn {
+        padding: 13px 20px; font-size: 1rem; background: #fff; color: #475569;
+        border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; font-weight: 600;
+        text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .ibr-existing-warn {
+        background: #fef3c7; border: 1px solid #fde68a; color: #92400e;
+        padding: 14px 16px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 18px;
+    }
+    @keyframes ifl-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .ifl-spinner { animation: ifl-spin 0.7s linear infinite; vertical-align: -3px; margin-right: 6px; }
+    button.is-loading { opacity: 0.75; cursor: wait; pointer-events: none; }
+    button.is-loading > .ifl-btn-original { display: none; }
+    @media (max-width: 700px) {
+        .ibr-card .grid-2, .ibr-card .grid-3 { grid-template-columns: 1fr; }
+    }
+</style>
+
+<%
+    const fmtDate = (d) => {
+        if (!d) return '';
+        try { return new Date(d).toISOString().slice(0, 10); } catch (_) { return String(d); }
+    };
+    const today = new Date().toISOString().slice(0, 10);
+%>
+
+<div class="ibr-card">
+    <div class="panel">
+        <h2>Internet Browsing Request</h2>
+        <p class="sub">
+            Submit a request to enable internet access on your AD account. Your details are
+            collected automatically from HRMS — only the four fields below are yours to fill.
+            The request will be validated by IT Operations, approved by your HOD, reviewed by
+            FMS, and finally signed off by IT senior management before being implemented.
+        </p>
+
+        <% if (existing) { %>
+            <div class="ibr-existing-warn">
+                You already have an active Internet Browsing request (Request #<%= existing.id %>,
+                status: <%= existing.status %>). A new request cannot be submitted until the
+                existing one is completed or rejected.
+            </div>
+        <% } %>
+
+        <form action="/api/internet-browsing/initiate" method="POST" id="ibrInitForm" autocomplete="off">
+
+            <div class="ibr-section-title">Request Details (auto-collected)</div>
+            <div class="grid-3">
+                <div class="form-row">
+                    <label>Request Number</label>
+                    <input type="text" value="— (assigned on submit)" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Application Status</label>
+                    <input type="text" value="Draft" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Request initiated on</label>
+                    <input type="text" value="<%= today %>" readonly>
+                </div>
+            </div>
+
+            <div class="ibr-section-title">Employee Details (auto-collected)</div>
+            <div class="grid-2">
+                <div class="form-row">
+                    <label>Employee Number</label>
+                    <input type="text" value="<%= snapshot.employeeId || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Full Name</label>
+                    <input type="text" value="<%= snapshot.fullName || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Joining Date</label>
+                    <input type="text" value="<%= fmtDate(snapshot.joiningDate) %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Department</label>
+                    <input type="text" value="<%= snapshot.department || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Designation</label>
+                    <input type="text" value="<%= snapshot.designation || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Location</label>
+                    <input type="text" value="<%= snapshot.location || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Extension</label>
+                    <input type="text" value="<%= snapshot.extension || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Contact Number</label>
+                    <input type="text" value="<%= snapshot.contactNumber || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Head of Department</label>
+                    <input type="text" value="<%= snapshot.hod || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Email Address</label>
+                    <input type="text" value="<%= snapshot.email || '' %>" readonly>
+                </div>
+            </div>
+
+            <div class="ibr-section-title">Your Inputs</div>
+
+            <div class="form-row">
+                <label>User Type</label>
+                <div class="ibr-radio-row">
+                    <label class="ibr-radio">
+                        <input type="radio" name="userType" value="New" required <%= existing ? 'disabled' : '' %>>
+                        <span>New</span>
+                    </label>
+                    <label class="ibr-radio">
+                        <input type="radio" name="userType" value="Existing" required <%= existing ? 'disabled' : '' %>>
+                        <span>Existing</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="ntLogin">NT Login</label>
+                <input type="text" id="ntLogin" name="ntLogin" required maxlength="60"
+                       placeholder="e.g. john.doe" <%= existing ? 'disabled' : '' %>>
+            </div>
+
+            <div class="form-row">
+                <label>Facility Duration</label>
+                <div class="ibr-radio-row">
+                    <label class="ibr-radio">
+                        <input type="radio" name="facilityDuration" value="Permanent" required <%= existing ? 'disabled' : '' %>>
+                        <span>Permanent</span>
+                    </label>
+                    <label class="ibr-radio">
+                        <input type="radio" name="facilityDuration" value="OneTime" required <%= existing ? 'disabled' : '' %>>
+                        <span>One time</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label>Browsing Rights</label>
+                <div class="ibr-radio-row">
+                    <label class="ibr-radio">
+                        <input type="radio" name="browsingRights" value="GeneralBrowsing" required <%= existing ? 'disabled' : '' %>>
+                        <span>General browsing</span>
+                    </label>
+                    <label class="ibr-radio">
+                        <input type="radio" name="browsingRights" value="GeneralBrowsingWithStreaming" required <%= existing ? 'disabled' : '' %>>
+                        <span>General browsing with streaming</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="ibr-actions">
+                <a class="cancel-btn" href="javascript:history.back()">Cancel</a>
+                <button type="submit" class="submit-btn" <%= existing ? 'disabled' : '' %>>
+                    Submit Internet Browsing Request
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Submit-button loader pattern — same as offboarding_status.ejs.
+    (function setupSubmitLoaders() {
+        const SPINNER_SVG = '<svg class="ifl-spinner" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>';
+
+        const ensureTokenField = async (form) => {
+            if (typeof window.iflGetToken !== 'function') return;
+            let hidden = form.querySelector('input[name="x-sidecar-token"]');
+            if (!hidden) {
+                hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'x-sidecar-token';
+                form.appendChild(hidden);
+            }
+            try { hidden.value = await window.iflGetToken(); }
+            catch (_) { /* server returns 401 with clear JSON */ }
+        };
+
+        function reSubmit(form, submitter) {
+            if (submitter && typeof form.requestSubmit === 'function') {
+                try { form.requestSubmit(submitter); return; } catch (_) {}
+            }
+            if (submitter && typeof submitter.click === 'function') submitter.click();
+            else form.submit();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', async (e) => {
+                    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+                    const submitter = e.submitter
+                        || form.querySelector('button[type="submit"]:focus')
+                        || form.querySelector('button[type="submit"]');
+
+                    if (!form.dataset.iflTokenAttached) {
+                        e.preventDefault();
+                        await ensureTokenField(form);
+                        form.dataset.iflTokenAttached = '1';
+                        reSubmit(form, submitter);
+                        return;
+                    }
+
+                    form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                        if (!btn.querySelector('.ifl-btn-original')) {
+                            const span = document.createElement('span');
+                            span.className = 'ifl-btn-original';
+                            while (btn.firstChild) span.appendChild(btn.firstChild);
+                            btn.appendChild(span);
+                        }
+                        btn.disabled = true;
+                        btn.classList.add('is-loading');
+                        if (btn === submitter) {
+                            const indicator = document.createElement('span');
+                            indicator.className = 'ifl-btn-loading-text';
+                            indicator.innerHTML = SPINNER_SVG + 'Working…';
+                            btn.appendChild(indicator);
+                        }
+                    });
+
+                    setTimeout(() => {
+                        form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                            btn.disabled = false;
+                            btn.classList.remove('is-loading');
+                            const ind = btn.querySelector('.ifl-btn-loading-text');
+                            if (ind) ind.remove();
+                        });
+                        delete form.dataset.iflTokenAttached;
+                    }, 30000);
+                });
+            });
+        });
+    })();
+</script>

@@ -10,6 +10,7 @@ import cronService from './src/services/cronService.js';
 import Employee from './src/models/Employee.js';
 import OnboardingRequest from './src/models/OnboardingRequest.js';
 import OffboardingRequest from './src/models/OffboardingRequest.js';
+import InternetBrowsingRequest from './src/models/InternetBrowsingRequest.js';
 import TimelineEvent from './src/models/TimelineEvent.js';
 import SyncLog from './src/models/SyncLog.js';
 import WorkflowApproverConfig from './src/models/WorkflowApproverConfig.js';
@@ -27,6 +28,8 @@ const DEFAULT_APPROVER_CONFIGS = [
     { roleKey: 'DCI_MANAGER', label: 'DCI Manager', description: 'DCI Manager decision in Step 5', workflowStage: 'Step 5 – DCI Manager Decision', approverEmail: process.env.EMAIL_DCI_MANAGER || null, approverName: 'DCI Manager' },
     { roleKey: 'IT_HOD', label: 'IT Head of Department', description: 'IT HOD review in Step 5b (email required)', workflowStage: 'Step 5b – IT HOD Review', approverEmail: process.env.EMAIL_IT_HOD || null, approverName: 'IT HOD' },
     { roleKey: 'DCI_IMPLEMENTER', label: 'DCI Implementer', description: 'Implements DCI changes in Step 6', workflowStage: 'Step 6 – DCI Implementation', approverEmail: process.env.EMAIL_DCI_IMPLEMENTER || null, approverName: 'DCI Implementer' },
+    { roleKey: 'NETWORK_VALIDATOR',   label: 'Network Validator (FMS)', description: 'Validates Internet Browsing requests against network/firewall policy.', workflowStage: 'IBR – FMS Validation', approverEmail: process.env.EMAIL_NETWORK_VALIDATOR || null, approverName: 'Network Validator' },
+    { roleKey: 'NETWORK_IMPLEMENTER', label: 'Network Implementer',     description: 'Applies approved Internet Browsing requests (proxy / firewall changes).', workflowStage: 'IBR – Network Implementation', approverEmail: process.env.EMAIL_NETWORK_IMPLEMENTER || null, approverName: 'Network Implementer' },
 ];
 
 const PORT = process.env.PORT || 3000;

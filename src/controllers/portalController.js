@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import OffboardingRequest from '../models/OffboardingRequest.js';
+import InternetBrowsingRequest from '../models/InternetBrowsingRequest.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import { issueToken, validateToken } from '../services/portalTokenService.js';
@@ -11,13 +12,15 @@ import logger from '../utils/logger.js';
 // ── Role registry ──────────────────────────────────────────────────────────────
 
 const ROLE_SLUGS = {
-    'it-ops':          'IT_OPS',
-    'dci-team':        'DCI_TEAM',
-    'dci-implementer': 'DCI_IMPLEMENTER',
-    'it-hod':          'IT_HOD',
-    'dci-manager':     'DCI_MANAGER',
-    'hr-initiator':    'HR_INITIATOR',
-    'it-ops-mgr':      'IT_OPS_MGR',
+    'it-ops':              'IT_OPS',
+    'dci-team':            'DCI_TEAM',
+    'dci-implementer':     'DCI_IMPLEMENTER',
+    'it-hod':              'IT_HOD',
+    'dci-manager':         'DCI_MANAGER',
+    'hr-initiator':        'HR_INITIATOR',
+    'it-ops-mgr':          'IT_OPS_MGR',
+    'network-validator':   'NETWORK_VALIDATOR',
+    'network-implementer': 'NETWORK_IMPLEMENTER',
 };
 
 const ROLE_META = {
@@ -84,6 +87,24 @@ const ROLE_META = {
         roleModel:       'delegation',
         isLocationAware: false,
     },
+    NETWORK_VALIDATOR: {
+        label:           'Network Validator (FMS)',
+        description:     'Validate Internet Browsing requests against network and firewall policy.',
+        accentColor:     '#DC2626',
+        pendingStatuses: [],   // IBR-only — no onboarding pending statuses
+        historyField:    null,
+        roleModel:       'fallback',
+        isLocationAware: false,
+    },
+    NETWORK_IMPLEMENTER: {
+        label:           'Network Implementer',
+        description:     'Apply approved Internet Browsing requests (proxy / firewall changes).',
+        accentColor:     '#1D4ED8',
+        pendingStatuses: [],   // IBR-only — no onboarding pending statuses
+        historyField:    null,
+        roleModel:       'fallback',
+        isLocationAware: false,
+    },
 };
 
 const LOCATION_AWARE   = new Set(['IT_OPS', 'HR_INITIATOR']);
@@ -106,18 +127,48 @@ const OFFBOARDING_STATUS_TO_SLUG = {
     PendingDCIImplementation: 'dci-implementer',
 };
 
-// Look up an action token across BOTH onboarding and offboarding stage-token
-// columns. Email links carry the same kind of token, but the request itself
-// could live in either table. Returns { kind: 'onboarding'|'offboarding', request }
-// or null if no match. Onboarding is checked first because that's the high-
-// volume table.
+// Internet Browsing Request status → slug map. PendingHOD is intentionally
+// omitted — HODs have no portal session, they act from the emailed direct
+// link only.
+const IBR_STATUS_TO_SLUG = {
+    PendingITOpsValidation: 'it-ops',
+    PendingFMS:             'network-validator',
+    PendingITOpsMgr:        'it-ops-mgr',
+    PendingITHOD:           'it-hod',
+    PendingImplementation:  'network-implementer',
+};
+
+// Look up an action token across the three request tables. Email links
+// carry the same kind of token but the request itself could live in any
+// of the tables. Returns { kind, request } or null. Onboarding first
+// (highest volume), then offboarding, then IBR.
 async function findRequestByActionToken(actionToken) {
     if (!actionToken) return null;
     const on = await OnboardingRequest.findOne({ where: { currentStageToken: actionToken } });
     if (on) return { kind: 'onboarding', request: on };
     const off = await OffboardingRequest.findOne({ where: { currentStageToken: actionToken } });
     if (off) return { kind: 'offboarding', request: off };
+    const ibr = await InternetBrowsingRequest.findOne({ where: { currentStageToken: actionToken } });
+    if (ibr) return { kind: 'internet-browsing', request: ibr };
     return null;
+}
+
+// Resolve the right status→slug map for a request kind.
+function statusMapFor(kind) {
+    if (kind === 'offboarding')       return OFFBOARDING_STATUS_TO_SLUG;
+    if (kind === 'internet-browsing') return IBR_STATUS_TO_SLUG;
+    return STATUS_TO_SLUG;
+}
+
+// Build the `&expand=&expandKind=` querystring tail for a request kind.
+// Onboarding uses the bare expand= for back-compat; the other kinds tag
+// the kind so the dashboard knows which DOM id (off-req-<id> / ibr-req-<id>)
+// + which tab to target.
+function expandSuffix(kind, id) {
+    if (!id) return '';
+    if (kind === 'offboarding')       return `&expand=${id}&expandKind=offboarding`;
+    if (kind === 'internet-browsing') return `&expand=${id}&expandKind=internet-browsing`;
+    return `&expand=${id}`;
 }
 
 // ── Identity helpers ───────────────────────────────────────────────────────────
@@ -246,8 +297,7 @@ export async function apiPortalAuth(req, res) {
                 const { kind, request } = found;
                 expandId   = request.id;
                 expandKind = kind;
-                const statusMap = kind === 'offboarding' ? OFFBOARDING_STATUS_TO_SLUG : STATUS_TO_SLUG;
-                const expectedSlug = statusMap[request.status];
+                const expectedSlug = statusMapFor(kind)[request.status];
                 if (expectedSlug && expectedSlug !== roleSlug) {
                     // Request moved to a different stage — authenticate for the correct portal.
                     targetSlug = expectedSlug;
@@ -259,8 +309,7 @@ export async function apiPortalAuth(req, res) {
                     const m2    = ROLE_META[correctKey];
                     const tok2  = issueToken({ roleKey: correctKey, username, email: e2, accesses: a2, roleName: m2.label });
                     logger.info(`[Portal] Sidecar auth (auto-corrected) → ${username} for ${correctKey} ${expandKind} req#${expandId}`);
-                    const qs = `&expand=${expandId}` + (expandKind === 'offboarding' ? '&expandKind=offboarding' : '');
-                    return res.json({ redirect: `/portal/${targetSlug}/view?token=${tok2}${qs}` });
+                    return res.json({ redirect: `/portal/${targetSlug}/view?token=${tok2}${expandSuffix(kind, expandId)}` });
                 }
             }
             // actionToken not found in DB — treat as expired (let dashboard redirect handle it)
@@ -281,10 +330,7 @@ export async function apiPortalAuth(req, res) {
         }
         const token = issueToken(tokenPayload);
         logger.info(`[Portal] Sidecar auth${delegatorInfo ? ' (original delegator, read-only)' : ''} → ${username} for ${roleKey}${expandId ? ` ${expandKind} req#${expandId}` : ''}`);
-        const expandQs = expandId
-            ? (`&expand=${expandId}` + (expandKind === 'offboarding' ? '&expandKind=offboarding' : ''))
-            : '';
-        const redirect = `/portal/${roleSlug}/view?token=${token}${expandQs}`;
+        const redirect = `/portal/${roleSlug}/view?token=${token}${expandSuffix(expandKind, expandId)}`;
         return res.json({ redirect });
 
     } catch (err) {
@@ -351,16 +397,16 @@ export async function enterViaActionToken(req, res) {
         const { kind, request } = found;
 
         // Auto-correct slug if the request has moved to a different stage.
-        const statusMap   = kind === 'offboarding' ? OFFBOARDING_STATUS_TO_SLUG : STATUS_TO_SLUG;
-        const expectedSlug = statusMap[request.status];
+        const expectedSlug = statusMapFor(kind)[request.status];
         if (expectedSlug && expectedSlug !== roleSlug) {
             return res.redirect(`/portal/${expectedSlug}/enter?action=${actionToken}`);
         }
 
-        // Build the expand-query suffix once — offboarding cards live in a
-        // separate id namespace, so we pass kind alongside the id so the
-        // dashboard knows which tab to open and which DOM id to target.
-        const expandQs = `&expand=${request.id}` + (kind === 'offboarding' ? '&expandKind=offboarding' : '');
+        // Build the expand-query suffix once — offboarding + IBR cards live
+        // in separate id namespaces (off-req-<id> / ibr-req-<id>), so we
+        // pass kind alongside the id so the dashboard can target the right
+        // DOM node and switch to the right tab.
+        const expandQs = expandSuffix(kind, request.id);
 
         // Fast path: X-Auth-User present.
         const username = stripDomain(req.headers['x-auth-user'] || '');
@@ -548,11 +594,14 @@ export async function showDashboard(req, res) {
 
         const isPrimary  = accesses.some(a => a.isPrimary);
         const expandId   = parseInt(req.query.expand, 10) || null;
-        // 'offboarding' switches the dashboard to the offboarding tab and
-        // looks for an "off-req-<id>" card; anything else (including missing)
-        // is treated as onboarding for back-compat.
-        const expandKind = ((req.query.expandKind || '').toString().toLowerCase() === 'offboarding')
-            ? 'offboarding' : 'onboarding';
+        // 'offboarding'         → off-req-<id>     card on the Offboarding tab
+        // 'internet-browsing'   → ibr-req-<id>     card on the Internet Browsing tab
+        // anything else / blank → onboarding (back-compat)
+        const expandKindRaw = (req.query.expandKind || '').toString().toLowerCase();
+        const expandKind =
+            expandKindRaw === 'offboarding'       ? 'offboarding' :
+            expandKindRaw === 'internet-browsing' ? 'internet-browsing' :
+                                                    'onboarding';
 
         // Discover every OTHER portal this user's account is configured for.
         // Both tables are tiny (<20 rows each) so two findAll calls are cheap.
