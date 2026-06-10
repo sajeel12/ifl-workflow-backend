@@ -585,9 +585,9 @@
                             </div>
                             <div style="border:2px dashed #d1d5db;border-radius:10px;padding:24px;text-align:center;background:#f9fafb;transition:border-color 0.15s;" onmouseenter="this.style.borderColor='#2563eb'" onmouseleave="this.style.borderColor='#d1d5db'">
                                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                <div style="font-size:0.84rem;font-weight:600;color:#374151;margin-bottom:4px;">Upload Screenshots (AD / Exchange)</div>
-                                <div style="font-size:0.75rem;color:#9ca3af;margin-bottom:12px;">PNG, JPG — proof of implementation</div>
-                                <input type="file" name="dciProof" multiple accept="image/*" required>
+                                <div style="font-size:0.84rem;font-weight:600;color:#374151;margin-bottom:4px;">Upload Screenshots (AD / Exchange) <span style="color:#dc2626;">*</span></div>
+                                <div style="font-size:0.75rem;color:#9ca3af;margin-bottom:12px;">Required — up to 5 images, max 1 MB each (5 MB total). JPG, PNG, GIF, or WEBP.</div>
+                                <input type="file" name="dciProof" id="dciProofInput" multiple required accept="image/jpeg,image/png,image/gif,image/webp">
                             </div>
                         </div>
                     </div>
@@ -850,6 +850,20 @@
                         // Run native validation first; if it fails, don't lock the buttons.
                         if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
 
+                        // HR initiate gate: require a successful "Get Employee Data" lookup
+                        // before submitting, so a stray Enter in the Employee ID field can't
+                        // fire an empty/duplicate request. Only enforced at the HR stage,
+                        // where the lookup button and an editable Employee ID exist.
+                        const empIdEl = form.querySelector('#employeeIdInput');
+                        const getBtn  = form.querySelector('#btnGetEmployee');
+                        if (getBtn && empIdEl && empIdEl.dataset.fetched !== '1') {
+                            e.preventDefault();
+                            empIdEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            empIdEl.focus();
+                            IflDialog.alert('Please press "Get Employee Data" to load the employee details before submitting.', { title: 'Employee lookup required' });
+                            return;
+                        }
+
                         // DCI stage: the NT User Name is auto-filled, so require an explicit
                         // AD availability check (the "Check" button) before forwarding to the
                         // Manager. The gate is only defined on the editable DCI form.
@@ -1073,6 +1087,9 @@
                 // from the previously fetched employee.
                 unlockRequestMode();
                 clearStateBanner();
+                // Invalidate any prior lookup until this one succeeds — the
+                // submit gate keys off this flag.
+                if (empIdInput) empIdInput.dataset.fetched = '';
 
                 if (btn) { btn.textContent = 'Fetching…'; btn.disabled = true; }
 
@@ -1081,6 +1098,10 @@
                     const hrmsRes = await fetch('/api/hrms/employee/' + encodeURIComponent(empId));
                     if (!hrmsRes.ok) throw new Error('Employee not found in HRMS');
                     const data = await hrmsRes.json();
+                    // Mark this employee as successfully looked up — the form may
+                    // now be submitted (terminated/in-flight cases still block
+                    // separately via data-ifl-lookup-blocked below).
+                    if (empIdInput) empIdInput.dataset.fetched = '1';
 
                     // Block terminated employees immediately — they cannot be onboarded.
                     if (data.actualTerminationDate) {
@@ -1153,7 +1174,41 @@
             };
 
             if (btn)        btn.addEventListener('click', lookupAndFill);
-            if (empIdInput) empIdInput.addEventListener('blur', () => { if (empIdInput.value.trim()) lookupAndFill(); });
+            if (empIdInput) {
+                empIdInput.addEventListener('blur', () => { if (empIdInput.value.trim()) lookupAndFill(); });
+                // CRITICAL: Enter in the Employee ID field must run the lookup,
+                // NOT submit the form. A stray Enter was firing premature/empty
+                // request submissions.
+                empIdInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); lookupAndFill(); }
+                });
+                // Editing the ID after a lookup invalidates it — force a fresh
+                // fetch before the form can be submitted.
+                empIdInput.addEventListener('input', () => { empIdInput.dataset.fetched = ''; });
+            }
+
+            // ── Proof-image validation (count / per-file / total size) ──────
+            // Mirrors the server-side multer limits so the implementer gets
+            // immediate feedback: max 5 images, 1 MB each, 5 MB total.
+            (function validateProofInput() {
+                const MAX_FILES = 5, MAX_BYTES = 1 * 1024 * 1024, MAX_TOTAL = 5 * 1024 * 1024;
+                const proofInput = document.getElementById('dciProofInput');
+                if (!proofInput) return;
+                proofInput.addEventListener('change', () => {
+                    const files = Array.from(proofInput.files || []);
+                    let msg = '';
+                    if (files.length > MAX_FILES) {
+                        msg = 'You can upload at most ' + MAX_FILES + ' images.';
+                    } else {
+                        const tooBig = files.find(f => f.size > MAX_BYTES);
+                        const total  = files.reduce((s, f) => s + f.size, 0);
+                        if (tooBig)            msg = 'Each image must be 1 MB or smaller — "' + tooBig.name + '" is too large.';
+                        else if (total > MAX_TOTAL) msg = 'The images combined must be 5 MB or smaller.';
+                    }
+                    proofInput.setCustomValidity(msg);
+                    if (msg) proofInput.reportValidity();
+                });
+            })();
         });
     </script>
 

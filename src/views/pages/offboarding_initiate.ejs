@@ -210,6 +210,9 @@
             if (!empId) return;
 
             clearBanner();
+            // Invalidate any prior lookup until this one succeeds — the submit
+            // gate keys off this flag.
+            if (empIdInput) empIdInput.dataset.fetched = '';
             if (btn) { btn.disabled = true; btn.innerHTML = 'Fetching…'; }
 
             try {
@@ -220,6 +223,9 @@
                     return;
                 }
                 const data = await r.json();
+                // Mark this employee as successfully looked up — the form may
+                // now be submitted (the submit handler enforces this gate).
+                if (empIdInput) empIdInput.dataset.fetched = '1';
                 setVal('fullName',    data.fullName);
                 setVal('department',  data.department);
                 setVal('designation', data.designation);
@@ -255,7 +261,18 @@
         };
 
         if (btn)        btn.addEventListener('click', lookupAndFill);
-        if (empIdInput) empIdInput.addEventListener('blur', () => { if (empIdInput.value.trim()) lookupAndFill(); });
+        if (empIdInput) {
+            empIdInput.addEventListener('blur', () => { if (empIdInput.value.trim()) lookupAndFill(); });
+            // CRITICAL: Enter in the Employee ID field must run the lookup, NOT
+            // submit the form. A stray Enter here was firing off empty/duplicate
+            // offboarding requests.
+            empIdInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); lookupAndFill(); }
+            });
+            // Editing the ID after a lookup invalidates it — force a fresh fetch
+            // before the form can be submitted again.
+            empIdInput.addEventListener('input', () => { empIdInput.dataset.fetched = ''; });
+        }
     })();
 
     // ── Attach sidecar token to the POST body so ssoMiddleware can authenticate.
@@ -263,6 +280,27 @@
         const form = document.getElementById('offInitForm');
         if (!form) return;
         form.addEventListener('submit', async (e) => {
+            // Gate: require a successful "Get Employee Data" lookup before the
+            // form can be submitted. Prevents a mistaken Enter / early submit
+            // from creating an empty or duplicate offboarding request.
+            const empIdEl = document.getElementById('employeeId');
+            if (empIdEl && empIdEl.dataset.fetched !== '1') {
+                e.preventDefault();
+                empIdEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                empIdEl.focus();
+                const msg = 'Please press "Get Employee Data" to load the employee details before initiating the offboarding.';
+                if (typeof IflDialog !== 'undefined' && IflDialog && typeof IflDialog.alert === 'function') {
+                    IflDialog.alert(msg, { title: 'Employee lookup required' });
+                } else {
+                    const b = document.getElementById('empStateBanner');
+                    if (b) {
+                        b.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:6px;font-size:0.86rem;font-weight:500;background:#fff7ed;border:1px solid #fdba74;color:#c2410c;';
+                        b.textContent = msg;
+                    }
+                }
+                return;
+            }
+
             if (form.dataset.iflTokenAttached) return;
             e.preventDefault();
             try {

@@ -268,6 +268,47 @@ async function collectNotifyEmails(request) {
     return [...emails].filter(Boolean);
 }
 
+// Offboarding equivalent of collectNotifyEmails. Offboarding has no
+// requesterEmail column — the initiator is stored as `initiatedBy` (SSO email).
+// Otherwise identical: initiator + live stage assignee + currently-configured
+// approver email for every role that acted on the request (per its timeline).
+async function collectOffboardingNotifyEmails(request) {
+    const emails = new Set();
+
+    if (request.initiatedBy) emails.add(request.initiatedBy.toLowerCase().trim());
+    if (request.currentStageAssigneeEmail) emails.add(request.currentStageAssigneeEmail.toLowerCase().trim());
+
+    let actorRoles = [];
+    try {
+        const events = await TimelineEvent.findAll({
+            where: { requestId: request.id },
+            attributes: ['actorRole']
+        });
+        actorRoles = [...new Set(events.map(e => e.actorRole).filter(r => r && r !== 'System' && r !== 'Admin'))];
+    } catch (err) {
+        console.error('[Admin Delete] Could not load offboarding timeline actors:', err.message);
+    }
+
+    for (const actorRole of actorRoles) {
+        const roleKey = ACTOR_ROLE_TO_ROLE_KEY[actorRole];
+        if (!roleKey) continue;
+        try {
+            let cfg = null;
+            if (LOCATION_AWARE_ROLES.has(roleKey) && request.location) {
+                cfg = await WorkflowApproverLocationOverride.findOne({
+                    where: { roleKey, location: request.location, isActive: true }
+                });
+            }
+            if (!cfg) cfg = await WorkflowApproverConfig.findOne({ where: { roleKey, isActive: true } });
+            if (cfg && cfg.approverEmail) emails.add(cfg.approverEmail.toLowerCase().trim());
+        } catch (err) {
+            console.error(`[Admin Delete] Could not resolve offboarding email for ${roleKey}:`, err.message);
+        }
+    }
+
+    return [...emails].filter(Boolean);
+}
+
 // State to remember current config (would usually be in DB)
 let currentCronConfig = {
     enabled: false,
@@ -1532,6 +1573,76 @@ class AdminController {
             });
         } catch (err) {
             console.error('[Admin Delete] Error:', err.message);
+            return res.status(500).json({ success: false, error: err.message });
+        }
+    }
+
+    /**
+     * API: Admin-only deletion of an OFFBOARDING request. Mirrors
+     * adminDeleteRequest: soft-deletes (status → AdminDeleted), voids the live
+     * stage token so outstanding action links die immediately, records an audit
+     * event, and notifies every stakeholder of the request.
+     */
+    async adminDeleteOffboardingRequest(req, res) {
+        try {
+            const { id } = req.params;
+            const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : '';
+
+            if (!reason) {
+                return res.status(400).json({ success: false, error: 'A deletion reason is required.' });
+            }
+
+            const request = await OffboardingRequest.findByPk(id);
+            if (!request) {
+                return res.status(404).json({ success: false, error: 'Offboarding request not found.' });
+            }
+            if (request.status === 'AdminDeleted') {
+                return res.status(409).json({ success: false, error: 'This request has already been deleted.' });
+            }
+
+            const deletedBy = req.user && (req.user.displayName || req.user.username || 'Admin');
+            const priorStatus = request.status;
+
+            // Collect stakeholder emails BEFORE marking deleted (assignee still set)
+            const notifyEmails = await collectOffboardingNotifyEmails(request);
+
+            // Soft-delete: invalidate all active links + mark status
+            await request.update({
+                status: 'AdminDeleted',
+                currentStageToken: null,
+                currentStageAssigneeEmail: null,
+                currentStageAssigneeUsername: null,
+            });
+
+            await TimelineEvent.create({
+                requestId: request.id,
+                action: 'Admin Deleted',
+                actorRole: 'Admin',
+                details: JSON.stringify({ deletedBy, priorStatus, reason, notifiedEmails: notifyEmails }),
+                timestamp: new Date()
+            });
+
+            // Notify all stakeholders — non-blocking; log failures but don't abort
+            const emailsSent = [];
+            const emailsFailed = [];
+            for (const email of notifyEmails) {
+                try {
+                    await emailService.sendOffboardingDeletionNotification(email, request, { deletedBy, reason, priorStatus });
+                    emailsSent.push(email);
+                } catch (err) {
+                    console.error(`[Admin Delete] Offboarding notification failed for ${email}:`, err.message);
+                    emailsFailed.push(email);
+                }
+            }
+
+            return res.json({
+                success: true,
+                message: `Offboarding request #${id} has been deleted. ${emailsSent.length} notification(s) sent.`,
+                emailsSent,
+                emailsFailed,
+            });
+        } catch (err) {
+            console.error('[Admin Delete] Offboarding error:', err.message);
             return res.status(500).json({ success: false, error: err.message });
         }
     }

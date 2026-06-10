@@ -189,61 +189,69 @@ export async function getRequestTimeline(req, res) {
     }
 }
 
+// ── Reusable AD resolver ──────────────────────────────────────────────────────
+// 4-strategy lookup → enrich → parse, returning { found, profile }. Shared by
+// the 360° profile endpoint AND the offboarding confirmation panel so both
+// surfaces resolve AD identically. Pure logic (no req/res) so any controller can
+// call it.
+export async function resolveEmployeeAdProfile(employeeNumber) {
+    const emp = await Employee.findOne({
+        where: { employeeId: employeeNumber },
+        attributes: ['email', 'name']
+    });
+
+    let raw = null;
+
+    // Strategy 1: sidecar employeeID lookup — the most reliable path.
+    // Immune to name/email mismatches. Works as long as AD admin ran the bulk
+    // Set-ADUser script (465 accounts updated).
+    raw = await findUserByEmployeeIdViaSidecar(employeeNumber);
+
+    // Strategy 2: LDAP lookup by employeeID (works when AD_URL is configured)
+    if (!raw) raw = await findUserByEmployeeId(employeeNumber);
+
+    // Strategy 3: sidecar email lookup with all domain variants
+    // Covers employees whose employeeID wasn't set in AD yet
+    if (!raw && emp?.email) {
+        const allEmails = [emp.email, ...alternateDomainEmails(emp.email)];
+        for (const email of allEmails) {
+            raw = await findUserByEmail(email);
+            if (raw?.sAMAccountName) break;
+        }
+    }
+
+    // Strategy 4: name search + username-part matching (last resort)
+    // Only run when the employee actually has an email — otherwise dbUsername
+    // is '' and would falsely match any AD account that also lacks a mail
+    // (this is how machine account "ALIMUHAMMADHP$" was attaching to an
+    // emailless employee whose first name appeared in its sAMAccountName).
+    if (!raw && emp?.name && emp?.email) {
+        const dbUsername = emp.email.toLowerCase().split('@')[0];
+        const results    = await searchUsersByName(emp.name.split(' ')[0]);
+        const hit = dbUsername && results.find(u =>
+            (u.mail || u.email || '').toLowerCase().split('@')[0] === dbUsername
+        );
+        if (hit) raw = hit;
+    }
+
+    if (!raw) return { found: false, profile: null };
+
+    // SIDECAR ONLY — LDAP is not used. Always enrich the resolved account via
+    // adsearch.aspx (by sAMAccountName) to pull the full attribute set:
+    // office, locality, memberOf, accountEnabled, createdAt. Strategy 3
+    // (findUserByEmail) only returns sAM+mail+name, so this is what makes the
+    // AD Office / City / Groups / Created fields populate.
+    raw = await enrichViaSidecar(raw);
+
+    return { found: true, profile: parseADProfile(raw) };
+}
+
 // ── 360° AD profile for a single employee ─────────────────────────────────────
 export async function getEmployeeAdProfile(req, res) {
     try {
         const { employeeNumber } = req.params;
-
-        const emp = await Employee.findOne({
-            where: { employeeId: employeeNumber },
-            attributes: ['email', 'name']
-        });
-
-        let raw = null;
-
-        // Strategy 1: sidecar employeeID lookup — the most reliable path.
-        // Immune to name/email mismatches. Works as long as AD admin ran the bulk
-        // Set-ADUser script (465 accounts updated).
-        raw = await findUserByEmployeeIdViaSidecar(employeeNumber);
-
-        // Strategy 2: LDAP lookup by employeeID (works when AD_URL is configured)
-        if (!raw) raw = await findUserByEmployeeId(employeeNumber);
-
-        // Strategy 3: sidecar email lookup with all domain variants
-        // Covers employees whose employeeID wasn't set in AD yet
-        if (!raw && emp?.email) {
-            const allEmails = [emp.email, ...alternateDomainEmails(emp.email)];
-            for (const email of allEmails) {
-                raw = await findUserByEmail(email);
-                if (raw?.sAMAccountName) break;
-            }
-        }
-
-        // Strategy 4: name search + username-part matching (last resort)
-        // Only run when the employee actually has an email — otherwise dbUsername
-        // is '' and would falsely match any AD account that also lacks a mail
-        // (this is how machine account "ALIMUHAMMADHP$" was attaching to an
-        // emailless employee whose first name appeared in its sAMAccountName).
-        if (!raw && emp?.name && emp?.email) {
-            const dbUsername = emp.email.toLowerCase().split('@')[0];
-            const results    = await searchUsersByName(emp.name.split(' ')[0]);
-            const hit = dbUsername && results.find(u =>
-                (u.mail || u.email || '').toLowerCase().split('@')[0] === dbUsername
-            );
-            if (hit) raw = hit;
-        }
-
-        if (!raw) return res.json({ found: false, profile: null });
-
-        // SIDECAR ONLY — LDAP is not used. Always enrich the resolved account via
-        // adsearch.aspx (by sAMAccountName) to pull the full attribute set:
-        // office, locality, memberOf, accountEnabled, createdAt. Strategy 3
-        // (findUserByEmail) only returns sAM+mail+name, so this is what makes the
-        // AD Office / City / Groups / Created fields populate.
-        raw = await enrichViaSidecar(raw);
-
-        const profile = parseADProfile(raw);
-        res.json({ found: true, profile });
+        const result = await resolveEmployeeAdProfile(employeeNumber);
+        res.json(result);
     } catch (err) {
         console.error('[EJ] getEmployeeAdProfile failed:', err);
         res.status(500).json({ error: 'Failed to fetch AD profile' });

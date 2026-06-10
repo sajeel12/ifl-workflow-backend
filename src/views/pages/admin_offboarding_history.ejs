@@ -28,6 +28,7 @@
             <option value="PendingDCIImplementation">Pending DCI Implementation</option>
             <option value="Completed">Completed</option>
             <option value="Rejected">Rejected</option>
+            <option value="AdminDeleted">Admin Deleted</option>
           </select>
         </div>
       </div>
@@ -78,6 +79,18 @@
         <div id="revocationItems" style="display:flex; flex-direction:column; gap:6px; font-size:.88rem; color:#0f172a;"></div>
       </div>
 
+      <!-- Admin Delete Bar — shown for any request that hasn't already been deleted. -->
+      <div id="adminDeleteBar" style="display:none; padding:12px 24px; border-bottom:1px solid #fecaca; background:#fff5f5; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+        <div style="flex:1; min-width:240px;">
+          <div style="font-size:.8rem; font-weight:600; color:#991b1b; margin-bottom:2px;">Delete Request</div>
+          <div style="font-size:.75rem; color:#b91c1c; margin-bottom:6px;">Permanently removes this offboarding request from the workflow and notifies all involved parties.</div>
+          <input type="text" id="deleteReasonInput" class="a-input" placeholder="Reason for deletion (required)" style="max-width:420px; border-color:#fca5a5;">
+        </div>
+        <button id="btnDeleteRequest" class="a-btn" style="background:#b91c1c; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:600; flex-shrink:0;" onclick="promptDeleteOffboardingRequest()">
+          🗑 Delete Request
+        </button>
+      </div>
+
       <div style="padding:24px;">
         <div id="timelineContainer" style="position:relative;padding:12px 0;"></div>
       </div>
@@ -118,6 +131,7 @@
 .request-badge.completed                { background:var(--a-green-bg); color:var(--a-green); }
 .request-badge.rejected                 { background:var(--a-red-bg);   color:var(--a-red); }
 .request-badge.draft                    { background:#f0f0f0;           color:#666; }
+.request-badge.admindeleted             { background:#fee2e2;           color:#991b1b; }
 
 /* Timeline styles — matched to the user-facing /history page */
 #timelineContainer .timeline-item {
@@ -223,6 +237,7 @@ function statusBadgeClass(s) { return (s || 'draft').toLowerCase(); }
 function statusBadgeLabel(s) {
   if (s === 'PendingDCIManager')         return 'Pending Manager';
   if (s === 'PendingDCIImplementation')  return 'Pending Implementer';
+  if (s === 'AdminDeleted')              return 'Admin Deleted';
   return s || 'Draft';
 }
 
@@ -267,7 +282,7 @@ async function loadTimeline(id) {
       `Employee ID: ${request.employeeId} · Department: ${request.department || '—'} · Status: ${statusBadgeLabel(request.status)}`;
 
     // Show recovery bar only when the request is still in an active token-bearing stage.
-    const closedStates = ['Completed', 'Rejected', 'Draft'];
+    const closedStates = ['Completed', 'Rejected', 'Draft', 'AdminDeleted'];
     const bar = document.getElementById('adminActionsBar');
     if (bar) {
       const canResend = !closedStates.includes(request.status);
@@ -278,6 +293,14 @@ async function loadTimeline(id) {
           ? `Stage: ${statusBadgeLabel(request.status)}. The original action email can be re-sent — the existing token will be reused.`
           : `Request is ${request.status}; no active stage email to resend.`;
       }
+    }
+
+    // Show the delete bar for any request that hasn't already been deleted.
+    const deleteBar = document.getElementById('adminDeleteBar');
+    if (deleteBar) {
+      deleteBar.style.display = (request.status === 'AdminDeleted') ? 'none' : 'flex';
+      const reasonInput = document.getElementById('deleteReasonInput');
+      if (reasonInput) reasonInput.value = '';
     }
 
     renderRevocationBar(request);
@@ -331,6 +354,51 @@ async function resendOffboardingEmail() {
   } catch (e) {
     console.error(e);
     IflDialog.error('Network error while resending email.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = original; }
+  }
+}
+
+async function promptDeleteOffboardingRequest() {
+  if (!currentModalRequestId) return;
+
+  const reasonInput = document.getElementById('deleteReasonInput');
+  const reason = reasonInput ? reasonInput.value.trim() : '';
+  if (!reason) {
+    IflDialog.error('Please enter a reason for deletion before proceeding.');
+    if (reasonInput) reasonInput.focus();
+    return;
+  }
+
+  const confirmed = await IflDialog.confirm(
+    `This will permanently remove Offboarding Request #${currentModalRequestId} from the workflow and notify all involved parties. This cannot be undone.`,
+    { title: 'Confirm Deletion', okText: 'Yes, Delete It', danger: true }
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById('btnDeleteRequest');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Deleting…'; }
+
+  try {
+    const res = await window.iflFetch(`/admin/offboarding/${currentModalRequestId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      IflDialog.error(json.error || 'Failed to delete the request.');
+      return;
+    }
+    IflDialog.success(json.message || 'Request deleted successfully.');
+    if (reasonInput) reasonInput.value = '';
+    closeModal();
+    // Reload the list so the deleted row shows AdminDeleted status
+    loadRequests(currentPage);
+  } catch (e) {
+    console.error(e);
+    IflDialog.error('Network error while deleting request.');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = original; }
   }

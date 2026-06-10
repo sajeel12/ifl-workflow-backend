@@ -63,6 +63,7 @@ router.post('/onboarding/:id/resend-email', ...guard, adminController.resendStag
 router.get('/offboarding/:id/resend-preview', ...guard, adminController.resendOffboardingStagePreview);
 router.post('/offboarding/:id/resend-email', ...guard, adminController.resendOffboardingStageEmail);
 router.delete('/onboarding/:id', ...guard, adminController.adminDeleteRequest);
+router.delete('/offboarding/:id', ...guard, adminController.adminDeleteOffboardingRequest);
 
 // Search AD users by name/sAMAccountName/email — powers the approver search box.
 // Also accepts ?employeeId=X for a reliable exact-match lookup by employeeID attribute.

@@ -149,6 +149,19 @@
         color: #854d0e; font-size: 0.9rem;
     }
 
+    /* Live AD account panel */
+    .ad-loading { display:flex; align-items:center; gap:10px; color:#64748b; font-size:0.9rem; padding:6px 0; }
+    .ad-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+    .ad-table td { padding:6px 10px 6px 0; vertical-align:top; }
+    .ad-table td.ad-key { color:#64748b; white-space:nowrap; width:1%; font-weight:600; }
+    .ad-table code { background:#f0f9ff; padding:1px 6px; border-radius:3px; font-size:0.85rem; }
+    .ad-badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:0.72rem; font-weight:700; letter-spacing:0.02em; }
+    .ad-badge--enabled  { background:#dcfce7; color:#166534; }
+    .ad-badge--disabled { background:#fee2e2; color:#b91c1c; }
+    .ad-groups { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
+    .ad-chip { background:#eef2ff; color:#3730a3; border:1px solid #e0e7ff; border-radius:6px; padding:2px 8px; font-size:0.78rem; }
+    .ad-empty { display:flex; align-items:center; gap:10px; padding:14px 16px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; color:#64748b; font-size:0.9rem; }
+
     /* Action panel */
     .action-panel {
         margin-top: 12px;
@@ -235,6 +248,30 @@
             </div>
         </div>
     </div>
+
+    <!-- Live Active Directory account — the real account + groups that deletion
+         will remove, fetched client-side via the sidecar (adsearch.aspx) so a
+         slow AD lookup never blocks the form render. Two-phase pattern: render a
+         placeholder now, fill it from /api/offboarding/:id/ad-profile on load.
+         Shown to the DCI Manager (confirmation) and DCI Implementer (deletion). -->
+    <% if (role === 'DCIManager' || role === 'DCIImplementer') { %>
+        <div class="off-card" id="adAccountCard">
+            <h2>Active Directory Account
+                <span style="font-weight:400; font-size:0.78rem; color:#64748b;">— live from AD</span>
+            </h2>
+            <p style="font-size: 0.88rem; color: #475569; margin: 0 0 14px;">
+                The actual Active Directory account that will be <strong>deleted</strong>, shown live
+                alongside the granted-services snapshot below. If no account is linked, deletion may
+                already be done or the Employee ID isn't set in AD.
+            </p>
+            <div id="adAccountBody">
+                <div class="ad-loading">
+                    <svg class="ifl-spinner" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+                    Looking up the Active Directory account…
+                </div>
+            </div>
+        </div>
+    <% } %>
 
     <%
         // Helper: build a list of "granted" services from the matched
@@ -332,6 +369,24 @@
                 rights. SmartX and door-access systems are physical and must be confirmed separately.
             </p>
 
+            <!-- Revocation Work Order PDF — generated at DCI Manager approval with
+                 the AD account, employee details, and onboarding-granted services.
+                 Download, action it, then upload the proof below. -->
+            <% if (request.revocationPdfPath) { %>
+                <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:14px;">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <div>
+                        <div style="font-size:0.88rem;font-weight:600;color:#991b1b;margin-bottom:4px;">Access Revocation Work Order (PDF)</div>
+                        <div style="font-size:0.78rem;color:#4b5563;margin-bottom:8px;">Includes the live AD account, employee details, and the services granted at onboarding. Download and action it before uploading proof.</div>
+                        <a href="/api/offboarding/pdf/<%= token %>" target="_blank" rel="noopener"
+                           style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#b91c1c;color:#fff;border-radius:6px;font-size:0.8rem;font-weight:600;text-decoration:none;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Open Work Order PDF
+                        </a>
+                    </div>
+                </div>
+            <% } %>
+
             <form action="/api/offboarding/handle?token=<%= token %>" method="POST" enctype="multipart/form-data">
                 <div class="action-panel">
                     <div style="margin-bottom: 14px;">
@@ -373,8 +428,9 @@
                     </div>
 
                     <div style="margin-top: 14px; padding: 14px; border: 2px dashed #cbd5e1; border-radius: 8px; text-align:center;">
-                        <label style="cursor:pointer; color: #0078D4; font-weight: 600;">Optional — upload proof screenshots</label>
-                        <input type="file" name="dciProof" multiple accept="image/*,application/pdf" style="display:block; margin: 8px auto 0;">
+                        <label style="cursor:pointer; color: #0078D4; font-weight: 600;">Upload proof screenshots <span style="color:#dc2626;">*</span></label>
+                        <div style="font-size:0.75rem; color:#64748b; margin-top:2px;">Required — up to 5 images, max 1 MB each (5 MB total). JPG, PNG, GIF, or WEBP.</div>
+                        <input type="file" name="dciProof" id="dciProofInput" multiple required accept="image/jpeg,image/png,image/gif,image/webp" style="display:block; margin: 8px auto 0;">
                     </div>
                 </div>
 
@@ -652,6 +708,90 @@
                     }, 30000);
                 });
             });
+        });
+    })();
+
+    // ── Live AD account loader ────────────────────────────────────────────
+    // Two-phase render: the card placeholder is already in the DOM; here we
+    // fetch the real AD account for this request's employee and fill it in.
+    // Done client-side (not at server render) so a slow adsearch.aspx round-trip
+    // never blocks the form. Uses window.iflFetch so the sidecar token is
+    // attached and IIS doesn't throw a Windows-auth popup.
+    (function loadAdAccount() {
+        const body = document.getElementById('adAccountBody');
+        if (!body) return; // card only renders for DCI Manager / Implementer
+
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const fmtDate = (d) => {
+            if (!d) return '—';
+            try { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+            catch (_) { return '—'; }
+        };
+        const row = (k, v) => '<tr><td class="ad-key">' + esc(k) + '</td><td>' + v + '</td></tr>';
+
+        const renderProfile = (p) => {
+            const badgeCls = p.accountEnabled ? 'ad-badge--enabled' : 'ad-badge--disabled';
+            const badge = '<span class="ad-badge ' + badgeCls + '">' + esc(p.accountStatus || (p.accountEnabled ? 'Enabled' : 'Disabled')) + '</span>';
+            const groups = Array.isArray(p.groups) ? p.groups : [];
+            const groupsHtml = groups.length
+                ? '<div class="ad-groups">' + groups.map(g => '<span class="ad-chip">' + esc(g) + '</span>').join('') + '</div>'
+                : '<span style="color:#94a3b8;">No group memberships</span>';
+
+            let html = '<table class="ad-table">';
+            html += row('Status', badge);
+            html += row('Login', '<code>' + esc(p.sAMAccountName || '—') + '</code>');
+            html += row('AD Email', esc(p.mail || '—'));
+            if (p.upn)        html += row('UPN', esc(p.upn));
+            if (p.title)      html += row('Title', esc(p.title));
+            if (p.department) html += row('AD Department', esc(p.department));
+            if (p.office)     html += row('AD Office', esc(p.office));
+            if (p.locality)   html += row('AD City', esc(p.locality));
+            if (p.phone)      html += row('Phone', esc(p.phone));
+            html += row('Last Login', esc(fmtDate(p.lastLogon)));
+            html += row('Account Created', esc(fmtDate(p.createdAt)));
+            html += row('Groups (' + groups.length + ')', groupsHtml);
+            html += '</table>';
+            body.innerHTML = html;
+        };
+
+        const renderEmpty = (msg) => {
+            body.innerHTML = '<div class="ad-empty"><span style="font-size:1.2rem;opacity:.5;">&#128274;</span><span>' + esc(msg) + '</span></div>';
+        };
+
+        (async () => {
+            try {
+                const fetcher = (typeof window.iflFetch === 'function') ? window.iflFetch : (u, o) => fetch(u, o);
+                const r = await fetcher('/api/offboarding/<%= request.id %>/ad-profile');
+                if (!r.ok) { renderEmpty('Could not load the AD account (HTTP ' + r.status + ').'); return; }
+                const j = await r.json();
+                if (j && j.found && j.profile) renderProfile(j.profile);
+                else renderEmpty('No Active Directory account is linked to this Employee ID.');
+            } catch (e) {
+                renderEmpty('Could not reach Active Directory: ' + (e && e.message ? e.message : 'unknown error'));
+            }
+        })();
+    })();
+
+    // ── Proof-image validation (count / per-file / total size) ─────────────
+    // Mirrors the server-side multer limits so the implementer gets immediate
+    // feedback instead of a rejected POST: max 5 images, 1 MB each, 5 MB total.
+    (function validateProofInput() {
+        const MAX_FILES = 5, MAX_BYTES = 1 * 1024 * 1024, MAX_TOTAL = 5 * 1024 * 1024;
+        const input = document.getElementById('dciProofInput');
+        if (!input) return;
+        input.addEventListener('change', () => {
+            const files = Array.from(input.files || []);
+            let msg = '';
+            if (files.length > MAX_FILES) {
+                msg = 'You can upload at most ' + MAX_FILES + ' images.';
+            } else {
+                const tooBig = files.find(f => f.size > MAX_BYTES);
+                const total  = files.reduce((s, f) => s + f.size, 0);
+                if (tooBig)            msg = 'Each image must be 1 MB or smaller — "' + tooBig.name + '" is too large.';
+                else if (total > MAX_TOTAL) msg = 'The images combined must be 5 MB or smaller.';
+            }
+            input.setCustomValidity(msg);
+            if (msg) input.reportValidity();
         });
     })();
 </script>

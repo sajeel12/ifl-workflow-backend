@@ -58,6 +58,12 @@ const OffboardingRequest = sequelize.define('OffboardingRequest', {
     assignedSystemAgentId: { type: DataTypes.STRING }, // legacy; unused on new flows
     managerApprovedAt: { type: DataTypes.DATE },
 
+    // Revocation Work Order PDF — generated when the DCI Manager approves, so
+    // the DCI Implementer can download the account/AD/privilege snapshot to act
+    // on. Mirrors OnboardingRequest.workOrderPdfPath. Served via
+    // /api/offboarding/pdf/:token.
+    revocationPdfPath: { type: DataTypes.STRING, allowNull: true },
+
     // DCI Implementer Checklist — single submit per plan §3
     adRevoked: { type: DataTypes.BOOLEAN, defaultValue: false },
     smartXRevoked: { type: DataTypes.BOOLEAN, defaultValue: false },

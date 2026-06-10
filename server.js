@@ -285,6 +285,8 @@ async function startServer() {
         await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciImplementerName', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciImplementerCompletedAt', 'DATETIME');
         await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'dciProofAttachments', 'TEXT');
+        // Revocation Work Order PDF generated at DCI Manager approval.
+        await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'revocationPdfPath', 'STRING');
 
         // One-time status migration. Legacy offboarding rows used the
         // SystemManager/SystemTeam role names; rename to the new DCI Manager /

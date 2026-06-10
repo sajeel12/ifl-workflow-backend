@@ -1,5 +1,5 @@
 import express from 'express';
-import { upload } from '../utils/upload.js';
+import { uploadProofImages } from '../utils/upload.js';
 const router = express.Router();
 import * as onboardingController from '../controllers/onboardingController.js';
 import * as approvalController from '../controllers/approvalController.js';
@@ -77,7 +77,7 @@ router.post('/onboarding/handle', ssoMiddleware, onboardingController.handleRequ
 // If ssoMiddleware runs first, req.body is empty for multipart requests and
 // the sidecar token (which the form submits as a hidden field) can't be read,
 // causing a 401 → IIS Windows-auth login-prompt loop.
-router.post('/onboarding/upload-proof', upload.array('dciProof', 5), ssoMiddleware, onboardingController.handleProofUpload);
+router.post('/onboarding/upload-proof', uploadProofImages, ssoMiddleware, onboardingController.handleProofUpload);
 
 // Serve the Work Order PDF for the DCI Implementer. Open at Node (no ssoMiddleware)
 // for the same reason as GET /handle — the page loads before the sidecar token is
@@ -183,6 +183,17 @@ router.get('/offboarding/queue', ssoMiddleware, offboardingController.getRoleQue
 // dashboards, and the admin panel). Mirrors /api/onboarding/history/:id.
 router.get('/offboarding/history/:id', offboardingController.renderHistory);
 
+// Live AD account snapshot for the employee on an offboarding request — powers
+// the "Active Directory Account" panel on the DCI Manager / Implementer form so
+// reviewers see the real AD account + groups deletion will remove, not just the
+// DB privilege snapshot. SSO-gated; scoped by request id inside the controller.
+router.get('/offboarding/:id/ad-profile', ssoMiddleware, offboardingController.getEmployeeAdProfile);
+
+// Serve the revocation Work Order PDF (generated at DCI Manager approval) to the
+// DCI Implementer. Open like onboarding's /onboarding/pdf/:token — validated by
+// the live stage token inside the controller.
+router.get('/offboarding/pdf/:token', offboardingController.serveRevocationPDF);
+
 // Quick employee-state lookup for the initiate form's "Get Employee Data"
 // flow. Returns { state: 'active' | 'completed' | null } so the form can
 // warn the user before submitting a duplicate.
@@ -195,6 +206,6 @@ router.get('/offboarding/lookup', offboardingController.lookupExistingRequest);
 // (DCI Implementer's optional proof upload) are parsed and the sidecar
 // token in the body becomes visible — same gotcha as onboarding upload-proof.
 router.get('/offboarding/handle', (req, res) => offboardingController.handleRequest(req, res));
-router.post('/offboarding/handle', upload.array('dciProof', 5), ssoMiddleware, (req, res) => offboardingController.handleRequest(req, res));
+router.post('/offboarding/handle', uploadProofImages, ssoMiddleware, (req, res) => offboardingController.handleRequest(req, res));
 
 export default router;

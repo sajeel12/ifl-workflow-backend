@@ -7,6 +7,10 @@ import TimelineEvent from '../models/TimelineEvent.js';
 import { emailsMatch } from '../utils/emailMatch.js';
 import { LOCATION_GROUPS, groupByKey, groupKeyForLocation } from '../utils/locationGroups.js';
 import { humanizeAction, humanizeDetails, humanizeDetailsHTML, narrate } from '../utils/historyFormatter.js';
+import { resolveEmployeeAdProfile } from './employeeJourneyController.js';
+import Employee from '../models/Employee.js';
+import * as pdfService from '../services/pdfService.js';
+import path from 'path';
 import logger from '../utils/logger.js';
 
 const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key, g.label]));
@@ -77,6 +81,61 @@ const renderError = (res, message, status = 400) => {
         iconClass: 'error-icon',
         message
     });
+};
+
+// Build the offboarding revocation Work Order PDF for the DCI Implementer and
+// store its path on the request. Pulls AD (live, via the sidecar resolver), the
+// granted-services snapshot (matched completed onboarding record), and Employee
+// DB details. Best-effort: a failure here is logged but must NOT block the
+// approval workflow — the implementer form degrades to "PDF unavailable".
+async function generateOffboardingRevocationPdf(request) {
+    try {
+        const adResult  = await resolveEmployeeAdProfile(request.employeeId).catch(() => null);
+        const adProfile = adResult && adResult.found ? adResult.profile : null;
+
+        const privileges = await OnboardingRequest.findOne({
+            where: { employeeId: request.employeeId, status: 'Completed' },
+            order: [['opsCompletedAt', 'DESC']]
+        }).catch(() => null);
+
+        const employee = await Employee.findOne({
+            where: { employeeId: request.employeeId }
+        }).catch(() => null);
+
+        const filename   = `Offboarding_${request.employeeId}_${request.id}.pdf`;
+        const outputPath = path.resolve('generated_pdfs', filename);
+        await pdfService.generateOffboardingRevocationPDF({ request, adProfile, privileges, employee }, outputPath);
+        await request.update({ revocationPdfPath: outputPath });
+        logger.info(`[Offboarding] Revocation PDF generated: ${outputPath}`);
+    } catch (err) {
+        logger.error(`[Offboarding] Revocation PDF generation failed: ${err.message}`);
+    }
+}
+
+// Serve the revocation Work Order PDF for the DCI Implementer — validated via
+// the live stage token. Mirrors onboarding's serveWorkOrderPDF.
+export const serveRevocationPDF = async (req, res) => {
+    try {
+        const token = req.params.token || req.query.token;
+        if (!token) return res.status(400).send('Token required');
+        const request = await OffboardingRequest.findOne({ where: { currentStageToken: token } });
+        if (!request || request.status !== 'PendingDCIImplementation') {
+            return res.status(404).send('PDF not available or token invalid.');
+        }
+        if (!request.revocationPdfPath) {
+            return res.status(404).send('Revocation PDF not yet generated for this request.');
+        }
+        const { createReadStream, existsSync } = await import('fs');
+        if (!existsSync(request.revocationPdfPath)) {
+            return res.status(404).send('PDF file not found on server.');
+        }
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="OffboardingRevocation_${request.id}.pdf"`);
+        createReadStream(request.revocationPdfPath).pipe(res);
+    } catch (err) {
+        logger.error(`[Offboarding PDF Serve] ${err.message}`);
+        res.status(500).send('Error serving PDF.');
+    }
 };
 
 export const handleRequest = async (req, res) => {
@@ -196,6 +255,9 @@ const handleSubmission = async (req, res, token) => {
                     actorRole: 'DCIManager', portalToken
                 });
             }
+            // Approved → build the revocation Work Order PDF (AD + DB + onboarding
+            // privileges) for the DCI Implementer to download and act on.
+            await generateOffboardingRevocationPdf(updated);
             return renderSuccess(
                 res,
                 'Approved — Forwarded to DCI Implementer',
@@ -210,6 +272,11 @@ const handleSubmission = async (req, res, token) => {
         if (role === 'DCIImplementer') {
             const implementerName = (req.user && (req.user.displayName || req.user.username)) || 'DCI Implementer';
             const proofPaths = Array.isArray(req.files) ? req.files.map(f => f.path) : [];
+            // Proof is mandatory at this stage — the implementer must attach at
+            // least one screenshot evidencing the AD/account revocation.
+            if (!proofPaths.length) {
+                return renderError(res, 'At least one proof screenshot is required to complete the offboarding. Please attach the revocation evidence and try again.');
+            }
             const updated = await offboardingService.handleImplementerCompletion(token, data, implementerName, proofPaths);
             return renderSuccess(
                 res,
@@ -460,6 +527,31 @@ export const getRoleQueue = async (req, res) => {
 // Suppress unused-import warning for groupByKey; it is intentionally available
 // for future use (e.g. resolving a group from a freeform location string).
 void groupByKey;
+
+// ───────────────────────────────────────────────────────────────────────
+// Live AD account snapshot for the employee on an offboarding request.
+// The DCI Manager confirmation / DCI Implementer checklist already show the
+// DB privilege snapshot (from the matched onboarding record); this adds the
+// ACTUAL Active Directory account + groups that deletion will remove, fetched
+// via the sidecar (adsearch.aspx) — the same resolver the 360° profile uses.
+// Scoped by request id so it can't be used to look up arbitrary employees.
+// GET /api/offboarding/:id/ad-profile  → { found, profile }
+// ───────────────────────────────────────────────────────────────────────
+export const getEmployeeAdProfile = async (req, res) => {
+    try {
+        const request = await OffboardingRequest.findByPk(req.params.id, {
+            attributes: ['employeeId']
+        });
+        if (!request || !request.employeeId) {
+            return res.json({ found: false, profile: null });
+        }
+        const result = await resolveEmployeeAdProfile(request.employeeId);
+        return res.json(result);
+    } catch (err) {
+        logger.error(`[Offboarding] AD profile fetch failed: ${err.message}`);
+        return res.status(500).json({ error: 'Failed to fetch AD profile' });
+    }
+};
 
 // ───────────────────────────────────────────────────────────────────────
 // Quick existence-check used by the initiate form's "Get Employee Data" flow.

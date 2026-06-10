@@ -869,6 +869,10 @@
                                                             onclick="switchTab('offboarding'); return false;">
                                                             Offboarding <span id="off-tab-count"></span>
                                                         </a>
+                                                        <a class="pd-tab" id="tab-offboarding-history" href="#"
+                                                            onclick="switchTab('offboarding-history'); return false;">
+                                                            Offboarding History <span id="off-hist-tab-count"></span>
+                                                        </a>
                                                         <% } %>
                                                             <a class="pd-tab" id="tab-history" href="#"
                                                                 onclick="switchTab('history'); return false;">
@@ -1063,6 +1067,18 @@
                                                             </div>
                                                         </div>
                                                     </div>
+
+                                                    <!-- Offboarding History tab — events this role performed on
+                                                         offboarding requests (mirrors the onboarding History tab). -->
+                                                    <div class="pd-section" id="pane-offboarding-history" style="display:none;">
+                                                        <div id="off-hist-list" class="req-list">
+                                                            <div class="pd-empty" id="off-hist-loading">
+                                                                <div class="em"
+                                                                    style="font-size: 1.5rem; opacity: 0.5;">⏳</div>
+                                                                <p>Loading offboarding history…</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                     <% } %>
 
                 </div>
@@ -1079,6 +1095,7 @@
             document.getElementById('tab-' + name).classList.add('is-active');
             document.getElementById('pane-' + name).style.display = '';
             if (name === 'offboarding') loadOffboardingOnce();
+            if (name === 'offboarding-history') loadOffboardingHistoryOnce();
         }
 
         // ── Offboarding queue loader ────────────────────────────────────
@@ -1132,6 +1149,53 @@
                 }
             } catch (e) {
                 listEl.innerHTML = '<div class="pd-empty" style="color:#dc2626;"><p>Could not load offboarding queue: ' + (e.message || '') + '</p></div>';
+            }
+        }
+
+        // ── Offboarding history loader ──────────────────────────────────
+        // Events this role performed on offboarding requests. Fetched once on
+        // first tab switch and cached. Mirrors the onboarding History tab.
+        let _offHistLoaded = false;
+        async function loadOffboardingHistoryOnce() {
+            if (_offHistLoaded) return;
+            _offHistLoaded = true;
+            const listEl = document.getElementById('off-hist-list');
+            if (!listEl) return;
+            try {
+                const fetcher = (typeof window.iflFetch === 'function') ? window.iflFetch : (u, o) => fetch(u, o);
+                const r = await fetcher('/api/offboarding/queue?role=' + encodeURIComponent(PORTAL_ROLE_KEY) + '&type=history');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                const rows = (j.success && Array.isArray(j.data)) ? j.data : [];
+                const countEl = document.getElementById('off-hist-tab-count');
+                if (countEl) countEl.textContent = rows.length ? '(' + rows.length + ')' : '';
+                if (!rows.length) {
+                    listEl.innerHTML = '<div class="pd-empty"><div class="em">&#128338;</div><p>No offboarding history for your role yet.</p></div>';
+                    return;
+                }
+                const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                const toneColor = { success: '#16a34a', danger: '#dc2626', info: '#64748b' };
+                listEl.innerHTML = rows.map(row => {
+                    const subBits = [row.designation, row.department].filter(Boolean).map(esc).join(' · ');
+                    const when = row.timestamp ? new Date(row.timestamp).toLocaleString('en-GB') : '';
+                    const tone = toneColor[row.actionTone] || '#64748b';
+                    return '<div class="req-card read-only" id="off-hist-' + row.eventId + '">' +
+                        '<div class="req-info">' +
+                        '<p class="req-name">#' + row.requestId + ' — ' + esc(row.fullName || '—') + '</p>' +
+                        '<p class="req-sub">' + (subBits || '—') + '</p>' +
+                        '<div class="req-meta">' +
+                        '<span class="req-pill" style="background:' + tone + '1a;color:' + tone + ';">' + esc(row.actionLabel || row.action || '') + '</span>' +
+                        '<span class="req-pill">' + esc(row.actorRole || '') + '</span>' +
+                        (when ? '<span class="req-pill">' + esc(when) + '</span>' : '') +
+                        '</div>' +
+                        '</div>' +
+                        '<div class="req-action">' +
+                        '<a href="/api/offboarding/history/' + row.requestId + '" class="btn-view">View</a>' +
+                        '</div>' +
+                        '</div>';
+                }).join('');
+            } catch (e) {
+                listEl.innerHTML = '<div class="pd-empty" style="color:#dc2626;"><p>Could not load offboarding history: ' + (e.message || '') + '</p></div>';
             }
         }
 
