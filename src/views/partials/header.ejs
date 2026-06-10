@@ -513,7 +513,14 @@
                 let token = await getToken();
                 let res   = await issueRequest(url, opts, token);
                 if (res.status !== 401) return res;
-                // Stale-token recovery — one shot, no loops.
+                // Stale-token recovery — one shot, no loops. We deliberately do
+                // NOT dispatch any session-expired event here: that path used to
+                // pop a modal + force a reload, which on a server where
+                // /token.aspx is flaky (slow AD lookups, transient IIS hiccups)
+                // creates a reload loop the user can't escape from. Instead, log
+                // quietly and let the caller render its own inline error. The
+                // user can recover by opening a new tab — same as before — but
+                // no automatic dialog interrupts them.
                 try {
                     sessionStorage.removeItem(TOKEN_KEY);
                     sessionStorage.removeItem(TOKEN_TS_KEY);
@@ -522,13 +529,11 @@
                     token = await fetchFreshToken();
                 } catch (e) {
                     console.warn('[SSO] Fresh token fetch failed during 401 recovery:', e && e.message);
-                    try { window.dispatchEvent(new CustomEvent('ifl:session-expired')); } catch (_) {}
                     return res;
                 }
                 const retry = await issueRequest(url, opts, token);
                 if (retry.status === 401) {
-                    console.warn('[SSO] Retry still 401 after fresh token — dispatching session-expired');
-                    try { window.dispatchEvent(new CustomEvent('ifl:session-expired')); } catch (_) {}
+                    console.warn('[SSO] Retry still 401 after fresh token — surfacing failure to caller');
                 }
                 return retry;
             };
@@ -721,14 +726,18 @@
             // the user to reload; that's the only honest recovery path. The
             // shownOnce guard prevents repeat dialogs if multiple in-flight
             // requests all 401 at the same time.
-            let __sessionExpiredShown = false;
+            // ifl:session-expired listener is intentionally a no-op now.
+            // Previously this auto-prompted a page reload, but on servers where
+            // /token.aspx is intermittently flaky that reload re-triggered the
+            // same 401, producing a login-loop the user couldn't break out of.
+            // The 401-retry path in iflFetch still silently re-fetches the
+            // token, which handles every recoverable case. If a request is
+            // truly unrecoverable, the caller's own error UI surfaces it and
+            // the user can recover by opening a new tab (their existing
+            // escape hatch). Leaving this listener registered so any future
+            // dispatcher doesn't throw an unhandled-event warning.
             window.addEventListener('ifl:session-expired', () => {
-                if (__sessionExpiredShown) return;
-                __sessionExpiredShown = true;
-                IflDialog.alert(
-                    'Your session has been idle and your authentication token has expired. The page will refresh now.',
-                    { title: 'Session refresh required', variant: 'warning' }
-                ).then(() => { try { location.reload(); } catch (_) {} });
+                console.warn('[SSO] ifl:session-expired received (no-op).');
             });
         })();
     </script>

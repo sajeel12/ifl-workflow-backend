@@ -175,13 +175,12 @@
             } catch (err) {
                 console.warn('[Portal]', err && err.message);
                 if (currentTab === tab) {
-                    // 401 here means the iflFetch retry path also failed —
-                    // a session-expired event has already been dispatched and
-                    // the IflDialog will prompt a reload. Show a friendly
-                    // placeholder instead of the scary "queue 401" string.
+                    // 401 here means the iflFetch silent-retry path also
+                    // failed. We no longer auto-reload (that caused a loop on
+                    // flaky token.aspx). Tell the user how to recover manually.
                     const msg = err && err.message || '';
                     if (/^queue\s+401$/i.test(msg)) {
-                        renderState('<div style="color:#dc2626;">Session expired. Reopening…</div>');
+                        renderState('<div style="color:#dc2626;">Could not verify your session.<br><span style="font-size:.78rem;">Please open this page in a new tab.</span></div>');
                     } else {
                         renderState('<div style="color:#dc2626;">Could not load tasks.<br><span style="font-size:.78rem;">' + escapeHTML(msg) + '</span></div>');
                     }
