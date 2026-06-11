@@ -17,6 +17,7 @@ router.get('/offboarding', adminPageGuard, adminController.renderOffboardingPane
 router.get('/workflow-approvers', adminPageGuard, adminController.renderWorkflowApproversPanel);
 router.get('/onboarding-history', adminPageGuard, adminController.renderOnboardingHistoryPanel);
 router.get('/offboarding-history', adminPageGuard, adminController.renderOffboardingHistoryPanel);
+router.get('/internet-browsing-history', adminPageGuard, adminController.renderIBRHistoryPanel);
 router.get('/system-config', adminPageGuard, adminController.renderSystemConfigPanel);
 router.get('/employee-journey', adminPageGuard, adminController.renderEmployeeJourneyPanel);
 
@@ -50,6 +51,8 @@ router.get('/onboarding-requests', ...guard, adminController.getOnboardingReques
 router.get('/onboarding-timeline/:id', ...guard, adminController.getOnboardingTimeline);
 router.get('/offboarding-requests', ...guard, adminController.getOffboardingRequests);
 router.get('/offboarding-timeline/:id', ...guard, adminController.getOffboardingTimeline);
+router.get('/internet-browsing-requests', ...guard, adminController.getIBRRequests);
+router.get('/internet-browsing-timeline/:id', ...guard, adminController.getIBRTimeline);
 
 // ── Employee Journey APIs (admin-only, adminApiGuard) ─────────────────────
 router.get('/ej/employees', ...guard, ejController.listEmployees);
@@ -62,6 +65,8 @@ router.get('/onboarding/:id/resend-preview', ...guard, adminController.resendSta
 router.post('/onboarding/:id/resend-email', ...guard, adminController.resendStageEmail);
 router.get('/offboarding/:id/resend-preview', ...guard, adminController.resendOffboardingStagePreview);
 router.post('/offboarding/:id/resend-email', ...guard, adminController.resendOffboardingStageEmail);
+router.get('/internet-browsing/:id/resend-preview', ...guard, adminController.resendIBRStagePreview);
+router.post('/internet-browsing/:id/resend-email', ...guard, adminController.resendIBRStageEmail);
 router.delete('/onboarding/:id', ...guard, adminController.adminDeleteRequest);
 
 // Search AD users by name/sAMAccountName/email — powers the approver search box.

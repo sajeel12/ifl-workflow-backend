@@ -5,6 +5,7 @@ import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocation
 import SystemConfig from '../models/SystemConfig.js';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import OffboardingRequest from '../models/OffboardingRequest.js';
+import InternetBrowsingRequest from '../models/InternetBrowsingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
 import oracleSyncService from '../services/oracleSyncService.js';
 import { Op } from 'sequelize';
@@ -46,6 +47,41 @@ const EMAIL_TYPE_TO_PORTAL_SLUG = {
     DCI_IMPLEMENTATION: 'dci-implementer',
     OPS_ACTION: 'it-ops',
 };
+
+// Map the current pending INTERNET BROWSING status → role + email type +
+// portal slug. Shared by the IBR resend preview + send handlers below.
+// HOD_APPROVAL has no portal slug (HODs act from the emailed link only).
+// The RN Approval stage (PendingITOpsMgr) routes to the existing IT_OPS team.
+const IBR_STAGE_MAP = {
+    PendingITOpsValidation: { roleKey: 'IT_OPS',              type: 'IT_OPS_VALIDATION', slug: 'it-ops' },
+    PendingHOD:             { roleKey: 'HOD',                 type: 'HOD_APPROVAL',      slug: null },
+    PendingFMS:             { roleKey: 'NETWORK_VALIDATOR',   type: 'FMS_VALIDATION',    slug: 'network-validator' },
+    PendingITOpsMgr:        { roleKey: 'IT_OPS',              type: 'IT_OPS_MGR',        slug: 'it-ops' },
+    PendingITHOD:           { roleKey: 'IT_HOD',              type: 'IT_HOD_APPROVAL',   slug: 'it-hod' },
+    PendingImplementation:  { roleKey: 'NETWORK_IMPLEMENTER', type: 'IMPLEMENTATION',    slug: 'network-implementer' },
+};
+
+// Resolve the currently-configured recipient for an IBR stage. Uses
+// RecipientService.getWithFallback (the same path the IBR service uses on a
+// live transition) so location-awareness + primary/secondary fallback both
+// apply. requestId is omitted so this is a pure read — it does NOT reset the
+// 2-day fallback clock (a resend shouldn't disturb escalation timing).
+async function resolveIBRResendRecipient(roleKey, context) {
+    if (roleKey === 'HOD') {
+        const email = await RecipientService.get('HOD', context);
+        return { role: 'Head of Department', name: '', email: email || '', username: null };
+    }
+    const r = await RecipientService.getWithFallback(roleKey, {
+        location:   context.location || null,
+        employeeId: context.employeeId
+    });
+    return {
+        role:     roleKey,
+        name:     r.name || '',
+        email:    r.email || '',
+        username: r.username || null
+    };
+}
 
 // Delegation roles own a single pending status. When admin reassigns the role,
 // all in-flight requests at that status must be rebound immediately so that:
@@ -1438,6 +1474,176 @@ class AdminController {
         } catch (error) {
             console.error('Error resending offboarding stage email:', error);
             return res.status(500).json({ success: false, error: 'Failed to resend stage email', details: error.message });
+        }
+    }
+
+    /**
+     * API: Resend the active stage email for an INTERNET BROWSING request.
+     * Mirrors resendOffboardingStageEmail. Reuses the existing
+     * currentStageToken so any prior link stays valid; re-resolves the live
+     * configured approver and re-points the request to them. This unsticks an
+     * IBR submitted BEFORE its FMS / Network Implementer approver was set up.
+     *
+     * GET  /admin/internet-browsing/:id/resend-preview
+     * POST /admin/internet-browsing/:id/resend-email
+     */
+    async resendIBRStagePreview(req, res) {
+        try {
+            const { id } = req.params;
+            const request = await InternetBrowsingRequest.findByPk(id);
+            if (!request) return res.status(404).json({ success: false, error: 'Internet Browsing request not found' });
+            if (!request.currentStageToken) {
+                return res.status(400).json({ success: false, error: `Request is in a closed state (${request.status}); no active stage to resend.` });
+            }
+            const map = IBR_STAGE_MAP[request.status];
+            if (!map) return res.status(400).json({ success: false, error: `No resend handler for status "${request.status}"` });
+
+            const recipient = await resolveIBRResendRecipient(map.roleKey, { location: request.location, employeeId: request.employeeId });
+            if (!recipient.email) {
+                return res.status(400).json({ success: false, error: `No approver is configured for this stage (${request.status}). Set one in Workflow Approvers first.` });
+            }
+            return res.json({ success: true, role: recipient.role, name: recipient.name, email: recipient.email });
+        } catch (error) {
+            console.error('Error previewing IBR resend recipient:', error);
+            return res.status(500).json({ success: false, error: 'Failed to resolve recipient', details: error.message });
+        }
+    }
+
+    async resendIBRStageEmail(req, res) {
+        try {
+            const { id } = req.params;
+            const request = await InternetBrowsingRequest.findByPk(id);
+            if (!request) return res.status(404).json({ success: false, error: 'Internet Browsing request not found' });
+
+            if (!request.currentStageToken) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Request is in a closed state (${request.status}); no active token to resend.`
+                });
+            }
+
+            const map = IBR_STAGE_MAP[request.status];
+            if (!map) return res.status(400).json({ success: false, error: `No resend handler for status "${request.status}"` });
+
+            const recipient = await resolveIBRResendRecipient(map.roleKey, { location: request.location, employeeId: request.employeeId });
+            if (!recipient.email) {
+                return res.status(400).json({ success: false, error: `No approver is configured for this stage (${request.status}). Set one in Workflow Approvers first.` });
+            }
+
+            await request.update({
+                currentStageAssigneeEmail:    recipient.email,
+                currentStageAssigneeUsername: recipient.username || null
+            });
+
+            const actionLink = map.slug
+                ? `${process.env.APP_URL}/portal/${map.slug}/enter?action=${request.currentStageToken}`
+                : `${process.env.APP_URL}/api/internet-browsing/handle?token=${request.currentStageToken}`;
+            await emailService.sendInternetBrowsingNotification(recipient.email, request, actionLink, map.type);
+
+            await TimelineEvent.create({
+                requestId: request.id,
+                action: 'Email Regenerated',
+                actorRole: 'Admin',
+                details: `Internet Browsing action email re-sent to ${recipient.email} (${recipient.role}) for stage ${request.status}; stage assignee refreshed. Existing token reused.`,
+                timestamp: new Date()
+            });
+
+            const who = recipient.name ? `${recipient.name} (${recipient.email})` : recipient.email;
+            return res.json({ success: true, message: `Action email re-sent to ${who}` });
+        } catch (error) {
+            console.error('Error resending IBR stage email:', error);
+            return res.status(500).json({ success: false, error: 'Failed to resend stage email', details: error.message });
+        }
+    }
+
+    /**
+     * View: Render the Internet Browsing history admin panel.
+     */
+    renderIBRHistoryPanel(req, res) {
+        res.render('pages/admin_internet_browsing_history', { activeTab: 'internet-browsing-history' });
+    }
+
+    /**
+     * API: List Internet Browsing requests with optional search + status filter.
+     */
+    async getIBRRequests(req, res) {
+        try {
+            const { page = 1, limit = 15, status, search } = req.query;
+            const limitInt = parseInt(limit, 10);
+            const pageInt = parseInt(page, 10);
+            const offset = (pageInt - 1) * limitInt;
+
+            const whereClause = {};
+            if (status) whereClause.status = status;
+            if (search) {
+                const searchStr = `%${search}%`;
+                whereClause[Op.or] = [
+                    { employeeId: { [Op.like]: searchStr } },
+                    { fullName: { [Op.like]: searchStr } },
+                    { department: { [Op.like]: searchStr } }
+                ];
+            }
+
+            const { count, rows } = await InternetBrowsingRequest.findAndCountAll({
+                where: whereClause,
+                limit: limitInt,
+                offset,
+                order: [['createdAt', 'DESC']],
+                attributes: [
+                    'id', 'employeeId', 'fullName', 'department', 'designation',
+                    'status', 'createdAt', 'initiatedAt', 'completedAt',
+                    'currentStageAssigneeEmail', 'browsingRights', 'facilityDuration'
+                ]
+            });
+
+            res.json({
+                success: true,
+                data: rows,
+                pagination: { total: count, page: pageInt, limit: limitInt, totalPages: Math.ceil(count / limitInt) }
+            });
+        } catch (error) {
+            console.error('Error fetching IBR requests:', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch Internet Browsing requests' });
+        }
+    }
+
+    /**
+     * API: Get timeline events for a specific Internet Browsing request.
+     */
+    async getIBRTimeline(req, res) {
+        try {
+            const { id } = req.params;
+            const request = await InternetBrowsingRequest.findByPk(id, {
+                attributes: [
+                    'id', 'employeeId', 'fullName', 'department', 'designation',
+                    'status', 'createdAt', 'initiatedAt', 'completedAt',
+                    'currentStageAssigneeEmail', 'ntLogin', 'userType',
+                    'browsingRights', 'facilityDuration',
+                    'itOpsRemarks', 'hodRemarks', 'fmsRemarks', 'itOpsMgrRemarks',
+                    'itHodRemarks', 'implementerNotes', 'networkImplementerName'
+                ]
+            });
+            if (!request) {
+                return res.status(404).json({ success: false, error: 'Internet Browsing request not found' });
+            }
+
+            const events = await TimelineEvent.findAll({
+                where: { requestId: id },
+                order: [['timestamp', 'ASC']],
+                attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
+            });
+            const timeline = events.map(e => {
+                const ev = e.toJSON();
+                ev.actionLabel = humanizeAction(ev.action);
+                ev.detailsText = humanizeDetails(ev.details);
+                ev.detailsHTML = humanizeDetailsHTML(ev.details);
+                return ev;
+            });
+
+            res.json({ success: true, request, timeline });
+        } catch (error) {
+            console.error('Error fetching IBR timeline:', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch Internet Browsing timeline' });
         }
     }
 

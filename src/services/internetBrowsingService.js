@@ -12,13 +12,14 @@ import logger from '../utils/logger.js';
 // and OFFBOARDING_TYPE_TO_PORTAL_SLUG in offboardingService.
 //
 // HOD_APPROVAL has no portal slug — HODs always act via the emailed direct
-// link. IT_OPS routes through 'it-ops' for both stage 2 (validation) and
-// is followed downstream by NETWORK_IMPLEMENTER for stage 7.
+// link. The RN Approval stage (IT_OPS_MGR email type) routes to the existing
+// IT_OPS team + portal — the same Location Ops / IT Ops pool that handles
+// stage 2 validation — per client decision (no separate IT Ops Manager role).
 const IBR_TYPE_TO_PORTAL_SLUG = {
     IT_OPS_VALIDATION: 'it-ops',
     HOD_APPROVAL:       null,
     FMS_VALIDATION:    'network-validator',
-    IT_OPS_MGR:        'it-ops-mgr',
+    IT_OPS_MGR:        'it-ops',
     IT_HOD_APPROVAL:   'it-hod',
     IMPLEMENTATION:    'network-implementer',
 };
@@ -261,7 +262,10 @@ export const handleFMSValidation = async (token, action, remarks) => {
     }
 
     const newToken = crypto.randomBytes(20).toString('hex');
-    const recipient = await RecipientService.getWithFallback('IT_OPS_MGR', {
+    // RN Approval routes to the existing IT_OPS team (location-aware), not a
+    // separate IT Ops Manager role.
+    const recipient = await RecipientService.getWithFallback('IT_OPS', {
+        location:   request.location,
         employeeId: request.employeeId,
         requestId:  request.id
     });

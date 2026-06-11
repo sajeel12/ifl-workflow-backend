@@ -348,6 +348,18 @@ async function startServer() {
             logger.warn(`[Schema] OPS_TEAM cleanup skipped: ${err.message}`);
         }
 
+        // Remove the phantom IT_OPS_MGR approver row. IT_OPS_MGR is a
+        // monitoring-only role (it reads the IT_OPS config, not its own row);
+        // a config row was briefly seeded when RN Approval was wired to it, but
+        // RN now routes to the existing IT_OPS team. The stray row only makes a
+        // spurious card appear in the Workflow Approvers admin page.
+        try {
+            const deleted = await WorkflowApproverConfig.destroy({ where: { roleKey: 'IT_OPS_MGR' } });
+            if (deleted > 0) logger.info(`[Schema] Removed ${deleted} stale IT_OPS_MGR row(s) from WorkflowApproverConfig.`);
+        } catch (err) {
+            logger.warn(`[Schema] IT_OPS_MGR cleanup skipped: ${err.message}`);
+        }
+
         // Seed default system configs if table is empty. Non-fatal.
         try {
             const configCount = await SystemConfig.count();

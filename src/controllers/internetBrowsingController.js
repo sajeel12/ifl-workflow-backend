@@ -16,7 +16,7 @@ const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key
 const IBR_ROLE_TO_PORTAL = {
     ITOps:              { key: 'IT_OPS',              label: 'IT Operations' },
     FMS:                { key: 'NETWORK_VALIDATOR',   label: 'Network Validator (FMS)' },
-    ITOpsMgr:           { key: 'IT_OPS_MGR',          label: 'IT Operations Manager' },
+    ITOpsMgr:           { key: 'IT_OPS',              label: 'IT Operations' },
     ITHOD:              { key: 'IT_HOD',              label: 'IT HOD' },
     NetworkImplementer: { key: 'NETWORK_IMPLEMENTER', label: 'Network Implementer' }
 };
@@ -331,7 +331,7 @@ const renderForm = async (req, res, token) => {
                 ITOps:              'IT Operations',
                 HOD:                'HOD',
                 FMS:                'Network Validator (FMS)',
-                ITOpsMgr:           'IT Operations Manager',
+                ITOpsMgr:           'IT Operations (RN Approval)',
                 ITHOD:              'IT HOD',
                 NetworkImplementer: 'Network Implementer'
             })[role] || 'this stage';
@@ -387,18 +387,21 @@ export const initiate = async (req, res) => handleRequest(req, res);
 
 // ─── Portal queue ─────────────────────────────────────────────────────
 // Returns pending or history rows scoped to the calling role's queue.
-// Roles understood: IT_OPS, NETWORK_VALIDATOR, IT_OPS_MGR, IT_HOD, NETWORK_IMPLEMENTER.
+// Roles understood: IT_OPS, NETWORK_VALIDATOR, IT_HOD, NETWORK_IMPLEMENTER.
+// IT_OPS owns BOTH the stage-2 validation queue and the stage-5 RN approval
+// queue (same team handles the request twice) — so its status filter is an
+// array. Sequelize treats `status: [...]` as an IN clause.
 const STATUS_FOR_ROLE = {
-    IT_OPS:              'PendingITOpsValidation',
+    IT_OPS:              ['PendingITOpsValidation', 'PendingITOpsMgr'],
     NETWORK_VALIDATOR:   'PendingFMS',
-    IT_OPS_MGR:          'PendingITOpsMgr',
     IT_HOD:              'PendingITHOD',
     NETWORK_IMPLEMENTER: 'PendingImplementation'
 };
 const HISTORY_ACTOR_ROLES = {
-    IT_OPS:              ['ITOps'],
+    // ITOps actor role is logged for both stage-2 validation and stage-5 RN
+    // approval (the latter still tags 'ITOpsMgr' on its timeline events).
+    IT_OPS:              ['ITOps', 'ITOpsMgr'],
     NETWORK_VALIDATOR:   ['FMS'],
-    IT_OPS_MGR:          ['ITOpsMgr'],
     IT_HOD:              ['ITHOD'],
     NETWORK_IMPLEMENTER: ['NetworkImplementer']
 };

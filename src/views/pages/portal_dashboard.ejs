@@ -865,9 +865,10 @@
                                             <%
                                                 // Internet Browsing tab visibility:
                                                 // - Approvers/implementers see it on their stage's queue.
+                                                // - IT_OPS owns both stage-2 validation and stage-5 RN approval.
                                                 // - NETWORK_VALIDATOR + NETWORK_IMPLEMENTER are IBR-only roles,
                                                 //   so the IBR tab is shown for them and becomes the default.
-                                                const IBR_ROLES = ['IT_OPS', 'IT_OPS_MGR', 'IT_HOD',
+                                                const IBR_ROLES = ['IT_OPS', 'IT_HOD',
                                                                    'NETWORK_VALIDATOR', 'NETWORK_IMPLEMENTER'];
                                                 const showIBRTab = IBR_ROLES.includes(roleKey);
                                             %>

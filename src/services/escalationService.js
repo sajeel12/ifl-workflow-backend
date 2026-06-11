@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import OnboardingRequest from '../models/OnboardingRequest.js';
 import OffboardingRequest from '../models/OffboardingRequest.js';
+import InternetBrowsingRequest from '../models/InternetBrowsingRequest.js';
 import WorkflowApproverConfig from '../models/WorkflowApproverConfig.js';
 import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocationOverride.js';
 import TimelineEvent from '../models/TimelineEvent.js';
@@ -35,6 +36,32 @@ const FALLBACK_ELIGIBLE = {
         roleKey:        'IT_OPS',
         emailType:      'OPS_ACTION',
         stageStartField: 'dciImplementedAt'
+    }
+};
+
+// Internet Browsing fallback-eligible stages. Same 2-day primary→secondary
+// model as the onboarding map above, keyed by IBR statuses + IBR email types
+// and portal slugs. Only roles with a primary/secondary fallback config
+// participate (IT_OPS validation, FMS, Network Implementer). HOD / RN (IT_OPS
+// again) / IT HOD are delegation-style — handled by admin reassignment.
+const IBR_FALLBACK_ELIGIBLE = {
+    PendingITOpsValidation: {
+        roleKey:         'IT_OPS',
+        emailType:       'IT_OPS_VALIDATION',
+        slug:            'it-ops',
+        stageStartField: 'initiatedAt'
+    },
+    PendingFMS: {
+        roleKey:         'NETWORK_VALIDATOR',
+        emailType:       'FMS_VALIDATION',
+        slug:            'network-validator',
+        stageStartField: 'hodApprovedAt'
+    },
+    PendingImplementation: {
+        roleKey:         'NETWORK_IMPLEMENTER',
+        emailType:       'IMPLEMENTATION',
+        slug:            'network-implementer',
+        stageStartField: 'itHodApprovedAt'
     }
 };
 
@@ -161,7 +188,16 @@ export async function runEscalationCheck() {
         }
     }
 
-    logger.info(`[Escalation] Done — checked ${checked}, escalated ${escalated}.`);
+    logger.info(`[Escalation] Done (onboarding) — checked ${checked}, escalated ${escalated}.`);
+
+    // IBR pass — same 48h primary→secondary logic for Internet Browsing.
+    try {
+        const ibr = await runIBREscalationCheck();
+        checked   += ibr.checked;
+        escalated += ibr.escalated;
+    } catch (err) {
+        logger.error(`[Escalation] IBR pass failed: ${err.message}`);
+    }
 
     // Second pass: delegation auto-revert. Independent of the 48h
     // primary→secondary timer above. Operates on both Onboarding and
@@ -174,6 +210,81 @@ export async function runEscalationCheck() {
         logger.error(`[Escalation] Delegation revert pass failed: ${err.message}`);
         return { checked, escalated, delegationReverts: { checked: 0, reverted: 0 } };
     }
+}
+
+// 48h primary→secondary escalation for Internet Browsing requests. Same
+// shape as runEscalationCheck's onboarding loop, scoped to IBR statuses +
+// the IBR email/slug maps. Returns { checked, escalated }.
+async function runIBREscalationCheck() {
+    const statuses = Object.keys(IBR_FALLBACK_ELIGIBLE);
+    logger.info(`[Escalation] Starting 48h IBR check — statuses: ${statuses.join(', ')}`);
+
+    const requests = await InternetBrowsingRequest.findAll({
+        where: { status: { [Op.in]: statuses } }
+    });
+
+    let checked = 0;
+    let escalated = 0;
+
+    for (const request of requests) {
+        try {
+            checked++;
+            const stageCfg = IBR_FALLBACK_ELIGIBLE[request.status];
+            if (!stageCfg) continue;
+
+            const stageStartedAt = request[stageCfg.stageStartField];
+            if (!stageStartedAt) continue;
+            const ageMs = Date.now() - new Date(stageStartedAt).getTime();
+            if (ageMs < TWO_DAYS_MS) continue;
+
+            const { activeCfg } = await resolveConfig(stageCfg.roleKey, request.location);
+            if (!activeCfg?.secondaryEmail) continue;
+
+            if (emailsMatch(request.currentStageAssigneeEmail, activeCfg.secondaryEmail)) continue;
+            if (!request.currentStageToken) continue;
+
+            const hoursStalled = Math.round(ageMs / 3_600_000);
+            logger.info(
+                `[Escalation] IBR #${request.id} stalled ${hoursStalled}h in ${request.status} ` +
+                `(${request.location || 'global'}) — escalating from ${activeCfg.approverEmail} → ${activeCfg.secondaryEmail}`
+            );
+
+            if (!activeCfg.primaryExpiredAt) {
+                await activeCfg.update({ primaryExpiredAt: new Date() });
+            }
+
+            await request.update({
+                currentStageAssigneeEmail:    activeCfg.secondaryEmail,
+                currentStageAssigneeUsername: activeCfg.secondaryUsername || null
+            });
+
+            const actionLink = stageCfg.slug
+                ? `${process.env.APP_URL}/portal/${stageCfg.slug}/enter?action=${request.currentStageToken}`
+                : `${process.env.APP_URL}/api/internet-browsing/handle?token=${request.currentStageToken}`;
+            await emailService.sendInternetBrowsingNotification(
+                activeCfg.secondaryEmail,
+                request,
+                actionLink,
+                stageCfg.emailType
+            );
+
+            await TimelineEvent.create({
+                requestId: request.id,
+                action:    'Auto-Escalated to Secondary',
+                actorRole: 'System',
+                details:   `Primary (${activeCfg.approverEmail}) did not act within 48 hours. ` +
+                           `Stage automatically escalated to secondary (${activeCfg.secondaryEmail}).`,
+                timestamp: new Date()
+            });
+
+            escalated++;
+        } catch (err) {
+            logger.error(`[Escalation] IBR error on request #${request.id}: ${err.message}`);
+        }
+    }
+
+    logger.info(`[Escalation] Done (IBR) — checked ${checked}, escalated ${escalated}.`);
+    return { checked, escalated };
 }
 
 // Default delegation timeout window. After this many hours of inactivity by
