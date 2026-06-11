@@ -10,6 +10,7 @@ import cronService from './src/services/cronService.js';
 import Employee from './src/models/Employee.js';
 import OnboardingRequest from './src/models/OnboardingRequest.js';
 import OffboardingRequest from './src/models/OffboardingRequest.js';
+import InternetBrowsingRequest from './src/models/InternetBrowsingRequest.js';
 import TimelineEvent from './src/models/TimelineEvent.js';
 import SyncLog from './src/models/SyncLog.js';
 import WorkflowApproverConfig from './src/models/WorkflowApproverConfig.js';
@@ -27,6 +28,8 @@ const DEFAULT_APPROVER_CONFIGS = [
     { roleKey: 'DCI_MANAGER', label: 'DCI Manager', description: 'DCI Manager decision in Step 5', workflowStage: 'Step 5 – DCI Manager Decision', approverEmail: process.env.EMAIL_DCI_MANAGER || null, approverName: 'DCI Manager' },
     { roleKey: 'IT_HOD', label: 'IT Head of Department', description: 'IT HOD review in Step 5b (email required)', workflowStage: 'Step 5b – IT HOD Review', approverEmail: process.env.EMAIL_IT_HOD || null, approverName: 'IT HOD' },
     { roleKey: 'DCI_IMPLEMENTER', label: 'DCI Implementer', description: 'Implements DCI changes in Step 6', workflowStage: 'Step 6 – DCI Implementation', approverEmail: process.env.EMAIL_DCI_IMPLEMENTER || null, approverName: 'DCI Implementer' },
+    { roleKey: 'NETWORK_VALIDATOR',   label: 'Network Validator (FMS)', description: 'Validates Internet Browsing requests against network/firewall policy.', workflowStage: 'IBR – FMS Validation', approverEmail: process.env.EMAIL_NETWORK_VALIDATOR || null, approverName: 'Network Validator' },
+    { roleKey: 'NETWORK_IMPLEMENTER', label: 'Network Implementer',     description: 'Applies approved Internet Browsing requests (proxy / firewall changes).', workflowStage: 'IBR – Network Implementation', approverEmail: process.env.EMAIL_NETWORK_IMPLEMENTER || null, approverName: 'Network Implementer' },
 ];
 
 const PORT = process.env.PORT || 3000;
@@ -353,6 +356,18 @@ async function startServer() {
             if (deleted > 0) logger.info(`[Schema] Removed ${deleted} stale OPS_TEAM row(s) from WorkflowApproverConfig.`);
         } catch (err) {
             logger.warn(`[Schema] OPS_TEAM cleanup skipped: ${err.message}`);
+        }
+
+        // Remove the phantom IT_OPS_MGR approver row. IT_OPS_MGR is a
+        // monitoring-only role (it reads the IT_OPS config, not its own row);
+        // a config row was briefly seeded when RN Approval was wired to it, but
+        // RN now routes to the existing IT_OPS team. The stray row only makes a
+        // spurious card appear in the Workflow Approvers admin page.
+        try {
+            const deleted = await WorkflowApproverConfig.destroy({ where: { roleKey: 'IT_OPS_MGR' } });
+            if (deleted > 0) logger.info(`[Schema] Removed ${deleted} stale IT_OPS_MGR row(s) from WorkflowApproverConfig.`);
+        } catch (err) {
+            logger.warn(`[Schema] IT_OPS_MGR cleanup skipped: ${err.message}`);
         }
 
         // Seed default system configs if table is empty. Non-fatal.

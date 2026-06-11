@@ -256,10 +256,19 @@
 
   <% const itOps=approvers.find(a=> a.roleKey === 'IT_OPS');
     const hrInit = approvers.find(a => a.roleKey === 'HR_INITIATOR');
-    const delegationKeys = ['IT_HOD', 'DCI_MANAGER', 'IT_OPS_MGR'];
-    const fallbackKeys = ['DCI_TEAM', 'DCI_IMPLEMENTER'];
+    // IT_OPS_MGR is monitoring-only (it reads the IT_OPS config, has no
+    // approver row of its own), so it is deliberately NOT listed here — it
+    // must never render a configurable card in this page.
+    const delegationKeys = ['IT_HOD', 'DCI_MANAGER'];
+    // NETWORK_VALIDATOR + NETWORK_IMPLEMENTER are the two IBR teams. Same
+    // 2-day primary/secondary fallback semantics as DCI_TEAM + DCI_IMPLEMENTER,
+    // so they get rendered in the same Fallback Roles section below.
+    const fallbackKeys = ['DCI_TEAM', 'DCI_IMPLEMENTER', 'NETWORK_VALIDATOR', 'NETWORK_IMPLEMENTER'];
+    // knownKeys keeps IT_OPS_MGR so that, if a stale row exists before the
+    // startup cleanup runs, it is NOT surfaced in the "Other Roles" catch-all
+    // section either.
     const knownKeys = new
-    Set(['IT_OPS','HR_INITIATOR','IT_HOD','DCI_MANAGER','DCI_TEAM','DCI_IMPLEMENTER','IT_OPS_MGR']);
+    Set(['IT_OPS','HR_INITIATOR','IT_HOD','DCI_MANAGER','DCI_TEAM','DCI_IMPLEMENTER','IT_OPS_MGR','NETWORK_VALIDATOR','NETWORK_IMPLEMENTER']);
     %>
 
     <!-- ══════════════════════════════════════════════════════════════════════

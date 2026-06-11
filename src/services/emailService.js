@@ -745,6 +745,121 @@ export const sendOffboardingCompletedNotification = async (toEmailList, request)
     });
 };
 
+// Internet Browsing Request stage notification — same bullet shape as the
+// onboarding / offboarding dispatchers, brand title swapped for IBR. Each
+// stage email is short by design (three or four bullets); the Adaptive Card
+// rendering inside sendApprovalEmail takes care of layout.
+export const sendInternetBrowsingNotification = async (toEmail, request, actionLink, type) => {
+    const userInfo = `${request.fullName || '—'}${request.designation ? ' (' + request.designation + ')' : ''}`;
+    const dept = request.department || '—';
+    const reqNo = `#${request.id}`;
+    const rights = request.browsingRights === 'GeneralBrowsingWithStreaming'
+        ? 'General browsing with streaming'
+        : 'General browsing';
+    const duration = request.facilityDuration === 'OneTime' ? 'One time' : 'Permanent';
+
+    const buildBullets = (action, next) => {
+        const lines = [
+            '::BULLETS::',
+            `Employee: ${userInfo}`,
+            `Department: ${dept}`,
+            `Browsing rights: ${rights}`,
+            `Duration: ${duration}`,
+            `Action: ${action}`
+        ];
+        if (next) lines.push(`Next: ${next}`);
+        return lines.join('\n');
+    };
+
+    let subject, body, stageName;
+    switch (type) {
+        case 'IT_OPS_VALIDATION':
+            subject   = `Internet Browsing ${reqNo} — Location Ops / IT Ops Validation`;
+            stageName = 'IT Ops Validation';
+            body = buildBullets(
+                'Validate the request against location policy and the user\'s role.',
+                'Approved → Employee HOD for approval.'
+            );
+            break;
+        case 'HOD_APPROVAL':
+            subject   = `Internet Browsing ${reqNo} — HOD Approval`;
+            stageName = 'HOD Approval';
+            body = buildBullets(
+                'Confirm this user genuinely needs internet access for their work.',
+                'Approved → FMS (Network Validator) for review.'
+            );
+            break;
+        case 'FMS_VALIDATION':
+            subject   = `Internet Browsing ${reqNo} — FMS Validation`;
+            stageName = 'FMS Validation';
+            body = buildBullets(
+                'Review the proposed internet rights against network policy.',
+                'Approved → IT Operations Manager for approval.'
+            );
+            break;
+        case 'IT_OPS_MGR':
+            subject   = `Internet Browsing ${reqNo} — RN Approval`;
+            stageName = 'RN Approval';
+            body = buildBullets(
+                'Approve the request before it reaches IT HOD.',
+                'Approved → IT HOD for final approval.'
+            );
+            break;
+        case 'IT_HOD_APPROVAL':
+            subject   = `Internet Browsing ${reqNo} — UZ Approval`;
+            stageName = 'UZ Approval';
+            body = buildBullets(
+                'Final senior approval before implementation.',
+                'Approved → Network Implementer to apply the change.'
+            );
+            break;
+        case 'IMPLEMENTATION':
+            subject   = `Internet Browsing ${reqNo} — Implementation`;
+            stageName = 'Implementation';
+            body = buildBullets(
+                'Apply the proxy/firewall change and upload proof.',
+                'Final notice will go to the employee, HOD and IT HOD.'
+            );
+            break;
+        default:
+            subject   = `Internet Browsing ${reqNo} — Action Required`;
+            stageName = 'Action Required';
+            body = buildBullets('Your input is required.', 'Workflow will continue after your action.');
+    }
+
+    return sendApprovalEmail(
+        toEmail, subject, body, actionLink,
+        'Internet Browsing Workflow', '',
+        {
+            brandTitle: 'Internet Browsing Request',
+            reqId:      request.id,
+            stageName
+        }
+    );
+};
+
+// Final IBR-completed notification — courtesy email to the requesting
+// employee + their HOD + IT HOD. No action link.
+export const sendIBRCompletionNotification = async (toEmailList, request) => {
+    const userInfo = `${request.fullName || request.employeeId} (${request.designation || '—'}, ${request.department || '—'})`;
+    const rights = request.browsingRights === 'GeneralBrowsingWithStreaming'
+        ? 'General browsing with streaming'
+        : 'General browsing';
+    const duration = request.facilityDuration === 'OneTime' ? 'One time' : 'Permanent';
+    const subject  = `Internet Browsing Approved: ${userInfo}`;
+    const body =
+        `Internet browsing access has been approved and applied for ${userInfo}.\n\n` +
+        `Browsing rights: ${rights}\n` +
+        `Duration: ${duration}\n\n` +
+        `This is a courtesy notice — no further action is required from you.`;
+    return sendRequesterNotification(toEmailList, subject, body, {
+        requestId:    request.id,
+        requestType:  'Internet Browsing',
+        status:       'Completed',
+        currentStage: 'Completed'
+    });
+};
+
 export const sendPortalAccessLink = async (toEmail, roleName, portalUrl) => {
     logger.info(`[Email] Sending portal access link to ${toEmail} for ${roleName}`);
     const subject = `Your ${roleName} Portal Access Link`;

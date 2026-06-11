@@ -1,0 +1,350 @@
+<%- include('../partials/admin_shell_top', { activeTab: 'internet-browsing-history' }) %>
+
+  <!-- Page header -->
+  <div class="a-page-hd">
+    <h1 class="a-page-hd__title">Internet Browsing History &amp; Timeline</h1>
+    <p class="a-page-hd__sub">View Internet Browsing request workflow history, and re-send a stalled stage's action email to the currently-configured approver.</p>
+  </div>
+
+  <!-- Main Content Card -->
+  <div class="a-card">
+    <!-- Search & Filter Section -->
+    <div class="a-card__body" style="padding:20px; border-bottom:1px solid var(--a-border); background:var(--a-surface-2);">
+      <div style="display:grid;grid-template-columns:1fr 240px;gap:16px;align-items:flex-end;">
+        <div>
+          <label class="a-label">Search Requests</label>
+          <div style="position:relative;">
+            <input type="text" id="searchInput" class="a-input" placeholder="Search by name, ID or department..." oninput="onSearchChange()" style="padding-left:38px;">
+            <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--a-text-faint);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+        </div>
+        <div>
+          <label class="a-label">Status Filter</label>
+          <select id="statusFilter" class="a-input" onchange="onFilterChange()">
+            <option value="">All Statuses</option>
+            <option value="PendingITOpsValidation">Pending IT Ops Validation</option>
+            <option value="PendingHOD">Pending HOD Approval</option>
+            <option value="PendingFMS">Pending FMS Validation</option>
+            <option value="PendingITOpsMgr">Pending RN Approval</option>
+            <option value="PendingITHOD">Pending UZ Approval</option>
+            <option value="PendingImplementation">Pending Implementation</option>
+            <option value="Completed">Completed</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="a-card__hd" style="background:#fff; border-bottom:1px solid var(--a-border); padding:12px 20px;">
+      <h3 class="a-card__title" style="font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--a-text-muted);">Request History</h3>
+    </div>
+    <div class="a-card__body" style="padding:0;">
+      <div id="requestsList">
+        <div style="text-align:center;padding:60px;color:var(--a-text-muted);">
+          <div style="font-size:2rem;margin-bottom:10px;opacity:0.3;">⏳</div>
+          Loading requests…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline Details Modal -->
+  <div class="modal-overlay" id="timelineModal">
+    <div class="modal a-modal--lg" style="max-width:820px;">
+      <div class="modal-header">
+        <div>
+          <h2 id="modalTitle">Internet Browsing Timeline</h2>
+          <p style="margin:4px 0 0;color:var(--a-text-muted);font-size:.85rem;" id="modalSubtitle"></p>
+        </div>
+        <button class="close-btn" onclick="closeModal()">×</button>
+      </div>
+
+      <!-- Admin Recovery Actions Bar (only shown while the request is still
+           in an active token-bearing stage). Re-sends the stage email to the
+           currently-configured approver using the same currentStageToken. -->
+      <div id="adminActionsBar" style="display:none; padding:12px 24px; border-bottom:1px solid var(--a-border); background:#fffbeb; gap:10px; align-items:center; flex-wrap:wrap;">
+        <div style="flex:1; min-width:240px;">
+          <div style="font-size:.8rem; font-weight:600; color:#854d0e; margin-bottom:2px;">Recovery Action</div>
+          <div style="font-size:.75rem; color:#a16207;" id="adminActionsHint">Re-send the action email to the person currently responsible for this stage. You'll see who receives it before it sends.</div>
+        </div>
+        <button id="btnResendEmail" class="a-btn" style="background:#0078D4; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:600;" onclick="resendIBREmail()">
+          ✉ Resend Action Email
+        </button>
+      </div>
+
+      <!-- Request detail bar -->
+      <div id="detailBar" style="display:none; padding:14px 24px; border-bottom:1px solid var(--a-border); background:#f0f9ff;">
+        <div style="font-size:.78rem;font-weight:700;color:#075985;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Request Details</div>
+        <div id="detailItems" style="display:flex; flex-wrap:wrap; gap:6px 24px; font-size:.88rem; color:#0f172a;"></div>
+      </div>
+
+      <div style="padding:24px;">
+        <div id="timelineContainer" style="position:relative;padding:12px 0;"></div>
+      </div>
+    </div>
+  </div>
+
+<%- include('../partials/admin_shell_bottom') %>
+
+<style>
+.request-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px; border-bottom:1px solid var(--a-border);
+  cursor:pointer; transition:background 0.15s ease;
+}
+.request-row:hover { background:var(--a-bg-hover); }
+.request-row:last-child { border-bottom:none; }
+
+.request-info { flex:1; min-width:0; }
+.request-name { font-weight:600; font-size:.95rem; color:var(--a-text); margin-bottom:4px; }
+.request-meta { font-size:.8rem; color:var(--a-text-muted); display:flex; gap:12px; }
+
+.request-badge {
+  display:inline-block; padding:4px 10px; border-radius:var(--a-radius-sm);
+  font-size:.72rem; font-weight:600; text-transform:uppercase;
+  letter-spacing:.03em; white-space:nowrap;
+}
+.request-badge.pendingitopsvalidation { background:#fef3c7; color:#92400e; }
+.request-badge.pendinghod             { background:#fef3c7; color:#92400e; }
+.request-badge.pendingfms             { background:#fee2e2; color:#991b1b; }
+.request-badge.pendingitopsmgr        { background:#e0e7ff; color:#3730a3; }
+.request-badge.pendingithod           { background:#dcfce7; color:#166534; }
+.request-badge.pendingimplementation  { background:#dbeafe; color:#1e40af; }
+.request-badge.completed              { background:var(--a-green-bg); color:var(--a-green); }
+.request-badge.rejected               { background:var(--a-red-bg);   color:var(--a-red); }
+.request-badge.draft                  { background:#f0f0f0;           color:#666; }
+
+#timelineContainer .timeline-item {
+  position: relative; padding-left: 40px; padding-bottom: 24px;
+  border-left: 2px solid #e2e8f0; margin-left: 12px;
+}
+#timelineContainer .timeline-item:last-child { border-left-color: transparent; padding-bottom: 0; }
+#timelineContainer .timeline-dot {
+  position: absolute; left: -11px; top: 0; width: 22px; height: 22px;
+  border-radius: 50%; background: #3b82f6; color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 700; box-shadow: 0 0 0 4px #fff;
+}
+#timelineContainer .timeline-dot.approved { background: #16a34a; }
+#timelineContainer .timeline-dot.rejected { background: #dc2626; }
+#timelineContainer .timeline-dot.email    { background: #0078D4; }
+#timelineContainer .timeline-dot.system   { background: #64748b; }
+#timelineContainer .timeline-action { font-weight: 600; font-size: 0.95rem; color: #0f172a; margin-bottom: 2px; }
+#timelineContainer .timeline-meta { font-size: 0.8rem; color: #64748b; margin-bottom: 8px; }
+#timelineContainer .timeline-details {
+  background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 12px;
+  border-radius: 6px; font-size: 0.85rem; color: #334155; word-break: break-word;
+}
+.detail-pill { font-size:.85rem; }
+.detail-pill strong { color:#334155; }
+</style>
+
+<script>
+let currentPage = 1;
+let totalPages  = 1;
+let allRequests = [];
+
+document.addEventListener('DOMContentLoaded', () => { loadRequests(); });
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+const debouncedLoad = debounce(() => loadRequests(1), 300);
+function onSearchChange() { debouncedLoad(); }
+function onFilterChange() { loadRequests(1); }
+
+async function loadRequests(page = 1) {
+  const search = document.getElementById('searchInput').value.trim();
+  const status = document.getElementById('statusFilter').value;
+  const params = new URLSearchParams({
+    page, limit: 15,
+    ...(search && { search }),
+    ...(status && { status })
+  });
+  try {
+    const res = await window.iflFetch(`/admin/internet-browsing-requests?${params}`);
+    const json = await res.json();
+    if (!json.success || !json.data.length) {
+      document.getElementById('requestsList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--a-text-muted);">No Internet Browsing requests found.</div>';
+      return;
+    }
+    allRequests = json.data;
+    currentPage = json.pagination.page;
+    totalPages  = json.pagination.totalPages;
+    renderRequests(json.data);
+  } catch (e) {
+    console.error(e);
+    document.getElementById('requestsList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--a-red);">Error loading requests</div>';
+  }
+}
+
+function statusBadgeClass(s) { return (s || 'draft').toLowerCase(); }
+function statusBadgeLabel(s) {
+  const map = {
+    PendingITOpsValidation: 'Pending IT Ops',
+    PendingHOD:             'Pending HOD',
+    PendingFMS:             'Pending FMS',
+    PendingITOpsMgr:        'Pending RN',
+    PendingITHOD:           'Pending UZ',
+    PendingImplementation:  'Pending Implementation',
+    Completed:              'Completed',
+    Rejected:               'Rejected'
+  };
+  return map[s] || s || 'Draft';
+}
+
+function renderRequests(requests) {
+  const html = requests.map(req => {
+    const safe = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const empInfo = `${safe(req.employeeId)} · ${safe(req.department || '—')}`;
+    return `
+      <div class="request-row" onclick="loadTimeline(${req.id})">
+        <div class="request-info">
+          <div class="request-name">${safe(req.fullName || '—')}</div>
+          <div class="request-meta">
+            <span>${empInfo}</span>
+            <span>${safe(req.designation || '—')}</span>
+            <span style="color:var(--a-text-muted);">${new Date(req.createdAt).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <span class="request-badge ${statusBadgeClass(req.status)}">${safe(statusBadgeLabel(req.status))}</span>
+      </div>`;
+  }).join('');
+  document.getElementById('requestsList').innerHTML = html;
+}
+
+let currentModalRequestId = null;
+let currentModalStatus    = null;
+
+async function loadTimeline(id) {
+  try {
+    const res = await window.iflFetch(`/admin/internet-browsing-timeline/${id}`);
+    const json = await res.json();
+    if (!json.success) { IflDialog.error('Could not load the timeline for this request.'); return; }
+    const { request, timeline } = json;
+    currentModalRequestId = request.id;
+    currentModalStatus    = request.status;
+
+    document.getElementById('modalTitle').textContent = request.fullName || ('Internet Browsing #' + request.id);
+    document.getElementById('modalSubtitle').textContent =
+      `Employee ID: ${request.employeeId} · Department: ${request.department || '—'} · Status: ${statusBadgeLabel(request.status)}`;
+
+    const closedStates = ['Completed', 'Rejected', 'Draft'];
+    const bar = document.getElementById('adminActionsBar');
+    if (bar) {
+      const canResend = !closedStates.includes(request.status);
+      bar.style.display = canResend ? 'flex' : 'none';
+      const hint = document.getElementById('adminActionsHint');
+      if (hint) {
+        hint.textContent = canResend
+          ? `Stage: ${statusBadgeLabel(request.status)}. The action email can be re-sent to the currently-configured approver — the existing token is reused.`
+          : `Request is ${request.status}; no active stage email to resend.`;
+      }
+    }
+
+    renderDetailBar(request);
+    renderTimeline(timeline);
+    openModal();
+  } catch (e) {
+    console.error(e);
+    IflDialog.error('Could not load the timeline for this request.');
+  }
+}
+
+async function resendIBREmail() {
+  if (!currentModalRequestId) return;
+  const id = currentModalRequestId;
+  const btn = document.getElementById('btnResendEmail');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Checking…'; }
+  try {
+    const pres = await window.iflFetch(`/admin/internet-browsing/${id}/resend-preview`);
+    const pj = await pres.json();
+    if (!pres.ok || !pj.success) { IflDialog.error(pj.error || 'Could not resolve the current recipient.'); return; }
+    const who = pj.name ? `${pj.name} (${pj.email})` : pj.email;
+    const ok = await IflDialog.confirm(
+      `This stage (${pj.role}) is currently assigned to:\n\n${who}\n\nResend the action email to them? They will be set as the active assignee.`,
+      { title: 'Resend action email', okText: 'Resend' }
+    );
+    if (!ok) return;
+    if (btn) btn.innerHTML = 'Sending…';
+    const res = await window.iflFetch(`/admin/internet-browsing/${id}/resend-email`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) { IflDialog.error(json.error || 'Failed to resend email.'); return; }
+    IflDialog.success(json.message || 'Action email re-sent successfully.');
+    await loadTimeline(id);
+  } catch (e) {
+    console.error(e);
+    IflDialog.error('Network error while resending email.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = original; }
+  }
+}
+
+function renderDetailBar(req) {
+  const bar = document.getElementById('detailBar');
+  if (!bar) return;
+  bar.style.display = 'block';
+  const rights = req.browsingRights === 'GeneralBrowsingWithStreaming' ? 'General browsing with streaming'
+               : req.browsingRights === 'GeneralBrowsing' ? 'General browsing'
+               : (req.browsingRights || '—');
+  const duration = req.facilityDuration === 'OneTime' ? 'One time' : (req.facilityDuration || '—');
+  const pill = (label, val) => `<div class="detail-pill"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(val)}</div>`;
+  let html = pill('NT Login', req.ntLogin || '—')
+           + pill('User Type', req.userType || '—')
+           + pill('Browsing Rights', rights)
+           + pill('Duration', duration);
+  if (req.currentStageAssigneeEmail) html += pill('Current Assignee', req.currentStageAssigneeEmail);
+  if (req.networkImplementerName)    html += pill('Implemented By', req.networkImplementerName);
+  document.getElementById('detailItems').innerHTML = html;
+}
+
+function renderTimeline(events) {
+  const container = document.getElementById('timelineContainer');
+  if (!events || !events.length) {
+    container.innerHTML = '<div style="text-align:center;color:var(--a-text-muted);padding:20px;">No timeline events yet.</div>';
+    return;
+  }
+  const deduped = [];
+  events.forEach(ev => {
+    const last = deduped[deduped.length - 1];
+    if (last && last.action === ev.action && last.actorRole === ev.actorRole) {
+      if (Math.abs(new Date(ev.timestamp) - new Date(last.timestamp)) < 5000) return;
+    }
+    deduped.push(ev);
+  });
+  const html = deduped.map((ev, i) => {
+    const a = (ev.action || '').toLowerCase();
+    let cls = '';
+    if (a.includes('reject')) cls = 'rejected';
+    else if (a.includes('approve') || a.includes('completed') || a.includes('applied')) cls = 'approved';
+    else if (a.includes('email')) cls = 'email';
+    else if (ev.actorRole === 'System' || ev.actorRole === 'Admin') cls = 'system';
+    const label = ev.actionLabel || ev.action || '';
+    const time  = new Date(ev.timestamp).toLocaleString();
+    const detailsBlock = ev.detailsHTML ? `<div class="timeline-details">${ev.detailsHTML}</div>` : '';
+    return `
+      <div class="timeline-item">
+        <div class="timeline-dot ${cls}">${i + 1}</div>
+        <div class="timeline-action">${escapeHtml(label)}</div>
+        <div class="timeline-meta">By <strong>${escapeHtml(ev.actorRole || '—')}</strong> · ${time}</div>
+        ${detailsBlock}
+      </div>`;
+  }).join('');
+  container.innerHTML = html;
+}
+
+function escapeHtml(text) {
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return String(text == null ? '' : text).replace(/[&<>"']/g, m => map[m]);
+}
+
+function openModal()  { document.getElementById('timelineModal').classList.add('active'); }
+function closeModal() { document.getElementById('timelineModal').classList.remove('active'); }
+</script>

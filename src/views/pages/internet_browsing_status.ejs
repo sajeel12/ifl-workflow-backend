@@ -1,0 +1,474 @@
+<%- include('../partials/header', { title: 'Internet Browsing Request' }) %>
+<link rel="stylesheet" href="/css/modern.css">
+
+<header class="app-header">
+    <div class="brand-section">
+        <img src="/logo.png" alt="IFL" class="logo" onerror="this.style.display='none'">
+        <div class="app-title">
+            <h1>Internet Browsing Request</h1>
+            <p>Ibrahim Fibres Limited</p>
+        </div>
+    </div>
+    <div class="status-section">
+        <% if (token && request && request.id) { %>
+            <div class="status-badge">REQ #<%= request.id %> | <%= request.status %></div>
+        <% } %>
+    </div>
+</header>
+
+<% if (typeof expectedAssigneeEmail !== 'undefined' && expectedAssigneeEmail) { %>
+<style>
+    body.ifl-is-verifying main, body.ifl-is-verifying .app-container,
+    body.ifl-is-verifying .portal-shell, body.ifl-is-verifying form { visibility: hidden; }
+    body.ifl-is-verifying { overflow: hidden; }
+    .iflv-overlay {
+        position: fixed; inset: 0; z-index: 9000;
+        display: flex; align-items: center; justify-content: center;
+        background: #fff; transition: opacity 0.24s ease;
+    }
+    .iflv-overlay.is-fading-out { opacity: 0; pointer-events: none; }
+    .iflv-card { text-align: center; max-width: 360px; }
+    .iflv-spin {
+        width: 36px; height: 36px; border-radius: 50%;
+        border: 3px solid #e2e8f0; border-top-color: #0078D4;
+        margin: 0 auto 14px; animation: iflv-spin 0.8s linear infinite;
+    }
+    @keyframes iflv-spin { to { transform: rotate(360deg); } }
+    .iflv-title { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 4px; }
+    .iflv-sub   { font-size: 0.86rem; color: #64748b; margin: 0; }
+</style>
+<script>document.documentElement.classList.add('ifl-is-verifying'); document.body && document.body.classList.add('ifl-is-verifying');</script>
+<div id="iflVerifyOverlay" class="iflv-overlay" role="status" aria-live="polite">
+    <div class="iflv-card">
+        <div class="iflv-spin"></div>
+        <p class="iflv-title">Verifying your access</p>
+        <p class="iflv-sub">Please wait while we confirm you are the intended approver for this Internet Browsing request.</p>
+    </div>
+</div>
+<% } %>
+
+<style>
+    .app-container { height: auto; min-height: 0; overflow: visible; display: block; background: transparent; border-radius: 0; box-shadow: none; }
+    .ibr-card { background: #fff; border-radius: 12px; box-shadow: 0 6px 18px -10px rgba(15,23,42,0.18); padding: 28px; margin-bottom: 24px; border: 1px solid #e2e8f0; }
+    .ibr-card h2 { margin: 0 0 16px; font-size: 1.05rem; font-weight: 700; color: #0f172a; }
+    @keyframes ifl-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .ifl-spinner { animation: ifl-spin 0.7s linear infinite; vertical-align: -3px; margin-right: 6px; }
+    button.is-loading { opacity: 0.75; cursor: wait; pointer-events: none; }
+    button.is-loading > .ifl-btn-original { display: none; }
+    button:disabled { cursor: not-allowed; }
+    .ibr-info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px; }
+    @media (max-width: 700px) { .ibr-info-grid { grid-template-columns: 1fr; } }
+    .field-label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; font-weight: 600; }
+    .field-value { font-size: 0.95rem; color: #0f172a; word-break: break-word; }
+    .btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+    .btn { padding: 11px 18px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-danger  { background: #dc2626; color: #fff; }
+    .btn-success:hover:not(:disabled) { background: #15803d; }
+    .btn-danger:hover:not(:disabled)  { background: #b91c1c; }
+    .stage-summary {
+        background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;
+        padding: 12px 14px; font-size: 0.9rem; color: #075985; margin-bottom: 16px;
+    }
+    .stage-summary strong { color: #0c4a6e; }
+    .ibr-history-list { margin-top: 6px; }
+    .ibr-history-row {
+        display: grid; grid-template-columns: 200px 1fr;
+        padding: 8px 0; border-bottom: 1px solid #f1f5f9;
+        font-size: 0.88rem;
+    }
+    .ibr-history-row:last-child { border-bottom: none; }
+    .ibr-history-row .when { color: #64748b; }
+    .ibr-history-row .what { color: #0f172a; }
+</style>
+
+<div class="app-container" style="padding: 24px;">
+
+    <!-- Request summary header -->
+    <div class="ibr-card">
+        <h2>Request Details</h2>
+        <div class="ibr-info-grid">
+            <div>
+                <div class="field-label">Request Number</div>
+                <div class="field-value">#<%= request.id || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Application Status</div>
+                <div class="field-value"><%= request.status || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Initiated On</div>
+                <div class="field-value"><%= request.initiatedAt ? new Date(request.initiatedAt).toLocaleString() : '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Employee Number</div>
+                <div class="field-value"><%= request.employeeId || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Full Name</div>
+                <div class="field-value"><%= request.fullName || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Department</div>
+                <div class="field-value"><%= request.department || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Designation</div>
+                <div class="field-value"><%= request.designation || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Location</div>
+                <div class="field-value">
+                    <%
+                        const locKey  = request.location || '';
+                        const locShow = locKey && typeof locationGroupLabels !== 'undefined' && locationGroupLabels[locKey]
+                                        ? locationGroupLabels[locKey] : (locKey || '—');
+                    %>
+                    <%= locShow %>
+                </div>
+            </div>
+            <div>
+                <div class="field-label">Extension / Contact</div>
+                <div class="field-value">
+                    <%= request.extension || '—' %>
+                    <% if (request.contactNumber) { %> / <%= request.contactNumber %><% } %>
+                </div>
+            </div>
+            <div>
+                <div class="field-label">Head of Department</div>
+                <div class="field-value"><%= request.hod || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Email</div>
+                <div class="field-value"><%= request.email || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">NT Login</div>
+                <div class="field-value"><%= request.ntLogin || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">User Type</div>
+                <div class="field-value"><%= request.userType || '—' %></div>
+            </div>
+            <div>
+                <div class="field-label">Facility Duration</div>
+                <div class="field-value"><%= request.facilityDuration === 'OneTime' ? 'One time' : request.facilityDuration %></div>
+            </div>
+            <div>
+                <div class="field-label">Browsing Rights</div>
+                <div class="field-value">
+                    <%= request.browsingRights === 'GeneralBrowsingWithStreaming' ? 'General browsing with streaming'
+                      : request.browsingRights === 'GeneralBrowsing' ? 'General browsing'
+                      : (request.browsingRights || '—') %>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%
+        // Stage labels used by the active-stage banner + the Approve button label.
+        const STAGE_META = {
+            ITOps:              { title: 'IT Operations Validation',  next: 'Approve & forward to Employee HOD' },
+            HOD:                { title: 'Employee HOD Approval',     next: 'Approve & forward to FMS' },
+            FMS:                { title: 'FMS Validation',            next: 'Approve & forward to RN' },
+            ITOpsMgr:           { title: 'RN Approval',                next: 'Approve & forward to IT HOD' },
+            ITHOD:              { title: 'UZ Approval',                next: 'Approve & forward to Network Implementer' },
+            NetworkImplementer: { title: 'Network Implementation',    next: 'Confirm & complete' }
+        };
+        const meta = STAGE_META[role];
+    %>
+
+    <% if (meta && role !== 'NetworkImplementer') { %>
+        <!-- Approve/Reject panel for stages 2–6 -->
+        <div class="ibr-card">
+            <h2><%= meta.title %></h2>
+            <div class="stage-summary">
+                Review the details above. Approve to <strong><%= meta.next.replace(/^Approve &amp; |^Approve & /, 'forward to ').replace('forward to forward to', 'forward to') %></strong>,
+                or Reject to close the request. Add a short remark to help the next reviewer.
+            </div>
+
+            <form action="/api/internet-browsing/handle?token=<%= token %>" method="POST">
+                <label class="field-label" style="display:block; margin-bottom:4px;">Remarks (optional)</label>
+                <textarea name="remarks" rows="3" style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem; font-family:inherit;"></textarea>
+
+                <div class="btn-row">
+                    <button type="submit" name="action" value="Reject"
+                            class="btn btn-danger"
+                            data-ifl-confirm="Reject this Internet Browsing request? The workflow will be closed."
+                            data-ifl-confirm-title="Reject request"
+                            data-ifl-confirm-ok="Reject"
+                            data-ifl-confirm-danger="1">Reject</button>
+                    <button type="submit" name="action" value="Approve" class="btn btn-success"><%= meta.next %></button>
+                </div>
+            </form>
+        </div>
+    <% } %>
+
+    <% if (role === 'NetworkImplementer') { %>
+        <!-- Implementer panel (stage 7) -->
+        <div class="ibr-card">
+            <h2>Apply Internet Browsing Rights</h2>
+            <p style="font-size: 0.88rem; color: #475569; margin: 0 0 14px;">
+                Apply the requested proxy / firewall change on the user's AD account. Confirm
+                the implementation below and optionally attach proof screenshots. Submitting
+                marks the request <strong>Completed</strong>; a courtesy notice will go to the
+                employee, their HOD and IT HOD.
+            </p>
+
+            <form action="/api/internet-browsing/handle?token=<%= token %>" method="POST" enctype="multipart/form-data">
+                <div style="margin-bottom: 14px;">
+                    <label class="field-label" style="display:block;">Implementer Name
+                        <span style="color:#64748b; font-weight:400; font-size:0.78rem;">(auto-filled from Windows login)</span>
+                    </label>
+                    <input type="text" name="implementerName"
+                           data-ifl-sso-name="1"
+                           value="<%= (currentUser && (currentUser.displayName || currentUser.username)) || '' %>"
+                           disabled
+                           style="width:100%; padding:8px 10px; border-radius:6px; border:1px solid #cbd5e1; background:#f1f5f9; color:#0f172a; font-size:0.95rem;">
+                </div>
+
+                <div style="display:flex; align-items:flex-start; gap:10px; padding: 12px 14px; background:#fef9c3; border:1px solid #fde68a; border-radius:8px;">
+                    <input type="checkbox" name="confirmed" value="on" id="cb-implemented" required style="margin-top:3px;">
+                    <label for="cb-implemented" style="font-size:0.92rem; color:#713f12; font-weight:600;">
+                        I confirm that the requested internet browsing rights have been applied for this user on the firewall / proxy.
+                    </label>
+                </div>
+
+                <div style="margin-top: 14px;">
+                    <label class="field-label" style="display:block; margin-bottom: 4px;">Notes (optional)</label>
+                    <textarea name="implementerNotes" rows="2" style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem; font-family:inherit;"></textarea>
+                </div>
+
+                <div style="margin-top: 14px; padding: 14px; border: 2px dashed #cbd5e1; border-radius: 8px; text-align:center;">
+                    <label style="cursor:pointer; color: #0078D4; font-weight: 600;">Optional — upload proof screenshots</label>
+                    <input type="file" name="ibrProof" multiple accept="image/*,application/pdf" style="display:block; margin: 8px auto 0;">
+                </div>
+
+                <div class="btn-row">
+                    <button type="submit" class="btn btn-success">Confirm &amp; Complete</button>
+                </div>
+            </form>
+        </div>
+    <% } %>
+
+    <% if (role === 'ReadOnly') { %>
+        <div class="ibr-card">
+            <h2>Status</h2>
+            <% if (request.status === 'Completed') { %>
+                <div style="padding: 16px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px;">
+                    <h3 style="color: #065f46; margin: 0 0 6px;">Request Approved &amp; Applied</h3>
+                    <p style="color: #047857; margin: 0; font-size: 0.92rem;">
+                        Completed on <%= request.completedAt ? new Date(request.completedAt).toLocaleString() : 'N/A' %>
+                        <% if (request.networkImplementerName) { %> · by <%= request.networkImplementerName %><% } %>
+                    </p>
+                </div>
+            <% } else if (request.status === 'Rejected') { %>
+                <div style="padding: 16px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;">
+                    <h3 style="color: #991b1b; margin: 0 0 6px;">Request Rejected</h3>
+                </div>
+            <% } else { %>
+                <p style="color:#64748b;">Status: <strong><%= request.status || 'Unknown' %></strong></p>
+            <% } %>
+        </div>
+
+        <% if (typeof timeline !== 'undefined' && timeline && timeline.length) { %>
+            <div class="ibr-card">
+                <h2>History</h2>
+                <div class="ibr-history-list">
+                    <% timeline.forEach(function(ev) { %>
+                        <div class="ibr-history-row">
+                            <div class="when">
+                                <%= ev.timestamp ? new Date(ev.timestamp).toLocaleString() : '—' %>
+                                <% if (ev.actorRole) { %><br><small><%= ev.actorRole %></small><% } %>
+                            </div>
+                            <div class="what">
+                                <strong><%= ev.actionLabel || ev.action %></strong>
+                                <% if (ev.detailsText) { %><br><small style="color:#475569;"><%= ev.detailsText %></small><% } %>
+                            </div>
+                        </div>
+                    <% }); %>
+                </div>
+            </div>
+        <% } %>
+    <% } %>
+
+</div>
+
+<script>
+    // Verification cloak — same pattern as offboarding_status.ejs.
+    document.addEventListener('DOMContentLoaded', async () => {
+        const expected = <%- JSON.stringify(typeof expectedAssigneeEmail !== 'undefined' && expectedAssigneeEmail ? expectedAssigneeEmail : null) %>;
+        const overlay  = document.getElementById('iflVerifyOverlay');
+
+        const emailLocalPart = (e) => {
+            if (!e || typeof e !== 'string') return '';
+            const at = e.indexOf('@');
+            if (at <= 0) return '';
+            return e.slice(0, at).toLowerCase().trim();
+        };
+        const emailsMatch = (a, b) => {
+            const la = emailLocalPart(a);
+            const lb = emailLocalPart(b);
+            return !!la && la === lb;
+        };
+
+        const liftCloak = () => {
+            document.documentElement.classList.remove('ifl-is-verifying');
+            document.body.classList.remove('ifl-is-verifying');
+            if (overlay) {
+                overlay.classList.add('is-fading-out');
+                setTimeout(() => overlay.remove(), 260);
+            }
+        };
+
+        const showRejection = (expectedEmail, actualLabel) => {
+            document.documentElement.classList.remove('ifl-is-verifying');
+            document.body.classList.remove('ifl-is-verifying');
+            if (overlay) overlay.remove();
+            document.body.innerHTML = `
+              <div style="max-width:560px;margin:80px auto;padding:36px;background:#fff;border:1px solid #fee2e2;border-radius:14px;text-align:center;font-family:'Segoe UI',sans-serif;box-shadow:0 12px 40px -8px rgba(220,38,38,.18);">
+                <div style="width:72px;height:72px;border-radius:50%;background:#fee2e2;color:#b91c1c;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 18px;">⛔</div>
+                <h2 style="color:#b91c1c;margin:0 0 14px;font-size:1.15rem;">Access Denied</h2>
+                <p style="color:#475569;line-height:1.55;margin:0 0 14px;">
+                  Account <strong>${actualLabel}</strong> is not configured as the approver for this Internet Browsing request.
+                </p>
+                <p style="color:#475569;line-height:1.55;margin:0 0 14px;">
+                  This action link was sent to <strong>${expectedEmail}</strong>.
+                </p>
+                <p style="color:#64748b;font-size:.9rem;">If you need to handle it on someone's behalf, please contact your administrator.</p>
+              </div>`;
+        };
+
+        if (!expected) {
+            liftCloak();
+        } else if (typeof window.iflGetUser !== 'function') {
+            showRejection(expected, 'an unverified user (SSO not available on this device)');
+            return;
+        } else {
+            try {
+                const u = await window.iflGetUser();
+                if (!u || !u.email) { showRejection(expected, 'an unverified user'); return; }
+                if (!emailsMatch(u.email, expected)) { showRejection(expected, u.email || u.username); return; }
+                liftCloak();
+            } catch (_) {
+                showRejection(expected, 'an unverified user (SSO check failed)');
+                return;
+            }
+        }
+
+        // Auto-fill implementer name from SSO.
+        try {
+            if (typeof window.iflGetUser !== 'function') return;
+            const u = await window.iflGetUser();
+            if (!u) return;
+            const v = u.displayName || u.username || '';
+            document.querySelectorAll('input[data-ifl-sso-name="1"]').forEach(el => {
+                if (!el.value) el.value = v;
+            });
+        } catch (_) {}
+    });
+
+    // setupSubmitLoaders — verbatim from offboarding_status.ejs.
+    (function setupSubmitLoaders() {
+        const SPINNER_SVG = '<svg class="ifl-spinner" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>';
+
+        const ensureTokenField = async (form) => {
+            if (typeof window.iflGetToken !== 'function') return;
+            let hidden = form.querySelector('input[name="x-sidecar-token"]');
+            if (!hidden) {
+                hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'x-sidecar-token';
+                form.appendChild(hidden);
+            }
+            try { hidden.value = await window.iflGetToken(); } catch (_) {}
+        };
+
+        function reSubmit(form, submitter) {
+            if (submitter && typeof form.requestSubmit === 'function') {
+                try { form.requestSubmit(submitter); return; } catch (_) {}
+            }
+            if (submitter && typeof submitter.click === 'function') submitter.click();
+            else form.submit();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', async (e) => {
+                    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+
+                    const submitter = e.submitter
+                        || form.querySelector('button[type="submit"]:focus')
+                        || form.querySelector('button[type="submit"]');
+
+                    if (submitter && submitter.name) {
+                        let mirror = form.querySelector('input[data-ifl-action-mirror]');
+                        if (!mirror) {
+                            mirror = document.createElement('input');
+                            mirror.type = 'hidden';
+                            mirror.dataset.iflActionMirror = '1';
+                            form.appendChild(mirror);
+                        }
+                        mirror.name  = submitter.name;
+                        mirror.value = submitter.value;
+                    }
+
+                    const confirmMsg = submitter && submitter.dataset && submitter.dataset.iflConfirm;
+                    if (confirmMsg && !form.dataset.iflConfirmed && typeof IflDialog !== 'undefined' && IflDialog && typeof IflDialog.confirm === 'function') {
+                        e.preventDefault();
+                        const ok = await IflDialog.confirm(confirmMsg, {
+                            title:  submitter.dataset.iflConfirmTitle || undefined,
+                            okText: submitter.dataset.iflConfirmOk    || 'Confirm',
+                            danger: submitter.dataset.iflConfirmDanger === '1'
+                        });
+                        if (!ok) return;
+                        form.dataset.iflConfirmed = '1';
+                        reSubmit(form, submitter);
+                        return;
+                    }
+
+                    if (!form.dataset.iflTokenAttached) {
+                        e.preventDefault();
+                        await ensureTokenField(form);
+                        form.dataset.iflTokenAttached = '1';
+                        reSubmit(form, submitter);
+                        return;
+                    }
+
+                    form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                        if (!btn.querySelector('.ifl-btn-original')) {
+                            const span = document.createElement('span');
+                            span.className = 'ifl-btn-original';
+                            while (btn.firstChild) span.appendChild(btn.firstChild);
+                            btn.appendChild(span);
+                        }
+                        if (btn.name) btn.dataset.iflBtnName = btn.name;
+                        btn.removeAttribute('name');
+                        btn.disabled = true;
+                        btn.classList.add('is-loading');
+                        if (btn === submitter) {
+                            const indicator = document.createElement('span');
+                            indicator.className = 'ifl-btn-loading-text';
+                            indicator.innerHTML = SPINNER_SVG + 'Working…';
+                            btn.appendChild(indicator);
+                        }
+                    });
+
+                    setTimeout(() => {
+                        form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                            if (btn.dataset.iflBtnName) { btn.setAttribute('name', btn.dataset.iflBtnName); delete btn.dataset.iflBtnName; }
+                            btn.disabled = false;
+                            btn.classList.remove('is-loading');
+                            const ind = btn.querySelector('.ifl-btn-loading-text');
+                            if (ind) ind.remove();
+                        });
+                        delete form.dataset.iflTokenAttached;
+                        delete form.dataset.iflConfirmed;
+                        const mirror = form.querySelector('input[data-ifl-action-mirror]');
+                        if (mirror) mirror.remove();
+                    }, 30000);
+                });
+            });
+        });
+    })();
+</script>
