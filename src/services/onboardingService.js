@@ -8,6 +8,7 @@ import * as pdfService from './pdfService.js';
 import path from 'path';
 
 import RecipientService from './recipientService.js';
+import { checkComputerExists } from './adService.js';
 
 
 // Email type → portal slug. Types without a portal (HOD_REVIEW) use the
@@ -212,22 +213,57 @@ export const handleDCIImplementation = async (token, filePaths, implementerName)
     }
 };
 
-export const handleOPSAction = async (token, checklistData, opsName) => {
+export const handleOPSAction = async (token, checklistData, opsName, assetDetails = {}) => {
     logger.info(`[Onboarding] OPS Action`);
     try {
         const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
         if (!request || request.status !== 'PendingOPSAction') throw new Error('Invalid Token');
+
+        // The hostname is the DCI-APPROVED name stored on the request — NOT taken
+        // from the client, so OPS cannot submit a different machine name.
+        const hostname = (request.machineHostname || '').trim();
+        const serial   = (assetDetails.serial || '').trim();
+        const screenshotPaths = Array.isArray(assetDetails.screenshotPaths) ? assetDetails.screenshotPaths : [];
+
+        if (!hostname) {
+            throw new Error('No approved hostname is on file for this request. The DCI Team must set the machine hostname before OPS can verify it.');
+        }
+        if (!serial) {
+            throw new Error('Product serial number is required before verification can be completed.');
+        }
+        if (screenshotPaths.length === 0) {
+            throw new Error('A screenshot of the assigned machine hostname is required before verification can be completed.');
+        }
+
+        // Authoritative AD cross-check — the machine must now be joined to the
+        // domain under the approved name (the account is created at desk setup).
+        // If AD still shows the name FREE, the workstation was named incorrectly
+        // or not yet joined — refuse and keep the request at OPS.
+        const { exists } = await checkComputerExists(hostname);
+        if (!exists) {
+            throw new Error(`The machine is not yet joined to Active Directory as "${hostname}". Rename/join the workstation to exactly "${hostname}" (the approved hostname), then upload the screenshot and Verify again.`);
+        }
 
         await request.update({
             status: 'Completed',
             opsCompletedBy: opsName,
             opsChecklist: checklistData,
             opsCompletedAt: new Date(),
+            productSerialNumber: serial,
+            opsProofAttachments: screenshotPaths,
+            hostnameVerified: true,
             currentStageToken: null, // Flow Ends
             currentStageAssigneeEmail:    null,
             currentStageAssigneeUsername: null
         });
-        await logTimelineEvent(request.id, 'OPS Checklist Completed', 'OPS', JSON.stringify(checklistData));
+        // Audit trail: record the checklist plus the verified asset details so the
+        // history shows the hostname/serial that were confirmed at desk setup.
+        const assetAudit = [
+            { item: `Machine hostname (AD-verified): ${hostname}`, checked: true },
+            { item: `Product serial number: ${serial}`, checked: true },
+            { item: `Hostname screenshot(s) uploaded: ${screenshotPaths.length}`, checked: true }
+        ];
+        await logTimelineEvent(request.id, 'OPS Checklist Completed', 'OPS', JSON.stringify([...checklistData, ...assetAudit]));
         logger.info(`[Onboarding] Request ${request.id} COMPLETED.`);
 
         // Final completion notification to configurable recipients (DCI + OPS managers)
@@ -405,6 +441,22 @@ export const updateDCIDetails = async (token, data) => {
     try {
         const request = await OnboardingRequest.findOne({ where: { currentStageToken: token } });
         if (!request || request.status !== 'PendingDCI') throw new Error('Invalid Token');
+
+        // Authoritative hostname guard — the DCI-approved machine name must be
+        // FREE in AD (the machine isn't joined until OPS desk setup). The client
+        // gate can't be trusted, so re-check here before reserving the name.
+        const approvedHostname = (data.machineHostname || '').trim();
+        if (!approvedHostname) {
+            throw new Error('A machine hostname is required. Build it (location + username + device) and press "Check Availability" before forwarding.');
+        }
+        if (approvedHostname.length > 15) {
+            throw new Error(`Hostname "${approvedHostname}" exceeds the 15-character AD computer-name limit. Shorten the username part.`);
+        }
+        const { exists: hostTaken, match: hostMatch } = await checkComputerExists(approvedHostname);
+        if (hostTaken) {
+            const who = hostMatch && (hostMatch.name || hostMatch.sAMAccountName);
+            throw new Error(`Hostname "${approvedHostname}" already exists in AD${who ? ` (${who})` : ''}. Change the username part and re-check before forwarding.`);
+        }
 
         const newToken = crypto.randomBytes(20).toString('hex');
         const dciMgrRecipient = await resolveRecipient('DCI_MANAGER', { location: request.location, requestId: request.id });

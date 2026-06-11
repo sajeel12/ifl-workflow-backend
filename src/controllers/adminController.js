@@ -443,7 +443,7 @@ class AdminController {
                 limit: limitInt,
                 offset: offset,
                 order: [['name', 'ASC']],
-                attributes: ['employeeId', 'name', 'designation', 'mainDept', 'hodId', 'email', 'location']
+                attributes: ['employeeId', 'name', 'designation', 'mainDept', 'hodId', 'email', 'location', 'actualTerminationDate']
             });
 
             const results = [];
@@ -462,7 +462,11 @@ class AdminController {
                     location: emp.location,
                     email: emp.email,
                     hodId: emp.hodId,
-                    hodName: hodName
+                    hodName: hodName,
+                    // Only an ACTUAL termination date marks an employee terminated —
+                    // null means active (we still list everyone).
+                    actualTerminationDate: emp.actualTerminationDate || null,
+                    isTerminated: !!emp.actualTerminationDate
                 });
             }
 
@@ -504,6 +508,24 @@ class AdminController {
 
             if (!employee) return res.status(404).json({ success: false, error: `Employee ${employeeId} not found` });
             if (!hod) return res.status(404).json({ success: false, error: `HOD ${hodId} not found` });
+
+            // An HOD must have a usable AD account/email — the workflow emails the
+            // HOD their approval link, so a user with no AD mailbox can never act.
+            // Resolve by employeeID attribute first (most reliable), then by the
+            // HRMS email as a fallback. Authoritative server-side gate — mirrors
+            // the client-side check in admin_hod_panel.ejs.
+            const { findUserByEmployeeIdViaSidecar, findUserByEmail } = await import('../services/adService.js');
+            let adUser = await findUserByEmployeeIdViaSidecar(hodId);
+            if (!(adUser && (adUser.mail || adUser.email)) && hod.email) {
+                adUser = await findUserByEmail(hod.email);
+            }
+            const adMail = adUser && (adUser.mail || adUser.email);
+            if (!adMail) {
+                return res.status(422).json({
+                    success: false,
+                    error: `${hod.name} (#${hodId}) has no Active Directory email/account and cannot be assigned as HOD. Choose a user with a valid AD mailbox.`
+                });
+            }
 
             // Assign
             employee.hodId = hodId;
@@ -1086,6 +1108,20 @@ class AdminController {
             // Verify HOD exists
             const hod = await Employee.findByPk(hodId);
             if (!hod) return res.status(404).json({ success: false, error: `HOD ${hodId} not found` });
+
+            // Same AD-mailbox requirement as individual assignment — an HOD with
+            // no AD account/email can never receive their approval emails.
+            const { findUserByEmployeeIdViaSidecar, findUserByEmail } = await import('../services/adService.js');
+            let adUser = await findUserByEmployeeIdViaSidecar(hodId);
+            if (!(adUser && (adUser.mail || adUser.email)) && hod.email) {
+                adUser = await findUserByEmail(hod.email);
+            }
+            if (!(adUser && (adUser.mail || adUser.email))) {
+                return res.status(422).json({
+                    success: false,
+                    error: `${hod.name} (#${hodId}) has no Active Directory email/account and cannot be assigned as HOD. Choose a user with a valid AD mailbox.`
+                });
+            }
 
             // Handle the "Unassigned Department" case where originalDeptName might be null
             const whereClause = departmentName === null ? { mainDept: null } : { mainDept: departmentName };

@@ -1,5 +1,5 @@
 import express from 'express';
-import { uploadProofImages } from '../utils/upload.js';
+import { uploadProofImages, uploadHostnameScreenshot } from '../utils/upload.js';
 const router = express.Router();
 import * as onboardingController from '../controllers/onboardingController.js';
 import * as approvalController from '../controllers/approvalController.js';
@@ -79,6 +79,10 @@ router.post('/onboarding/handle', ssoMiddleware, onboardingController.handleRequ
 // causing a 401 → IIS Windows-auth login-prompt loop.
 router.post('/onboarding/upload-proof', uploadProofImages, ssoMiddleware, onboardingController.handleProofUpload);
 
+// OPS desk-setup verification (multipart: hostname screenshot). Same multer →
+// ssoMiddleware ordering rationale as /upload-proof above.
+router.post('/onboarding/ops-verify', uploadHostnameScreenshot, ssoMiddleware, onboardingController.handleOPSVerify);
+
 // Serve the Work Order PDF for the DCI Implementer. Open at Node (no ssoMiddleware)
 // for the same reason as GET /handle — the page loads before the sidecar token is
 // attached. The token itself acts as the gate: we only serve if the token is valid
@@ -92,6 +96,8 @@ router.get('/onboarding/lookup', onboardingController.lookupExistingRequest);
 // Open at Node (like /hrms/employee) so the token-bearing DCI form JS can call
 // them; they only expose AD account existence + group names (low sensitivity).
 router.get('/onboarding/check-ntname', onboardingController.checkNtName);
+// OPS Desk-Setup hostname cross-check — confirms the machine exists in AD.
+router.get('/onboarding/check-hostname', onboardingController.checkHostname);
 router.get('/onboarding/ad-groups', onboardingController.searchGroups);
 
 // HR location group for the signed-in user — used by the initiate form to

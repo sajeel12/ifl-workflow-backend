@@ -417,6 +417,56 @@ export const checkAccountNameExists = async (name) => {
     return { exists: !!match, match: match || null };
 };
 
+/**
+ * Search AD COMPUTER objects by hostname via the adsearch.aspx sidecar (?computer=).
+ * Returns an array of { name, sAMAccountName, displayName, dNSHostName, operatingSystem }
+ * — empty on failure. Used by the OPS Desk-Setup hostname cross-check.
+ */
+export const searchComputersByName = async (q) => {
+    const needle = (q || '').trim();
+    if (needle.length < 2 || !ADSEARCH_URL) return [];
+    try {
+        const url = new URL(ADSEARCH_URL);
+        url.searchParams.set('computer', needle);
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6000) });
+        if (!res.ok) { logger.warn(`[ADComputer] HTTP ${res.status}`); return []; }
+        const data = await res.json();
+        if (!Array.isArray(data.results)) return [];
+        const age      = Math.abs(Date.now() / 1000 - data.timestamp);
+        const expected = _hmacHex(`search|computer:${needle}|${data.timestamp}|${data.results.length}`);
+        if (age > 30 || data.signature !== expected) {
+            logger.warn(`[ADComputer] HMAC mismatch or stale response for "${needle}"`);
+            return [];
+        }
+        return data.results;
+    } catch (e) {
+        logger.warn(`[ADComputer] sidecar error: ${e.message}`);
+        return [];
+    }
+};
+
+/**
+ * Confirm an AD computer/machine account exists for the given hostname.
+ * The OPS user types the bare hostname; AD stores it as cn/name = HOSTNAME and
+ * sAMAccountName = HOSTNAME$. We require an EXACT (case-insensitive) match on
+ * any of those so "PCABC" confirms the real machine but is not a false positive
+ * for "PCABC2". Returns { exists: boolean, match: {...}|null }.
+ */
+export const checkComputerExists = async (hostname) => {
+    const needle = (hostname || '').trim();
+    if (!needle) return { exists: false, match: null };
+    const results = await searchComputersByName(needle);
+    const lc = needle.toLowerCase();
+    const strip$ = s => (s || '').replace(/\$$/, '').toLowerCase();
+    const match = results.find(r =>
+        strip$(r.sAMAccountName) === lc ||
+        (r.name        && r.name.toLowerCase()        === lc) ||
+        (r.displayName && r.displayName.toLowerCase() === lc) ||
+        (r.dNSHostName && r.dNSHostName.toLowerCase().split('.')[0] === lc)
+    );
+    return { exists: !!match, match: match || null };
+};
+
 // ── Internal: search by arbitrary LDAP filter, returns first match ────────────────
 function _searchByFilter(client, filter, attrs, label) {
     return new Promise(resolve => {

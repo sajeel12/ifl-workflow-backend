@@ -23,12 +23,32 @@
         string q          = (Request.QueryString["q"]          ?? "").Trim();
         string employeeId = (Request.QueryString["employeeId"] ?? "").Trim();
         string groups     = (Request.QueryString["groups"]     ?? "").Trim();
+        string computer   = (Request.QueryString["computer"]   ?? "").Trim();
 
         string filter;
         string sigKey; // used in HMAC — tells Node which path was taken
         int    limit = 15;
 
-        if (!string.IsNullOrEmpty(groups)) {
+        if (!string.IsNullOrEmpty(computer)) {
+            // ── Computer path: search COMPUTER objects (objectCategory=computer) ──
+            // Used by the OPS Desk-Setup hostname cross-check — confirms the machine
+            // the OPS user typed was actually joined to the domain. A computer's
+            // sAMAccountName is "HOSTNAME$"; its cn / name / dNSHostName carry the
+            // bare hostname, so we match on all of them.
+            if (computer.Length < 2) {
+                Response.StatusCode = 400;
+                Response.Write("{\"error\":\"computer min 2 chars\"}");
+                return;
+            }
+            string esc = EscLdap(computer);
+            filter = "(&(objectCategory=computer)"
+                   +   "(|(cn=*" + esc + "*)"
+                   +     "(name=*" + esc + "*)"
+                   +     "(dNSHostName=*" + esc + "*)"
+                   +     "(sAMAccountName=*" + esc + "*)))";
+            sigKey = "computer:" + computer;
+            limit  = 25;
+        } else if (!string.IsNullOrEmpty(groups)) {
             // ── Group path: list/search GROUP objects (objectClass=group) ─────────
             // groups=all (or 1) → every group, for the DCI form's load-once dropdown.
             // groups=<text>     → substring search on cn / sAMAccountName / mail.
@@ -118,6 +138,8 @@
                 searcher.PropertiesToLoad.Add("physicalDeliveryOfficeName");
                 searcher.PropertiesToLoad.Add("l");
                 searcher.PropertiesToLoad.Add("streetAddress");
+                searcher.PropertiesToLoad.Add("dNSHostName");
+                searcher.PropertiesToLoad.Add("operatingSystem");
 
                 foreach (SearchResult r in searcher.FindAll()) {
                     string sam  = Prop(r, "sAMAccountName");
@@ -166,7 +188,9 @@
                         memberOf        = grps,
                         office          = Prop(r, "physicalDeliveryOfficeName"),
                         locality        = Prop(r, "l"),
-                        streetAddress   = Prop(r, "streetAddress")
+                        streetAddress   = Prop(r, "streetAddress"),
+                        dNSHostName     = Prop(r, "dNSHostName"),
+                        operatingSystem = Prop(r, "operatingSystem")
                     });
                 }
                 return true;

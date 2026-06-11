@@ -61,3 +61,27 @@ export const uploadProofImages = (req, res, next) => {
         });
     });
 };
+
+// OPS desk-setup hostname screenshot(s). Same image rules/limits as the DCI
+// implementer proof; the multipart field is named `opsProof`.
+export const uploadHostnameScreenshot = (req, res, next) => {
+    upload.array('opsProof', MAX_PROOF_FILES)(req, res, (err) => {
+        if (!err) return next();
+
+        let message;
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            message = `Each screenshot must be 1 MB or smaller (max ${MAX_PROOF_FILES} images). Please compress or pick a smaller image and try again.`;
+        } else if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+            message = `You can upload at most ${MAX_PROOF_FILES} screenshots. Please remove some and try again.`;
+        } else {
+            message = err.message || 'The screenshot upload could not be processed.';
+        }
+
+        return res.status(400).render('pages/message', {
+            title: 'Upload Error',
+            heading: 'Screenshot upload rejected',
+            titleClass: 'error',
+            message
+        });
+    });
+};

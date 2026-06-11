@@ -68,6 +68,11 @@ async function loadService({ resolvedEmail = 'resolved@ifl.com', hodEmail = 'hod
     await jest.unstable_mockModule('../src/utils/logger.js', () => ({
         default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
     }));
+    // AD computer lookup — the DCI hostname must be FREE (exists:false) for
+    // updateDCIDetails to reserve it.
+    await jest.unstable_mockModule('../src/services/adService.js', () => ({
+        checkComputerExists: jest.fn().mockResolvedValue({ exists: false, match: null })
+    }));
 
     const onboardingService = await import('../src/services/onboardingService.js');
     return { onboardingService, sendOnboardingNotification, getWithFallback, get, requestUpdate };
@@ -170,7 +175,7 @@ describe('Email routing chain audit', () => {
             status: 'PendingDCI'
         });
 
-        await onboardingService.updateDCIDetails('tok', {});
+        await onboardingService.updateDCIDetails('tok', { machineHostname: 'HOtestAIO' });
 
         expect(sendOnboardingNotification).toHaveBeenCalledWith(
             'dci.manager@ifl.com',

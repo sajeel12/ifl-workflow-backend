@@ -12,7 +12,7 @@ import WorkflowApproverLocationOverride from '../models/WorkflowApproverLocation
 import { resolveStageRecipient, STATUS_TO_ROLE, LOCATION_AWARE_ROLE_KEYS } from '../utils/resolveStageRecipient.js';
 import { emailsMatch } from '../utils/emailMatch.js';
 import { LOCATION_GROUPS, groupByKey, groupLabel } from '../utils/locationGroups.js';
-import { checkAccountNameExists, searchADGroups, getAllADGroups } from '../services/adService.js';
+import { checkAccountNameExists, searchADGroups, getAllADGroups, checkComputerExists } from '../services/adService.js';
 
 // Built once at module-load so each form render doesn't rebuild it.
 const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key, g.label]));
@@ -109,6 +109,73 @@ async function resolveUserLocationForRole(roleKey, userEmail, username = '') {
     }
     return matches[0] ?? null;
 }
+
+// ─── Shared stage-approver gate ──────────────────────────────────────────────
+// Verifies the signed-in user is the LIVE configured approver for the request's
+// current stage (location-aware, delegation-aware). Returns { ok:true } when
+// allowed, or { ok:false, statusCode, view } describing the message page to
+// render. Records an audit event on rejection. Used by both the generic
+// handleSubmission and the dedicated multipart handleOPSVerify so OPS keeps the
+// exact same gating as every other stage.
+const assertStageApprover = async (req, request) => {
+    const actualEmail = (req.user && req.user.email) || '';
+    const stageRoleInfo = STATUS_TO_ROLE[request.status];
+    if (!stageRoleInfo || !stageRoleInfo.key) return { ok: true };
+
+    if (!actualEmail) {
+        try {
+            await TimelineEvent.create({
+                requestId: request.id,
+                action: 'Unauthorized Submit',
+                actorRole: 'System',
+                details: `Submission attempt without SSO context. Stage: ${request.status}, stored assignee: ${request.currentStageAssigneeEmail}.`,
+                timestamp: new Date()
+            });
+        } catch (_) {}
+        return {
+            ok: false,
+            statusCode: 401,
+            view: {
+                title: 'SSO required',
+                heading: 'SSO sign-in required',
+                titleClass: 'error',
+                icon: '⛔',
+                iconClass: 'error-icon',
+                message: `This action can only be submitted by the configured approver for this stage. Please open the action link from the IFL portal so we can verify your identity.`
+            }
+        };
+    }
+
+    const currentRecipient = await resolveCurrentRecipient(request.status, request.location);
+    const configuredEmail = (currentRecipient && currentRecipient.email) || '';
+    if (configuredEmail && !emailsMatch(actualEmail, configuredEmail)) {
+        try {
+            await TimelineEvent.create({
+                requestId: request.id,
+                action: 'Unauthorized Submit',
+                actorRole: 'System',
+                details: `Configured approver: ${configuredEmail}, submitted by: ${actualEmail}`,
+                timestamp: new Date()
+            });
+        } catch (_) {}
+        const delegateName = (currentRecipient.name && currentRecipient.name.trim())
+            ? `${currentRecipient.name} (${configuredEmail})`
+            : configuredEmail;
+        return {
+            ok: false,
+            statusCode: 403,
+            view: {
+                title: 'Not authorized',
+                heading: 'This stage has been delegated',
+                titleClass: 'error',
+                icon: '⛔',
+                iconClass: 'error-icon',
+                message: `This stage is currently assigned to ${delegateName}. You are signed in as ${actualEmail} and are no longer the configured approver. Please use the portal to check your own pending actions, or contact your administrator.`
+            }
+        };
+    }
+    return { ok: true };
+};
 
 export const handleRequest = async (req, res) => {
     const { token } = req.query;
@@ -262,60 +329,10 @@ const handleSubmission = async (req, res, token) => {
             const { role, request } = context;
 
             // ─── Authorization: check the LIVE configured approver for this
-            // stage role (not just the stored currentStageAssigneeEmail).
-            // This lets admin role changes take effect immediately on
-            // in-flight requests without needing an explicit rebind action.
-            // If no approver is configured for the role, any authenticated
-            // user may proceed (avoids lock-out during initial setup).
-            // Compare LOCAL-PART only (text before "@") — same person can be
-            // ali.khan@ifl.net in HRMS and ali.khan@igc.com.pk in AD.
-            const actualEmail = (req.user && req.user.email) || '';
-            const stageRoleInfo = STATUS_TO_ROLE[request.status];
-            if (stageRoleInfo && stageRoleInfo.key) {
-                if (!actualEmail) {
-                    try {
-                        await TimelineEvent.create({
-                            requestId: request.id,
-                            action: 'Unauthorized Submit',
-                            actorRole: 'System',
-                            details: `Submission attempt without SSO context. Stage: ${request.status}, stored assignee: ${request.currentStageAssigneeEmail}.`,
-                            timestamp: new Date()
-                        });
-                    } catch (_) {}
-                    return res.status(401).render('pages/message', {
-                        title: 'SSO required',
-                        heading: 'SSO sign-in required',
-                        titleClass: 'error',
-                        icon: '⛔',
-                        iconClass: 'error-icon',
-                        message: `This action can only be submitted by the configured approver for this stage. Please open the action link from the IFL portal so we can verify your identity.`
-                    });
-                }
-                const currentRecipient = await resolveCurrentRecipient(request.status, request.location);
-                const configuredEmail = (currentRecipient && currentRecipient.email) || '';
-                if (configuredEmail && !emailsMatch(actualEmail, configuredEmail)) {
-                    try {
-                        await TimelineEvent.create({
-                            requestId: request.id,
-                            action: 'Unauthorized Submit',
-                            actorRole: 'System',
-                            details: `Configured approver: ${configuredEmail}, submitted by: ${actualEmail}`,
-                            timestamp: new Date()
-                        });
-                    } catch (_) {}
-                    const delegateName = (currentRecipient.name && currentRecipient.name.trim())
-                        ? `${currentRecipient.name} (${configuredEmail})`
-                        : configuredEmail;
-                    return res.status(403).render('pages/message', {
-                        title: 'Not authorized',
-                        heading: 'This stage has been delegated',
-                        titleClass: 'error',
-                        icon: '⛔',
-                        iconClass: 'error-icon',
-                        message: `This stage is currently assigned to ${delegateName}. You are signed in as ${actualEmail} and are no longer the configured approver. Please use the portal to check your own pending actions, or contact your administrator.`
-                    });
-                }
-            }
+            // stage role (location-aware, delegation-aware). Shared with the
+            // dedicated OPS multipart handler via assertStageApprover.
+            const gate = await assertStageApprover(req, request);
+            if (!gate.ok) return res.status(gate.statusCode).render('pages/message', gate.view);
 
             if (role === 'IT') {
                 // Step 2: IT Ops records the configuration.
@@ -402,20 +419,11 @@ const handleSubmission = async (req, res, token) => {
                 );
             }
             else if (role === 'OPS') {
-                // Step 12 — OPS final verification.
-                const opsName = (req.user && (req.user.displayName || req.user.username)) || data.opsName;
-                const checklistData = [];
-                Object.keys(data).forEach(key => {
-                    if (key.startsWith('check_')) {
-                        checklistData.push({ item: key.replace('check_', ''), checked: data[key] === 'on' });
-                    }
-                });
-                await onboardingService.handleOPSAction(token, checklistData, opsName);
-                return success(
-                    'Mark as Verified',
-                    'Verification completed successfully. The onboarding process has been completed.',
-                    { status: 'Completed', requestId: request.id, actorRole: 'OPS' }
-                );
+                // OPS desk-setup verification is multipart (hostname screenshot)
+                // and goes through the dedicated /api/onboarding/ops-verify route
+                // → handleOPSVerify. If a request lands here, the form was posted
+                // the wrong way; guide the user rather than silently mis-handling.
+                return renderError(res, 'Please complete the desk-setup verification from the OPS form (it requires a hostname screenshot upload).', { actorRole: 'OPS' });
             }
             else {
                 return renderError(res, 'Action not permitted.');
@@ -452,6 +460,53 @@ export const handleProofUpload = async (req, res) => {
         );
     } catch (err) {
         return renderError(res, err.message);
+    }
+};
+
+// OPS desk-setup verification (multipart: hostname screenshot). Mirrors
+// handleProofUpload but completes the request. The hostname is NOT taken from
+// the client — handleOPSAction re-verifies the stored DCI-approved name against
+// AD, so OPS physically cannot submit a different machine name.
+export const handleOPSVerify = async (req, res) => {
+    try {
+        const token = req.query.token || req.body.token;
+        if (!token) return renderError(res, 'Missing stage token.', { actorRole: 'OPS' });
+
+        const context = await onboardingService.getFormContext(token);
+        if (!context) return renderError(res, 'Invalid or Expired Token', { actorRole: 'OPS' });
+        const { request } = context;
+
+        // Same stage-approver gate as every other stage.
+        const gate = await assertStageApprover(req, request);
+        if (!gate.ok) return res.status(gate.statusCode).render('pages/message', gate.view);
+
+        // Identity comes ONLY from SSO — never a form field.
+        if (!req.user) {
+            return renderError(res, 'SSO sign-in required to complete desk-setup verification.', { actorRole: 'OPS' });
+        }
+        const opsName = req.user.displayName || req.user.username;
+
+        // Reconstruct the checklist from check_* fields (multipart text fields).
+        const checklistData = [];
+        Object.keys(req.body).forEach(key => {
+            if (key.startsWith('check_')) {
+                checklistData.push({ item: key.replace('check_', ''), checked: req.body[key] === 'on' });
+            }
+        });
+
+        const serial = (req.body.productSerialNumber || '').trim();
+        const screenshotPaths = (req.files || []).map(f => f.path);
+
+        await onboardingService.handleOPSAction(token, checklistData, opsName, { serial, screenshotPaths });
+
+        return renderSuccess(
+            res,
+            'Mark as Verified',
+            'Verification completed successfully. The onboarding process has been completed.',
+            { status: 'Completed', requestId: request.id, actorRole: 'OPS' }
+        );
+    } catch (err) {
+        return renderError(res, err.message, { actorRole: 'OPS' });
     }
 };
 
@@ -676,6 +731,11 @@ const renderForm = async (req, res, token) => {
     if (role === 'DCIImplementer') {
         formAction = '/api/onboarding/upload-proof';
         formEnctype = 'enctype="multipart/form-data"';
+    } else if (role === 'OPS') {
+        // OPS desk setup uploads a hostname screenshot, so the final submit is
+        // multipart and routed to the dedicated ops-verify handler.
+        formAction = `/api/onboarding/ops-verify?token=${token || ''}`;
+        formEnctype = 'enctype="multipart/form-data"';
     }
 
     // Full workflow stepper — driven by request.status, not the viewer role.
@@ -736,6 +796,57 @@ const renderForm = async (req, res, token) => {
                </div>`
             : '';
 
+        // OPS desk-setup asset block. The hostname is the DCI-APPROVED name and
+        // is LOCKED here — OPS cannot type a different value. OPS must (a) name
+        // the machine to exactly this hostname, (b) upload a screenshot proof,
+        // and (c) press "Verify in AD" so the system confirms the machine is now
+        // joined (the approved name must now EXIST). Serial is captured here.
+        const escAttr = v => String(v == null ? '' : v).replace(/"/g, '&quot;');
+        const approvedHn = escAttr(request.machineHostname);
+        const sn = escAttr(request.productSerialNumber);
+        const deviceLabel = request.productType
+            ? `${request.productType}${request.productType === 'Laptop' ? ' (LPT)' : ''}`
+            : '—';
+        const assetDetailsHTML = `
+            <div class="section-title" style="margin-top:6px;margin-bottom:10px;">
+                <span>Machine / Asset Verification</span>
+                <span class="section-tag" style="background:#d9770620;color:#b45309;">Required</span>
+            </div>
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:0.82rem;color:#1e3a8a;">
+                Name the workstation to <strong>exactly</strong> the approved hostname below, then upload a screenshot of the assigned hostname and press <strong>Verify in AD</strong>. Verification confirms the machine is joined to the domain under this name.
+            </div>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Approved Machine Hostname <span style="color:#64748b;font-weight:400;font-size:0.8rem;">(set by DCI — locked)</span></label>
+                    <div style="display:flex;gap:8px;align-items:stretch;">
+                        <input type="text" id="opsHostname" value="${approvedHn}" readonly
+                               style="flex:1 1 auto;background:#f1f5f9;color:#0f172a;font-weight:700;letter-spacing:0.3px;">
+                        <button type="button" id="opsCheckHostBtn" class="btn btn-secondary"
+                                style="flex-shrink:0;white-space:nowrap;">Verify in AD</button>
+                    </div>
+                    <div id="opsHostStatus" style="font-size:0.8rem;margin-top:6px;color:#64748b;"></div>
+                </div>
+                <div class="form-group">
+                    <label>Device Type <span style="color:#64748b;font-weight:400;font-size:0.8rem;">(from IT)</span></label>
+                    <input type="text" value="${escAttr(deviceLabel)}" readonly
+                           style="background:#f1f5f9;color:#0f172a;">
+                </div>
+            </div>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Product Serial Number <span style="color:#dc2626;">*</span></label>
+                    <input type="text" name="productSerialNumber" value="${sn}"
+                           placeholder="Manufacturer serial / asset no." autocomplete="off" required>
+                </div>
+                <div class="form-group">
+                    <label>Hostname Screenshot <span style="color:#dc2626;">*</span>
+                        <span style="color:#64748b;font-weight:400;font-size:0.8rem;">(JPG/PNG, ≤1 MB)</span>
+                    </label>
+                    <input type="file" name="opsProof" accept="image/*" required>
+                </div>
+            </div>
+        `;
+
         opsChecklistHTML = `
             <div class="ops-box">
                 <div class="section-title">
@@ -753,6 +864,7 @@ const renderForm = async (req, res, token) => {
                                style="background:#f1f5f9; color:#0f172a;">
                     </div>
                 </div>
+                ${assetDetailsHTML}
                 <div class="checkbox-card-group" style="grid-template-columns: 1fr;">
                     ${items.map(item => `
                         <label class="checkbox-card">
@@ -781,6 +893,17 @@ const renderForm = async (req, res, token) => {
         logger.warn('[Onboarding] Could not load SystemConfig for form dropdowns: ' + e.message);
     }
 
+    // Individual locations of the request's group — feeds the DCI hostname
+    // builder's location dropdown (groups hold several physical locations).
+    // Falls back to every known location code when the group can't be resolved
+    // (e.g. a global HR request with no group locations).
+    let deviceLocations = [];
+    const _grp = request.location ? groupByKey(request.location) : null;
+    if (_grp && Array.isArray(_grp.locations)) deviceLocations = _grp.locations;
+    if (deviceLocations.length === 0) {
+        deviceLocations = [...new Set(LOCATION_GROUPS.flatMap(g => g.locations || []))];
+    }
+
     return res.render('pages/onboarding_form', {
         title: `Onboarding - ${role}`,
         request,
@@ -801,6 +924,7 @@ const renderForm = async (req, res, token) => {
         printerLocations,
         fileSharePaths,
         sharepointPaths,
+        deviceLocations,
         // Group-key → label map so the form can show "LHR" / "HO / ISB / …"
         // instead of the raw group key stored in request.location.
         locationGroupLabels: LOCATION_GROUP_LABELS,
@@ -1393,6 +1517,34 @@ export const checkNtName = async (req, res) => {
         });
     } catch (err) {
         logger.error(`[Onboarding] checkNtName: ${err.message}`);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * GET /api/onboarding/check-hostname?name=X
+ * Used by the OPS Desk-Setup form's "Verify" button to confirm the machine
+ * hostname the OPS user typed actually exists as an AD computer account.
+ * Unlike check-ntname (which requires the name to be FREE), this requires the
+ * name to EXIST. Returns { name, exists, match }.
+ */
+export const checkHostname = async (req, res) => {
+    try {
+        const name = (req.query.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'name query param required' });
+        const { exists, match } = await checkComputerExists(name);
+        return res.json({
+            name,
+            exists,
+            match: match ? {
+                sAMAccountName:  match.sAMAccountName  || null,
+                name:            match.name            || match.displayName || null,
+                dNSHostName:     match.dNSHostName     || null,
+                operatingSystem: match.operatingSystem || null,
+            } : null
+        });
+    } catch (err) {
+        logger.error(`[Onboarding] checkHostname: ${err.message}`);
         return res.status(500).json({ error: err.message });
     }
 };

@@ -350,6 +350,22 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Hardware / Device (set by IT Ops; drives the hostname suffix) -->
+                            <div style="border-top:1px dashed #cbd5e1;padding-top:12px;">
+                                <div class="grid-4">
+                                    <div class="form-group">
+                                        <label>Device Type <span style="color:#dc2626;">*</span>
+                                            <span style="color:#64748b;font-weight:400;font-size:0.8rem;">(Laptop / All-in-One)</span>
+                                        </label>
+                                        <select name="productType" <%= role === 'IT' ? '' : 'disabled' %> required>
+                                            <option value="">— Select Device —</option>
+                                            <option value="Laptop" <%= val('productType') === 'Laptop' ? 'selected' : '' %>>Laptop</option>
+                                            <option value="AIO" <%= val('productType') === 'AIO' ? 'selected' : '' %>>AIO (All-in-One)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <% } %>
@@ -421,6 +437,49 @@
                                     <label>Title <span style="color:#9ca3af;font-weight:400;text-transform:none;">(auto)</span></label>
                                     <input type="text" id="dciTitle" name="adTitle" value="<%= val('adTitle') || val('designation') %>" <%=configDisabled %>>
                                 </div>
+                            </div>
+
+                            <!-- Machine Hostname builder — DCI composes & AD-reserves a FREE name -->
+                            <div style="border-top:1px dashed #cbd5e1;padding-top:12px;margin-bottom:14px;">
+                                <label style="font-weight:600;">Machine Hostname <span style="color:#dc2626;">*</span>
+                                    <span style="color:#64748b;font-weight:400;font-size:0.8rem;">(Location + Username + Device — must be free in AD)</span>
+                                </label>
+                                <% if (dciEditable) { %>
+                                    <div class="grid-4" style="margin-top:6px;">
+                                        <div class="form-group">
+                                            <label>Location</label>
+                                            <select id="dciHostLoc" name="deviceLocationCode">
+                                                <% (typeof deviceLocations !== 'undefined' ? deviceLocations : []).forEach(loc => { %>
+                                                    <option value="<%= loc %>" <%= val('deviceLocationCode') === loc ? 'selected' : '' %>><%= loc %></option>
+                                                <% }) %>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Username</label>
+                                            <input type="text" id="dciHostUser" autocomplete="off" placeholder="username">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Device <span style="color:#9ca3af;font-weight:400;text-transform:none;">(from IT)</span></label>
+                                            <select id="dciHostDevice" <%= val('productType') ? 'disabled' : '' %>>
+                                                <option value="">—</option>
+                                                <option value="LPT" <%= val('productType') === 'Laptop' ? 'selected' : '' %>>Laptop (LPT)</option>
+                                                <option value="AIO" <%= val('productType') === 'AIO' ? 'selected' : '' %>>AIO</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>&nbsp;</label>
+                                            <button type="button" id="dciCheckHostBtn" class="btn btn-secondary" style="white-space:nowrap;">Check Availability</button>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex;gap:8px;align-items:center;margin-top:2px;">
+                                        <span style="font-size:0.8rem;color:#64748b;">Hostname:</span>
+                                        <code id="dciHostPreview" style="font-weight:700;color:#0f172a;">—</code>
+                                    </div>
+                                    <div id="dciHostStatus" style="font-size:0.78rem;margin-top:5px;min-height:16px;"></div>
+                                    <input type="hidden" id="dciHostname" name="machineHostname" value="<%= val('machineHostname') %>">
+                                <% } else { %>
+                                    <input type="text" name="machineHostname" value="<%= val('machineHostname') %>" readonly style="background:#f1f5f9;margin-top:6px;">
+                                <% } %>
                             </div>
 
                             <!-- Alias + SMTP domain compose the SMTP address -->
@@ -510,6 +569,7 @@
                                 fullName:    <%- JSON.stringify(request.fullName    || '') %>,
                                 designation: <%- JSON.stringify(request.designation || '') %>,
                                 department:  <%- JSON.stringify(request.department  || '') %>,
+                                productType: <%- JSON.stringify(request.productType  || '') %>,
                                 existing: {
                                     ntUserName:          <%- JSON.stringify(val('ntUserName')) %>,
                                     exchangeDisplayName: <%- JSON.stringify(val('exchangeDisplayName')) %>,
@@ -844,6 +904,54 @@
                 }
             }
 
+            // ── OPS Desk-Setup: locked-hostname AD cross-check ────────────────────
+            // The hostname is the DCI-approved name (read-only). OPS must (a)
+            // upload a screenshot of the assigned hostname and (b) press "Verify
+            // in AD" so we confirm the machine is now JOINED under that name. The
+            // gate below is consumed by the submit handler; the server re-checks.
+            document.addEventListener('DOMContentLoaded', () => {
+                const hostEl  = document.getElementById('opsHostname');
+                if (!hostEl) return; // not the OPS form
+                const btnEl   = document.getElementById('opsCheckHostBtn');
+                const statEl  = document.getElementById('opsHostStatus');
+                const fileEl  = document.querySelector('input[name="opsProof"]');
+                const approvedName = (hostEl.value || '').trim();
+                let hostVerified = false;
+                const setStat = (html, color) => {
+                    if (statEl) { statEl.innerHTML = html; statEl.style.color = color || '#64748b'; }
+                };
+                const runHostCheck = async () => {
+                    if (!approvedName) { setStat('No approved hostname on file — contact the DCI Team.', '#b45309'); return; }
+                    setStat('Checking AD…', '#64748b');
+                    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Checking…'; }
+                    try {
+                        const res  = await fetch('/api/onboarding/check-hostname?name=' + encodeURIComponent(approvedName));
+                        const data = await res.json();
+                        if (data.exists) {
+                            hostVerified = true;
+                            const os = data.match && data.match.operatingSystem;
+                            setStat('✓ Joined to AD' + (os ? ' (' + os + ')' : '') + ' — hostname verified.', '#16a34a');
+                        } else {
+                            hostVerified = false;
+                            setStat('✕ "' + approvedName + '" is not joined to AD yet. Name the machine to exactly this hostname, then Verify again.', '#dc2626');
+                        }
+                    } catch (_) {
+                        hostVerified = false;
+                        setStat('Could not reach AD to verify. Try again.', '#b45309');
+                    } finally {
+                        if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Verify in AD'; }
+                    }
+                };
+                if (btnEl) btnEl.addEventListener('click', runHostCheck);
+                // Gate consumed by the submit handler before completing OPS verification.
+                window.__opsHostnameGate = () => {
+                    if (!approvedName) return { ok: false, message: 'No approved hostname is on file for this request. The DCI Team must set it first.' };
+                    if (fileEl && (!fileEl.files || fileEl.files.length === 0)) return { ok: false, message: 'Upload a screenshot of the assigned machine hostname before completing.' };
+                    if (!hostVerified) return { ok: false, message: 'Press "Verify in AD" and confirm the machine "' + approvedName + '" is joined to Active Directory before marking the setup as verified.' };
+                    return { ok: true };
+                };
+            });
+
             document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('form').forEach(form => {
                     form.addEventListener('submit', async (e) => {
@@ -879,6 +987,40 @@
                                     ntEl.focus();
                                 }
                                 IflDialog.alert(gate.message, { title: 'AD check required' });
+                                return;
+                            }
+                        }
+
+                        // DCI stage: require the composed machine hostname to be
+                        // confirmed FREE in AD before forwarding to the Manager.
+                        if (typeof window.__dciHostnameGate === 'function' && form.querySelector('#dciHostname')) {
+                            const gate = window.__dciHostnameGate();
+                            if (!gate.ok) {
+                                e.preventDefault();
+                                const sec = document.getElementById('sec-dci');
+                                if (sec && sec.classList.contains('is-collapsed')) iflToggleSection(sec.querySelector('.form-section-hd'));
+                                const hu = form.querySelector('#dciHostUser');
+                                if (hu) { hu.scrollIntoView({ behavior: 'smooth', block: 'center' }); hu.focus(); }
+                                IflDialog.alert(gate.message, { title: 'Hostname check required' });
+                                return;
+                            }
+                        }
+
+                        // OPS stage: require an AD hostname verification before the
+                        // setup can be marked Verified. Gate is only defined on the
+                        // OPS form (presence of #opsHostname).
+                        if (typeof window.__opsHostnameGate === 'function' && form.querySelector('#opsHostname')) {
+                            const gate = window.__opsHostnameGate();
+                            if (!gate.ok) {
+                                e.preventDefault();
+                                const hostEl = form.querySelector('#opsHostname');
+                                if (hostEl) {
+                                    const sec = document.getElementById('sec-ops');
+                                    if (sec && sec.classList.contains('is-collapsed')) iflToggleSection(sec.querySelector('.form-section-hd'));
+                                    hostEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    hostEl.focus();
+                                }
+                                IflDialog.alert(gate.message, { title: 'AD verification required' });
                                 return;
                             }
                         }
@@ -1349,6 +1491,85 @@
             }
             // Any edit invalidates the prior AD check — the new value must be re-checked.
             ntEl.addEventListener('input', () => { ntVerifiedValue = null; setStatus('', '#64748b'); });
+
+            // ── Machine hostname builder (Location + Username + Device) ───────────
+            // Composes <LocationCode><username><DeviceCode> (e.g. HOisrarulhaqAIO)
+            // and checks AD that it is FREE — the machine isn't joined until OPS
+            // desk setup, so an existing name means a clash to avoid. The gate
+            // below blocks forwarding to the Manager until a free name is confirmed.
+            const hostLocEl    = $('dciHostLoc');
+            const hostUserEl   = $('dciHostUser');
+            const hostDevEl    = $('dciHostDevice');
+            const hostPrevEl   = $('dciHostPreview');
+            const hostStatusEl = $('dciHostStatus');
+            const hostHiddenEl = $('dciHostname');
+            const hostCheckBtn = $('dciCheckHostBtn');
+            if (hostUserEl && hostHiddenEl) {
+                const sanitizeUser = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                let hostVerifiedValue = null;
+                let hostUserTouched   = false;
+                const setHostStatus = (html, color) => {
+                    if (hostStatusEl) { hostStatusEl.innerHTML = html; hostStatusEl.style.color = color || '#64748b'; }
+                };
+                // Seed the username middle from the NT login name (or full name).
+                if (!hostUserEl.value) hostUserEl.value = sanitizeUser(ntEl.value || CFG.existing.ntUserName || CFG.fullName);
+                const composeHostname = () => {
+                    const loc = ((hostLocEl && hostLocEl.value) || '').trim();
+                    const mid = sanitizeUser(hostUserEl.value);
+                    const dev = ((hostDevEl && hostDevEl.value) || '').trim();
+                    const full = loc + mid + dev;
+                    if (hostPrevEl)   hostPrevEl.textContent = full || '—';
+                    if (hostHiddenEl) hostHiddenEl.value = full;
+                    return full;
+                };
+                const invalidate = () => {
+                    hostVerifiedValue = null;
+                    const full = composeHostname();
+                    if (full.length > 15) setHostStatus('⚠ ' + full.length + ' chars — AD computer names max out at 15. Shorten the username.', '#b45309');
+                    else setHostStatus('', '#64748b');
+                };
+                const runHostCheck = async () => {
+                    const name = composeHostname();
+                    if (!name) { setHostStatus('Pick a location and enter a username first.', '#b45309'); return; }
+                    if (!hostDevEl || !hostDevEl.value) { setHostStatus('Device type is missing — set it at the IT Ops stage.', '#b45309'); return; }
+                    if (name.length > 15) { setHostStatus('✕ ' + name.length + ' chars — exceeds the 15-char AD limit. Shorten the username.', '#dc2626'); return; }
+                    setHostStatus('Checking AD…', '#64748b');
+                    if (hostCheckBtn) { hostCheckBtn.disabled = true; hostCheckBtn.textContent = 'Checking…'; }
+                    try {
+                        const res  = await fetch('/api/onboarding/check-hostname?name=' + encodeURIComponent(name));
+                        const data = await res.json();
+                        if (!data.exists) {
+                            hostVerifiedValue = name;
+                            setHostStatus('✓ Available — "' + name + '" is free to assign.', '#16a34a');
+                        } else {
+                            hostVerifiedValue = null;
+                            const who = data.match && (data.match.name || data.match.sAMAccountName);
+                            setHostStatus('✕ "' + name + '" already exists' + (who ? ' (' + who + ')' : '') + ' — change the username part and re-check.', '#dc2626');
+                        }
+                    } catch (_) {
+                        hostVerifiedValue = null;
+                        setHostStatus('Could not reach AD to verify. Try again.', '#b45309');
+                    } finally {
+                        if (hostCheckBtn) { hostCheckBtn.disabled = false; hostCheckBtn.textContent = 'Check Availability'; }
+                    }
+                };
+                composeHostname();
+                if (hostCheckBtn) hostCheckBtn.addEventListener('click', runHostCheck);
+                if (hostLocEl)    hostLocEl.addEventListener('change', invalidate);
+                if (hostDevEl)    hostDevEl.addEventListener('change', invalidate);
+                hostUserEl.addEventListener('input', () => { hostUserTouched = true; invalidate(); });
+                // Mirror NT-login edits into the hostname username until the user
+                // hand-edits the hostname field themselves.
+                ntEl.addEventListener('input', () => { if (!hostUserTouched) { hostUserEl.value = sanitizeUser(ntEl.value); invalidate(); } });
+                // Gate consumed by the submit handler before forwarding to the Manager.
+                window.__dciHostnameGate = () => {
+                    const cur = composeHostname();
+                    if (!cur) return { ok: false, message: 'Build the machine hostname (location + username + device) before forwarding.' };
+                    if (cur.length > 15) return { ok: false, message: 'The hostname "' + cur + '" exceeds the 15-character AD limit. Shorten the username part.' };
+                    if (hostVerifiedValue !== cur) return { ok: false, message: 'Press "Check Availability" and confirm the hostname is free in AD before forwarding to the Manager.' };
+                    return { ok: true };
+                };
+            }
 
             // ── Member Of: load-once AD group dropdown (multi-select) ─────────────
             const toggleBtn   = $('dciGroupToggle');

@@ -113,7 +113,8 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         // APPLICANT BOX
         // ════════════════════════════════════════════════════════════════
         const appTop = M;
-        const appHeight = 540;     // ~64% of A4 — leaves room for the System Infra box below
+        const appHeight = 524;     // ~62% of A4 — leaves room for the System Infra box below
+                                   // (incl. the DCI-assigned hostname row)
         const appBottom = appTop + appHeight;
 
         doc.lineWidth(0.7).rect(M, appTop, W, appHeight).stroke();
@@ -293,6 +294,14 @@ export const generateOnboardingPDF = async (request, outputPath) => {
         sy += 20;
         labeledField('Member of (if any)',   colLeftX, sy, 95, colWidth - 100, 16, request.memberOf);
         labeledField('Mailbox Storage Limit', colRightX, sy, 105, colWidth - 110, 16, request.mailboxStorageLimit || '250 MB');
+
+        // ─── Machine assignment (DCI-approved hostname + device type) ───
+        sy += 20;
+        const deviceLabel = request.productType
+            ? `${request.productType}${request.productType === 'Laptop' ? ' (LPT)' : ''}`
+            : '';
+        labeledField('Assigned Hostname', colLeftX, sy, 95, colWidth - 100, 16, request.machineHostname);
+        labeledField('Device Type',       colRightX, sy, 80, colWidth - 85, 16, deviceLabel);
 
         // ─── Group Policy Level ─────────────────────────────────────────
         sy += 20;

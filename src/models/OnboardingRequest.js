@@ -225,6 +225,55 @@ const OnboardingRequest = sequelize.define('OnboardingRequest', {
         type: DataTypes.STRING,
         allowNull: true
     },
+    // --- Machine / Asset fields (spread across IT → DCI → OPS stages) ---
+    // Form factor of the delivered machine: 'Laptop' | 'AIO'.
+    // Captured at STAGE 2 (IT Ops). Drives the hostname suffix (LPT/AIO).
+    productType: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // Individual location code chosen by DCI from the request's location group
+    // (e.g. 'HO'). Captured at STAGE 5 (DCI). Forms the hostname prefix.
+    deviceLocationCode: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // DCI-APPROVED machine hostname following <LocationCode><username><DeviceCode>
+    // (e.g. 'HOisrarulhaqAIO'). Composed + AD-availability-checked at STAGE 5
+    // (DCI) — must be FREE there since the machine isn't joined yet. Locked
+    // thereafter; OPS verifies this exact value now EXISTS in AD at desk setup.
+    machineHostname: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // Manufacturer serial / asset number of the delivered machine.
+    // Captured at STAGE 7 (OPS desk setup) — only known with the device in hand.
+    productSerialNumber: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // Audit flag — true once the DCI-approved machineHostname was confirmed to
+    // EXIST in AD at OPS desk setup (set server-side after the re-check in
+    // handleOPSAction, never trusted from the client).
+    hostnameVerified: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    // OPS-uploaded screenshot(s) of the assigned machine hostname — human proof
+    // the workstation actually bears the approved name. Captured at STAGE 7.
+    // Stored as JSON-serialized array of file paths (TEXT for MSSQL), mirroring
+    // dciProofAttachments.
+    opsProofAttachments: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        get() {
+            const rawValue = this.getDataValue('opsProofAttachments');
+            return rawValue ? JSON.parse(rawValue) : [];
+        },
+        set(value) {
+            this.setDataValue('opsProofAttachments', JSON.stringify(value));
+        }
+    },
     opsChecklist: {
         type: DataTypes.TEXT, // Changed from JSON for MSSQL compatibility
         allowNull: true,

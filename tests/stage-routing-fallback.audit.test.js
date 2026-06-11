@@ -69,6 +69,11 @@ async function loadService({ status, extraRequestFields = {} }) {
     await jest.unstable_mockModule('../src/services/recipientService.js', () => ({
         default: { get, getWithFallback }
     }));
+    // AD computer lookup — the DCI hostname must be FREE (exists:false) for
+    // updateDCIDetails to reserve it.
+    await jest.unstable_mockModule('../src/services/adService.js', () => ({
+        checkComputerExists: jest.fn().mockResolvedValue({ exists: false, match: null })
+    }));
 
     const onboardingService = await import('../src/services/onboardingService.js');
 
@@ -150,7 +155,7 @@ describe('Stage routing fallback audit', () => {
             status: 'PendingDCI'
         });
 
-        await onboardingService.updateDCIDetails('tok', {});
+        await onboardingService.updateDCIDetails('tok', { machineHostname: 'HOtestAIO' });
 
         expect(getWithFallback).toHaveBeenCalledWith(
             'DCI_MANAGER',

@@ -296,6 +296,11 @@ let assignmentContext = { type: 'individual', targetId: null };
 let currentViewedEmployee = null;
 let isEditMode = false;
 let _hodExcludeId = null;
+// AD-email verification state for the currently selected HOD candidate:
+//   true  = has an AD mailbox (assignable)
+//   false = no AD account/email (blocked)
+//   null  = unknown / not yet verified / AD unreachable
+let _selectedHodHasAdEmail = null;
 
 /* ================================================================
    INIT
@@ -438,30 +443,55 @@ async function selectHod(hodId, hodName, designation, dept, email) {
 
   document.getElementById('selectedHodAvatar').textContent = hodName.charAt(0).toUpperCase();
   document.getElementById('selectedHodName').textContent   = hodName;
-  // Show DB email immediately; replace with AD email once the sidecar responds
   const metaEl = document.getElementById('selectedHodMeta');
-  metaEl.textContent = [hodId, dept, designation, email || 'Fetching email…'].filter(Boolean).join(' · ');
+  metaEl.style.color = 'var(--a-brand)';
+  metaEl.textContent = [hodId, dept, designation, 'Verifying AD email…'].filter(Boolean).join(' · ');
   document.getElementById('selectedHodCard').style.display = 'flex';
   document.getElementById('assignForm').style.display      = 'block';
   FloatSuggest.close();
 
-  // Resolve real email from AD sidecar — DB emails are often stale
+  // An HOD MUST have an AD mailbox (the workflow emails their approval link).
+  // Disable Confirm until the AD sidecar verifies one. DB emails are not
+  // sufficient — they're often stale and the account may not exist in AD.
+  _selectedHodHasAdEmail = null;
+  const confirmBtn = document.getElementById('btnConfirmAssign');
+  confirmBtn.disabled = true;
+
   try {
     const adRes  = await window.iflFetch(`/admin/ad-search?employeeId=${encodeURIComponent(hodId)}`);
     const adJson = await adRes.json();
-    const adMail = adJson.success && adJson.results && adJson.results[0] && adJson.results[0].mail;
+    const adRec  = adJson.success && adJson.results && adJson.results[0];
+    const adMail = adRec && (adRec.mail || adRec.email);
+    // Ignore a late response if the admin already changed selection.
+    if (document.getElementById('selectedHodId').value !== String(hodId)) return;
     if (adMail) {
+      _selectedHodHasAdEmail = true;
+      confirmBtn.disabled = false;
+      metaEl.style.color = 'var(--a-brand)';
       metaEl.textContent = [hodId, dept, designation, adMail].filter(Boolean).join(' · ');
-    } else if (!email) {
-      metaEl.textContent = [hodId, dept, designation].filter(Boolean).join(' · ');
+    } else {
+      _selectedHodHasAdEmail = false;
+      confirmBtn.disabled = true;
+      metaEl.style.color = 'var(--a-red)';
+      metaEl.textContent = `⛔ ${hodId} — No AD email/account. This user cannot be assigned as HOD.`;
     }
-  } catch (_) { /* non-fatal — DB email or placeholder already shown */ }
+  } catch (_) {
+    // AD unreachable — leave the final decision to the server gate, but warn.
+    if (document.getElementById('selectedHodId').value !== String(hodId)) return;
+    _selectedHodHasAdEmail = null;
+    confirmBtn.disabled = false;
+    metaEl.style.color = '#b45309';
+    metaEl.textContent = [hodId, dept, designation, 'Could not reach AD — email will be verified on submit'].filter(Boolean).join(' · ');
+  }
 }
 
 function clearHodSelection(clearInput = true) {
   document.getElementById('selectedHodId').value           = '';
   document.getElementById('selectedHodCard').style.display = 'none';
   document.getElementById('assignForm').style.display      = 'none';
+  _selectedHodHasAdEmail = null;
+  const confirmBtn = document.getElementById('btnConfirmAssign');
+  if (confirmBtn) confirmBtn.disabled = false;
   if (clearInput) document.getElementById('hodSearchInput').value = '';
 }
 
@@ -562,9 +592,12 @@ function renderTable(employees, q = '') {
          <button class="btn btn-secondary" style="padding:5px 10px;font-size:.78rem;" onclick="viewEmployeeDetails('${emp.employeeId}')">View</button>`
       : `<button class="btn btn-primary" style="padding:5px 10px;font-size:.78rem;" onclick="openAssignModal('${emp.employeeId}')">Assign HOD</button>
          <button class="btn btn-secondary" style="padding:5px 10px;font-size:.78rem;" onclick="viewEmployeeDetails('${emp.employeeId}')">View</button>`;
-    return `<tr>
+    const termBadge = emp.isTerminated
+      ? ` <span class="badge" style="background:var(--a-red-bg);color:var(--a-red);border:1px solid #fca5a5;font-size:.66rem;padding:1px 7px;border-radius:10px;vertical-align:middle;white-space:nowrap;" title="${emp.actualTerminationDate ? 'Terminated on ' + new Date(emp.actualTerminationDate).toLocaleDateString('en-GB') : 'Terminated'}">Terminated</span>`
+      : '';
+    return `<tr${emp.isTerminated ? ' style="background:var(--a-red-bg);"' : ''}>
       <td><strong>${emp.employeeId}</strong></td>
-      <td>${highlight(emp.name, q)}</td>
+      <td>${highlight(emp.name, q)}${termBadge}</td>
       <td>${highlight(emp.department || '—', q)}</td>
       <td>${emp.designation || '—'}</td>
       <td>${emp.location || '—'}</td>
@@ -649,6 +682,10 @@ async function submitAssignment(e) {
   const targetVal = document.getElementById('selectedEmpId').value;
   const hodId     = document.getElementById('selectedHodId').value;
   if (!hodId) { IflDialog.warning('Please select an HOD from the suggestions.'); return; }
+  if (_selectedHodHasAdEmail === false) {
+    IflDialog.warning('This user has no Active Directory email/account and cannot be assigned as HOD. Please choose a user with a valid AD mailbox.');
+    return;
+  }
   const btn = document.getElementById('btnConfirmAssign');
   btn.disabled = true; btn.innerText = 'Assigning…';
   const endpoint = assignmentContext.type === 'department' ? '/admin/assign-department-hod' : '/admin/assign-hod';

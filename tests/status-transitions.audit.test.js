@@ -67,6 +67,15 @@ async function loadService({ status, extraRequestFields = {} }) {
             getWithFallback: jest.fn().mockResolvedValue({ email: 'next@ifl.com', name: 'Next', isFallback: false, source: 'DB' })
         }
     }));
+    // AD computer lookup — DCI availability + OPS existence checks. Default to a
+    // positive match so the OPS completion path succeeds; individual tests can
+    // override if they need the "not found" branch.
+    await jest.unstable_mockModule('../src/services/adService.js', () => ({
+        checkComputerExists: jest.fn().mockResolvedValue({
+            exists: true,
+            match: { sAMAccountName: 'HOTESTAIO$', name: 'HOtestAIO' }
+        })
+    }));
 
     const onboardingService = await import('../src/services/onboardingService.js');
     return { onboardingService, requestUpdate };
@@ -148,9 +157,18 @@ describe('Stage status transition audit', () => {
     });
 
     test('handleOPSAction sets status Completed and clears token and both assignee fields', async () => {
-        const { onboardingService, requestUpdate } = await loadService({ status: 'PendingOPSAction' });
+        const { onboardingService, requestUpdate } = await loadService({
+            status: 'PendingOPSAction',
+            // OPS verifies the DCI-approved hostname stored on the request.
+            extraRequestFields: { machineHostname: 'HOtestAIO' }
+        });
 
-        await onboardingService.handleOPSAction('tok', { check1: true }, 'OPS Name');
+        await onboardingService.handleOPSAction(
+            'tok',
+            [{ item: 'check1', checked: true }],
+            'OPS Name',
+            { serial: 'SN-123', screenshotPaths: ['uploads/proofs/x.png'] }
+        );
 
         expect(requestUpdate).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -158,6 +176,7 @@ describe('Stage status transition audit', () => {
                 currentStageToken:           null,
                 currentStageAssigneeEmail:    null,
                 currentStageAssigneeUsername: null,
+                hostnameVerified:             true,
             })
         );
     });

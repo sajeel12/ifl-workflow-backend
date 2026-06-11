@@ -252,6 +252,14 @@ async function startServer() {
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'mgLevel', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'adTitle', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'adDepartment', 'STRING');
+        // Machine / asset capture across IT (device type) → DCI (approved
+        // hostname + location) → OPS (serial, screenshot, AD existence check).
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'productType', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'deviceLocationCode', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'machineHostname', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'productSerialNumber', 'STRING');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'hostnameVerified', 'BOOLEAN');
+        await ensureColumn(sequelize, isSqlite, 'OnboardingRequests', 'opsProofAttachments', 'TEXT');
 
         // WorkflowApproverConfig — six columns added with the delegation /
         // AD-username feature. The sequelize-cli migration covers four of
