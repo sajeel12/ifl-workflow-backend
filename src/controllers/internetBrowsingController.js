@@ -84,6 +84,17 @@ const collectInitiatorSnapshot = async (req) => {
             status: 403
         };
     }
+    // IT-Ops validation is routed by the AD-derived LOCATION GROUP — NOT the
+    // HRMS location. Resolve the user's AD office and map it to a group; if it
+    // can't be mapped, block the request (we never fall back to HRMS location).
+    const { adOffice, group } = await ibrService.resolveLocationGroupForEmployee(empRow, req.user);
+    if (!group) {
+        return {
+            error: `Your office${adOffice ? ` "${adOffice}"` : ''} is not mapped to a location group, so we can't route your request to the right IT Operations team. Please contact IT to configure your office in the location-group mapping.`,
+            status: 422
+        };
+    }
+
     let hodEmail = '';
     let hodName  = empRow.managerName || '';
     try {
@@ -101,7 +112,12 @@ const collectInitiatorSnapshot = async (req) => {
             joiningDate:   empRow.joiningDate || null,
             department:    empRow.mainDept || empRow.orgElementName || null,
             designation:   empRow.designation || null,
-            location:      empRow.location || null,
+            // `location` here is the DISPLAY value shown on the form (the real AD
+            // office). `locationGroup` is the routing key consumed by createRequest;
+            // `adOffice` is persisted for audit.
+            location:      adOffice || null,
+            locationGroup: group,
+            adOffice:      adOffice || null,
             extension:     empRow.extension || null,
             contactNumber: empRow.mobile || null,
             hod:           hodName,

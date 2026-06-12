@@ -5,8 +5,81 @@ import TimelineEvent from '../models/TimelineEvent.js';
 import * as emailService from './emailService.js';
 import RecipientService from './recipientService.js';
 import HRMSService from './hrmsService.js';
-import { searchUsersByName } from './adService.js';
+import SystemConfig from '../models/SystemConfig.js';
+import { searchUsersByName, findUserByEmployeeIdViaSidecar } from './adService.js';
+import { groupKeyForAdOffice, normalizeLoc, LOCATION_GROUPS } from '../utils/locationGroups.js';
 import logger from '../utils/logger.js';
+
+const LOCATION_GROUP_KEYS = LOCATION_GROUPS.map(g => g.key);
+
+// Admin-configurable AD office → location-group map (SystemConfig key).
+// Shape stored as JSON: { "head office": "HO_FSD", "lahore": "LHR", ... }.
+const AD_LOC_MAP_KEY = 'ad_location_group_map';
+let _adLocMapCache = null;
+let _adLocMapAt = 0;
+const AD_LOC_MAP_TTL_MS = 60 * 1000; // re-read at most once a minute
+
+// Load the AD-office → group-key alias map from SystemConfig, normalizing keys.
+export const loadAdLocationGroupMap = async () => {
+    if (_adLocMapCache && (Date.now() - _adLocMapAt) < AD_LOC_MAP_TTL_MS) return _adLocMapCache;
+    let map = {};
+    try {
+        const cfg = await SystemConfig.findOne({ where: { key: AD_LOC_MAP_KEY } });
+        const v = cfg && cfg.value;
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+            for (const [k, grp] of Object.entries(v)) map[normalizeLoc(k)] = grp;
+        }
+    } catch (e) {
+        logger.warn(`[IBR] could not load ${AD_LOC_MAP_KEY} from SystemConfig: ${e.message}`);
+    }
+    _adLocMapCache = map;
+    _adLocMapAt = Date.now();
+    return map;
+};
+
+// Resolve the user's LOCATION GROUP from their AD office (physicalDeliveryOfficeName).
+// Returns { adOffice, group }. `group` is null when the office maps to nothing —
+// the caller blocks the request in that case (we never fall back to HRMS location).
+export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) => {
+    let adOffice = null;
+    // Preferred: exact employeeID lookup via the adsearch sidecar.
+    try {
+        if (employee && employee.employeeId) {
+            const rec = await findUserByEmployeeIdViaSidecar(String(employee.employeeId));
+            if (rec && rec.office) adOffice = rec.office;
+        }
+    } catch (e) {
+        logger.warn(`[IBR] AD office lookup by employeeId failed: ${e.message}`);
+    }
+    // Fallback: search by AD username / email and take the matched record's office.
+    if (!adOffice) {
+        const needle = (ssoUser.username || ssoUser.email || '').trim();
+        if (needle.length >= 2) {
+            try {
+                const results = await searchUsersByName(needle);
+                const un = (ssoUser.username || '').toLowerCase();
+                const lc = (ssoUser.email || '').toLowerCase();
+                const m = results.find(r =>
+                    (r.sAMAccountName && r.sAMAccountName.toLowerCase() === un) ||
+                    (r.mail && r.mail.toLowerCase() === lc)
+                ) || (results.length === 1 ? results[0] : null);
+                if (m && m.office) adOffice = m.office;
+            } catch (e) {
+                logger.warn(`[IBR] AD office fallback search failed: ${e.message}`);
+            }
+        }
+    }
+
+    const aliasMap = await loadAdLocationGroupMap();
+    const group = groupKeyForAdOffice(adOffice, aliasMap);
+    if (group) {
+        logger.info(`[IBR] AD office "${adOffice}" (emp #${employee && employee.employeeId}) → location group ${group}`);
+    } else {
+        logger.warn(`[IBR] AD office "${adOffice || '∅'}" (emp #${employee && employee.employeeId}) maps to no location group — ` +
+            `add it to SystemConfig "${AD_LOC_MAP_KEY}" (one of: ${LOCATION_GROUP_KEYS.join(', ')}).`);
+    }
+    return { adOffice: adOffice || null, group };
+};
 
 // Map each IBR email type → the portal slug we want to bounce the
 // recipient through. Mirrors EMAIL_TYPE_TO_PORTAL_SLUG in onboardingService
@@ -209,8 +282,14 @@ export const createRequest = async (data, initiator) => {
 
     const token = crypto.randomBytes(20).toString('hex');
 
+    // Route IT-Ops validation by the AD-derived LOCATION GROUP — never the HRMS
+    // location. The controller resolves data.locationGroup from the AD office and
+    // blocks initiation when it can't be mapped, so a group key is expected here.
+    if (!data.locationGroup) {
+        throw new Error('Your location could not be mapped to a location group, so the request cannot be routed to IT Operations. Please contact IT.');
+    }
     const recipient = await RecipientService.getWithFallback('IT_OPS', {
-        location:   data.location,
+        location:   data.locationGroup,
         employeeId: data.employeeId,
         requestId:  null
     });
@@ -221,7 +300,8 @@ export const createRequest = async (data, initiator) => {
         joiningDate:      data.joiningDate || null,
         department:       data.department || null,
         designation:      data.designation || null,
-        location:         data.location || null,
+        location:         data.locationGroup,       // group key, for routing/history
+        adOffice:         data.adOffice || null,    // raw AD office, for audit
         extension:        data.extension || null,
         contactNumber:    data.contactNumber || null,
         hod:              data.hod || null,

@@ -57,6 +57,9 @@ const InternetBrowsingRequest = sequelize.define('InternetBrowsingRequest', {
     designation:   { type: DataTypes.STRING },
     // Location group key (e.g. 'LHR', 'HO_FSD') — also drives IT_OPS routing.
     location:      { type: DataTypes.STRING, allowNull: true },
+    // Raw AD office (physicalDeliveryOfficeName) the location group was derived
+    // from — kept for audit / to help extend the ad_location_group_map.
+    adOffice:      { type: DataTypes.STRING, allowNull: true },
     extension:     { type: DataTypes.STRING },
     contactNumber: { type: DataTypes.STRING },
     hod:           { type: DataTypes.STRING }, // display name only

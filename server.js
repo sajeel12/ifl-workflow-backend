@@ -299,6 +299,10 @@ async function startServer() {
         // Revocation Work Order PDF generated at DCI Manager approval.
         await ensureColumn(sequelize, isSqlite, 'OffboardingRequests', 'revocationPdfPath', 'STRING');
 
+        // Internet Browsing Request — raw AD office the location group was
+        // derived from (location stores the group key; routing is AD-driven).
+        await ensureColumn(sequelize, isSqlite, 'InternetBrowsingRequests', 'adOffice', 'STRING');
+
         // One-time status migration. Legacy offboarding rows used the
         // SystemManager/SystemTeam role names; rename to the new DCI Manager /
         // DCI Implementer chain in place. Idempotent — the UPDATE only touches
@@ -410,6 +414,38 @@ async function startServer() {
             }
         } catch (err) {
             logger.warn(`[Seed] SystemConfig seed skipped: ${err.message}`);
+        }
+
+        // Seed the AD office → location-group map (IBR IT-Ops routing). Runs
+        // independently of the bulk seed above so EXISTING installs get it too.
+        // Keys are normalized (lowercase) AD office names; values are location
+        // group keys (LHR | HO_FSD | TP3_TP4_PG | PP | TP1_TP2). Admins extend it
+        // from the System Config admin page; the IBR flow logs any unmapped AD
+        // office so the exact string to add is visible.
+        try {
+            const [, created] = await SystemConfig.findOrCreate({
+                where: { key: 'ad_location_group_map' },
+                defaults: {
+                    key: 'ad_location_group_map',
+                    value: {
+                        'head office': 'HO_FSD',
+                        'faisalabad':  'HO_FSD',
+                        'islamabad':   'HO_FSD',
+                        'multan':      'HO_FSD',
+                        'karachi':     'HO_FSD',
+                        'sidhupura':   'HO_FSD',
+                        'lahore':      'LHR',
+                        'tech park 1': 'TP1_TP2',
+                        'tech park 2': 'TP1_TP2',
+                        'tech park 3': 'TP3_TP4_PG',
+                        'tech park 4': 'TP3_TP4_PG'
+                    },
+                    description: 'AD office (physicalDeliveryOfficeName) → location group key, for IBR IT-Ops routing'
+                }
+            });
+            if (created) logger.info('Seeded SystemConfig ad_location_group_map.');
+        } catch (err) {
+            logger.warn(`[Seed] ad_location_group_map seed skipped: ${err.message}`);
         }
 
         // Seed sample onboarding requests + timeline events for UI demonstration. Non-fatal.

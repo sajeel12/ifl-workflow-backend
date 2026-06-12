@@ -48,3 +48,24 @@ export function groupLabel(key) {
 export function isValidGroupKey(key) {
     return !!key && GROUP_KEY_SET.has(String(key).toUpperCase());
 }
+
+// Normalize a free-text location/office label for map lookups: trim, lowercase,
+// collapse internal whitespace. e.g. "  Head   Office " → "head office".
+export function normalizeLoc(s) {
+    return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Resolve a group key from a free-text AD office name (physicalDeliveryOfficeName),
+// e.g. "Head Office" → "HO_FSD", "Lahore" → "LHR". Resolution order:
+//   1. the admin-configured alias map (normalized office name → group key),
+//   2. groupKeyForLocation() in case the office is already a site/group code,
+//   3. null when nothing maps.
+// `aliasMap` is a plain object { normalizedOfficeName: groupKey } (caller loads
+// it from SystemConfig so this stays DB-free and easy to unit-test).
+export function groupKeyForAdOffice(adOffice, aliasMap = {}) {
+    if (!adOffice) return null;
+    const norm = normalizeLoc(adOffice);
+    const mapped = aliasMap && aliasMap[norm];
+    if (mapped && isValidGroupKey(mapped)) return String(mapped).toUpperCase();
+    return groupKeyForLocation(adOffice);
+}
