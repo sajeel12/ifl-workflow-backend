@@ -117,34 +117,48 @@ export const resolveInitiatorEmployee = async (ssoUser) => {
     if (!ssoUser) return null;
 
     const byEmail = await lookupEmployeeByEmail(ssoUser.email);
-    if (byEmail) return byEmail;
+    if (byEmail) {
+        logger.info(`[IBR] initiator matched by DB email: ${ssoUser.email} → #${byEmail.employeeId}`);
+        return byEmail;
+    }
+    logger.info(`[IBR] no DB email match for "${ssoUser.email}" (user=${ssoUser.username || '∅'}); pivoting on Employee Number via AD…`);
 
-    const needle = (ssoUser.username || ssoUser.email || '').trim();
-    if (!needle) return null;
+    // Try both the AD username (sAMAccountName) and the email as adsearch needles
+    // — whichever finds the account first wins.
+    const needles = [ssoUser.username, ssoUser.email].map(s => (s || '').trim()).filter(s => s.length >= 2);
+    const un = (ssoUser.username || '').toLowerCase();
+    const lc = (ssoUser.email || '').toLowerCase();
 
     let employeeId = null;
-    try {
-        const results = await searchUsersByName(needle);
-        const un = (ssoUser.username || '').toLowerCase();
-        const lc = (ssoUser.email || '').toLowerCase();
-        // Prefer an exact sAMAccountName / mail match; only fall back to a sole
-        // result so we never bind the request to the wrong person.
-        const match = results.find(r =>
-            (r.sAMAccountName && r.sAMAccountName.toLowerCase() === un) ||
-            (r.mail && r.mail.toLowerCase() === lc)
-        ) || (results.length === 1 ? results[0] : null);
-        if (match && match.employeeID) employeeId = String(match.employeeID).trim();
-    } catch (e) {
-        logger.warn(`[IBR] AD employee-number pivot failed for "${needle}": ${e.message}`);
+    for (const needle of needles) {
+        try {
+            const results = await searchUsersByName(needle);
+            logger.info(`[IBR] adsearch("${needle}") → ${results.length} result(s): ` +
+                (results.map(r => `${r.sAMAccountName || '?'}|${r.mail || '?'}|empID=${r.employeeID || '∅'}`).join('  ') || '(none)'));
+            const match = results.find(r =>
+                (r.sAMAccountName && r.sAMAccountName.toLowerCase() === un) ||
+                (r.mail && r.mail.toLowerCase() === lc)
+            ) || (results.length === 1 ? results[0] : null);
+            if (match && match.employeeID) {
+                employeeId = String(match.employeeID).trim();
+                logger.info(`[IBR] AD match: ${match.sAMAccountName || '?'} → employeeID=${employeeId}`);
+                break;
+            }
+            if (match) logger.warn(`[IBR] AD matched ${match.sAMAccountName || '?'} but its employeeID attribute is EMPTY — cannot pivot.`);
+        } catch (e) {
+            logger.warn(`[IBR] adsearch("${needle}") failed: ${e.message}`);
+        }
     }
 
     if (employeeId) {
         const byId = await Employee.findByPk(employeeId);
         if (byId) {
-            logger.info(`[IBR] Resolved ${ssoUser.email || needle} → employee #${employeeId} via AD employee-number pivot`);
+            logger.info(`[IBR] Resolved ${ssoUser.email || un} → employee #${employeeId} via AD employee-number pivot`);
             return byId;
         }
-        logger.warn(`[IBR] AD gave employeeID ${employeeId} for ${needle}, but no DB Employee row matched it`);
+        logger.warn(`[IBR] AD gave employeeID="${employeeId}" but no DB Employee row has that primary key (number/format mismatch?).`);
+    } else {
+        logger.warn(`[IBR] Could not derive an Employee Number from AD for user="${ssoUser.username || ssoUser.email}".`);
     }
     return null;
 };
