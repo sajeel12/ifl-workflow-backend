@@ -10,7 +10,8 @@ import TimelineEvent from '../models/TimelineEvent.js';
 import oracleSyncService from '../services/oracleSyncService.js';
 import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
-import { LOCATION_GROUPS } from '../utils/locationGroups.js';
+import { LOCATION_GROUPS, isValidGroupKey } from '../utils/locationGroups.js';
+import { resolveLocationGroupForEmployee as resolveIBRLocationGroup } from '../services/internetBrowsingService.js';
 import cronService from '../services/cronService.js';
 import * as emailService from '../services/emailService.js';
 import RecipientService from '../services/recipientService.js';
@@ -71,8 +72,19 @@ async function resolveIBRResendRecipient(roleKey, context) {
         const email = await RecipientService.get('HOD', context);
         return { role: 'Head of Department', name: '', email: email || '', username: null };
     }
+    let location = context.location || null;
+    // Legacy IBR rows may have stored a non-group-key location (the old HRMS
+    // location, before AD-office routing). IT_OPS is location-aware, so when the
+    // stored value isn't a valid group key, re-derive the group from the
+    // employee's AD office — exactly how a fresh request routes.
+    if (roleKey === 'IT_OPS' && context.employeeId && !isValidGroupKey(location)) {
+        try {
+            const { group } = await resolveIBRLocationGroup({ employeeId: context.employeeId }, {});
+            if (group) location = group;
+        } catch (_) { /* keep whatever location we had */ }
+    }
     const r = await RecipientService.getWithFallback(roleKey, {
-        location:   context.location || null,
+        location,
         employeeId: context.employeeId
     });
     return {
