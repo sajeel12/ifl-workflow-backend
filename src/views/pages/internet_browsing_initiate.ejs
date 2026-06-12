@@ -100,6 +100,9 @@
                 existing one is completed or rejected.
             </div>
         <% } %>
+        <!-- Filled client-side when the form is hydrated from /my-snapshot
+             (active-request warning or an identity/auth error message). -->
+        <div id="ibrExistingSlot"></div>
 
         <form action="/api/internet-browsing/initiate" method="POST" id="ibrInitForm" autocomplete="off">
 
@@ -123,43 +126,43 @@
             <div class="grid-2">
                 <div class="form-row">
                     <label>Employee Number</label>
-                    <input type="text" value="<%= snapshot.employeeId || '' %>" readonly>
+                    <input type="text" id="ibr-employeeId" value="<%= snapshot.employeeId || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Full Name</label>
-                    <input type="text" value="<%= snapshot.fullName || '' %>" readonly>
+                    <input type="text" id="ibr-fullName" value="<%= snapshot.fullName || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Joining Date</label>
-                    <input type="text" value="<%= fmtDate(snapshot.joiningDate) %>" readonly>
+                    <input type="text" id="ibr-joiningDate" value="<%= fmtDate(snapshot.joiningDate) %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Department</label>
-                    <input type="text" value="<%= snapshot.department || '' %>" readonly>
+                    <input type="text" id="ibr-department" value="<%= snapshot.department || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Designation</label>
-                    <input type="text" value="<%= snapshot.designation || '' %>" readonly>
+                    <input type="text" id="ibr-designation" value="<%= snapshot.designation || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Location</label>
-                    <input type="text" value="<%= snapshot.location || '' %>" readonly>
+                    <input type="text" id="ibr-location" value="<%= snapshot.location || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Extension</label>
-                    <input type="text" value="<%= snapshot.extension || '' %>" readonly>
+                    <input type="text" id="ibr-extension" value="<%= snapshot.extension || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Contact Number</label>
-                    <input type="text" value="<%= snapshot.contactNumber || '' %>" readonly>
+                    <input type="text" id="ibr-contactNumber" value="<%= snapshot.contactNumber || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Head of Department</label>
-                    <input type="text" value="<%= snapshot.hod || '' %>" readonly>
+                    <input type="text" id="ibr-hod" value="<%= snapshot.hod || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Email Address</label>
-                    <input type="text" value="<%= snapshot.email || '' %>" readonly>
+                    <input type="text" id="ibr-email" value="<%= snapshot.email || '' %>" readonly>
                 </div>
             </div>
 
@@ -295,4 +298,79 @@
             });
         });
     })();
+</script>
+
+<script>
+    // ── SSO hydration ─────────────────────────────────────────────────────
+    // The GET page is open at Node (no server-side SSO), so the auto-collected
+    // employee fields arrive empty on a fresh navigation. Pull them from the
+    // SSO-gated /my-snapshot endpoint via window.iflFetch (which attaches the
+    // sidecar token). If the server already pre-filled them (identity present
+    // at render), skip. On an auth/identity error, block the form with a clear
+    // message instead of letting a blank request be submitted.
+    document.addEventListener('DOMContentLoaded', () => {
+        const $ = (id) => document.getElementById(id);
+        const empEl = $('ibr-employeeId');
+        if (!empEl) return;
+        // Already pre-filled server-side → nothing to do.
+        if ((empEl.value || '').trim()) return;
+
+        const form      = document.getElementById('ibrInitForm');
+        const submitBtn = form && form.querySelector('button[type="submit"]');
+        const slot      = $('ibrExistingSlot');
+        const fmtDate = (d) => { if (!d) return ''; try { return new Date(d).toISOString().slice(0, 10); } catch (_) { return String(d); } };
+        const setVal  = (id, v) => { const el = $(id); if (el) el.value = (v == null ? '' : v); };
+        const lockForm = (html, danger) => {
+            if (slot) slot.innerHTML = '<div class="ibr-existing-warn"'
+                + (danger ? ' style="background:#fee2e2;border-color:#fecaca;color:#991b1b;"' : '') + '>' + html + '</div>';
+            if (form) form.querySelectorAll('input:not([type=hidden]), button[type="submit"]').forEach(el => { el.disabled = true; });
+        };
+
+        // Don't let an impatient submit fire a blank request before we hydrate.
+        if (submitBtn) submitBtn.disabled = true;
+
+        const finish = () => { if (submitBtn && !submitBtn.dataset.locked) submitBtn.disabled = false; };
+
+        if (typeof window.iflFetch !== 'function') {
+            // No portal SSO helper on the page — leave the POST gate to enforce.
+            finish();
+            return;
+        }
+
+        (async () => {
+            try {
+                const res = await window.iflFetch('/api/internet-browsing/my-snapshot');
+                if (!res.ok) {
+                    let msg = 'Sign-in required. Please open this page from the IFL portal.';
+                    try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (_) {}
+                    if (submitBtn) submitBtn.dataset.locked = '1';
+                    lockForm(msg, true);
+                    return;
+                }
+                const data = await res.json();
+                const s = data.snapshot || {};
+                setVal('ibr-employeeId', s.employeeId);
+                setVal('ibr-fullName', s.fullName);
+                setVal('ibr-joiningDate', fmtDate(s.joiningDate));
+                setVal('ibr-department', s.department);
+                setVal('ibr-designation', s.designation);
+                setVal('ibr-location', s.location);
+                setVal('ibr-extension', s.extension);
+                setVal('ibr-contactNumber', s.contactNumber);
+                setVal('ibr-hod', s.hod);
+                setVal('ibr-email', s.email);
+                if (data.existing) {
+                    if (submitBtn) submitBtn.dataset.locked = '1';
+                    lockForm('You already have an active Internet Browsing request (Request #'
+                        + data.existing.id + ', status: ' + data.existing.status + '). A new request '
+                        + 'cannot be submitted until the existing one is completed or rejected.', false);
+                    return;
+                }
+                finish();
+            } catch (_) {
+                if (submitBtn) submitBtn.dataset.locked = '1';
+                lockForm('Could not verify your identity. Please open this page from the IFL portal and refresh.', true);
+            }
+        })();
+    });
 </script>

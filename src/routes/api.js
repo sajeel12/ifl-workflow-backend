@@ -216,10 +216,16 @@ router.get('/offboarding/handle', (req, res) => offboardingController.handleRequ
 router.post('/offboarding/handle', uploadProofImages, ssoMiddleware, (req, res) => offboardingController.handleRequest(req, res));
 
 // ─── Internet Browsing Request (IBR) ─────────────────────────────────────
-// Any logged-in employee can self-initiate; no HR/IT Ops gate. The form
-// pre-fills from HRMS using the SSO identity.
-router.get('/internet-browsing/initiate', ssoMiddleware, internetBrowsingController.handleRequest);
+// Any logged-in employee can self-initiate; no HR/IT Ops gate.
+// GET /initiate stays OPEN at Node (like onboarding's GET /initiate): a fresh
+// browser navigation has no sidecar token yet, so gating it would 401 / trigger
+// the IIS Windows-auth loop. The page renders open and hydrates its read-only
+// fields client-side via /my-snapshot (SSO-gated). POST IS the hard gate.
+router.get('/internet-browsing/initiate', internetBrowsingController.handleRequest);
 router.post('/internet-browsing/initiate', ssoMiddleware, internetBrowsingController.handleRequest);
+// SSO-gated snapshot for the initiate form's client-side hydration. Called with
+// window.iflFetch, which attaches the sidecar token so ssoMiddleware authenticates.
+router.get('/internet-browsing/my-snapshot', ssoMiddleware, internetBrowsingController.getMySnapshot);
 // Role-scoped queue for the portal dashboard (IT Ops, FMS, IT Ops Mgr, IT HOD,
 // Network Implementer). SSO-gated like the offboarding queue.
 router.get('/internet-browsing/queue', ssoMiddleware, internetBrowsingController.getRoleQueue);

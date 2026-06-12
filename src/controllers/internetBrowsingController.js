@@ -109,6 +109,38 @@ const collectInitiatorSnapshot = async (req) => {
     };
 };
 
+// Statuses that count as an in-flight IBR for the "already has an active
+// request" guard. Shared by the form render and the snapshot endpoint.
+const IBR_ACTIVE_STATUSES = ['Draft', 'PendingITOpsValidation', 'PendingHOD', 'PendingFMS',
+                             'PendingITOpsMgr', 'PendingITHOD', 'PendingImplementation'];
+
+const findActiveIBR = (employeeId) =>
+    InternetBrowsingRequest.findOne({ where: { employeeId, status: IBR_ACTIVE_STATUSES } });
+
+/**
+ * GET /api/internet-browsing/my-snapshot  (ssoMiddleware required)
+ * Returns the signed-in employee's auto-collected snapshot + any active request.
+ * The initiate form (rendered open at Node) calls this via window.iflFetch — which
+ * attaches the sidecar token — to hydrate its read-only fields after page load.
+ */
+export const getMySnapshot = async (req, res) => {
+    try {
+        if (!req.user || !req.user.email) {
+            return res.status(401).json({ error: 'Sign-in required. Please open this page from the IFL portal.' });
+        }
+        const r = await collectInitiatorSnapshot(req);
+        if (r.error) return res.status(r.status || 400).json({ error: r.error });
+        const existing = await findActiveIBR(r.snapshot.employeeId);
+        return res.json({
+            snapshot: r.snapshot,
+            existing: existing ? { id: existing.id, status: existing.status } : null
+        });
+    } catch (err) {
+        logger.error(`[IBR] getMySnapshot: ${err.message}`);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 const handleSubmission = async (req, res, token) => {
     const data = req.body;
 
@@ -280,25 +312,23 @@ const handleSubmission = async (req, res, token) => {
 const renderForm = async (req, res, token) => {
     // No token + initiate URL → employee self-initiation form.
     if (!token && req.originalUrl.includes('/initiate')) {
-        const { snapshot, error, status } = await collectInitiatorSnapshot(req);
-        if (error) {
-            return res.status(status || 400).render('pages/message', {
-                title: 'Cannot Initiate Request',
-                heading: 'Cannot Initiate Request',
-                titleClass: 'error',
-                icon: '⛔',
-                iconClass: 'error-icon',
-                message: error
-            });
-        }
-        // Refuse with a clear message if an active IBR already exists.
-        const existing = await InternetBrowsingRequest.findOne({
-            where: {
-                employeeId: snapshot.employeeId,
-                status: ['Draft', 'PendingITOpsValidation', 'PendingHOD', 'PendingFMS',
-                         'PendingITOpsMgr', 'PendingITHOD', 'PendingImplementation']
+        // GET stays OPEN at Node (no ssoMiddleware) — a fresh browser navigation
+        // carries no sidecar token, so gating it would 401 / trigger the IIS
+        // Windows-auth loop (same rule as onboarding's GET /initiate). We render
+        // the form shell; if the SSO identity already happens to be present
+        // (e.g. MOCK mode) we pre-fill server-side, otherwise the page hydrates
+        // its auto-collected fields client-side from /internet-browsing/my-snapshot.
+        let snapshot = {};
+        let existing = null;
+        if (req.user && req.user.email) {
+            const r = await collectInitiatorSnapshot(req);
+            if (!r.error) {
+                snapshot = r.snapshot;
+                existing = await findActiveIBR(snapshot.employeeId);
             }
-        });
+            // On error (identity not matchable) fall through to the empty shell;
+            // the client /my-snapshot call surfaces the same message.
+        }
         return res.render('pages/internet_browsing_initiate', {
             snapshot,
             existing,
