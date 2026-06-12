@@ -1,5 +1,5 @@
 import express from 'express';
-import { uploadProofImages, uploadHostnameScreenshot } from '../utils/upload.js';
+import { upload, uploadProofImages, uploadHostnameScreenshot } from '../utils/upload.js';
 const router = express.Router();
 import * as onboardingController from '../controllers/onboardingController.js';
 import * as approvalController from '../controllers/approvalController.js';
