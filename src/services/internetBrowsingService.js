@@ -5,6 +5,7 @@ import TimelineEvent from '../models/TimelineEvent.js';
 import * as emailService from './emailService.js';
 import RecipientService from './recipientService.js';
 import HRMSService from './hrmsService.js';
+import { searchUsersByName } from './adService.js';
 import logger from '../utils/logger.js';
 
 // Map each IBR email type → the portal slug we want to bounce the
@@ -98,6 +99,54 @@ export const lookupEmployeeByEmail = async (email) => {
     const all = await Employee.findAll();
     const lower = String(email).toLowerCase();
     return all.find(e => (e.email || '').toLowerCase() === lower) || null;
+};
+
+// Resolve the requesting employee from the SSO identity.
+//
+// The SSO email comes from Active Directory and frequently differs from the
+// HRMS/DB email (e.g. ad: israr.haq@igc.com.pk vs hrms: israr.haq@ifl.net), so
+// an email match alone misses. The stable key shared by AD and the DB is the
+// Employee Number. We therefore:
+//   1) try a direct DB email match (cheap; works when the two emails agree), then
+//   2) pivot on the Employee Number — resolve the AD account's `employeeID`
+//      attribute via the adsearch.aspx sidecar (the same proven path used by the
+//      360° profile / approver lookups) and load the DB row by that number.
+//
+// `ssoUser` is req.user — { username (sAMAccountName), email, ... }.
+export const resolveInitiatorEmployee = async (ssoUser) => {
+    if (!ssoUser) return null;
+
+    const byEmail = await lookupEmployeeByEmail(ssoUser.email);
+    if (byEmail) return byEmail;
+
+    const needle = (ssoUser.username || ssoUser.email || '').trim();
+    if (!needle) return null;
+
+    let employeeId = null;
+    try {
+        const results = await searchUsersByName(needle);
+        const un = (ssoUser.username || '').toLowerCase();
+        const lc = (ssoUser.email || '').toLowerCase();
+        // Prefer an exact sAMAccountName / mail match; only fall back to a sole
+        // result so we never bind the request to the wrong person.
+        const match = results.find(r =>
+            (r.sAMAccountName && r.sAMAccountName.toLowerCase() === un) ||
+            (r.mail && r.mail.toLowerCase() === lc)
+        ) || (results.length === 1 ? results[0] : null);
+        if (match && match.employeeID) employeeId = String(match.employeeID).trim();
+    } catch (e) {
+        logger.warn(`[IBR] AD employee-number pivot failed for "${needle}": ${e.message}`);
+    }
+
+    if (employeeId) {
+        const byId = await Employee.findByPk(employeeId);
+        if (byId) {
+            logger.info(`[IBR] Resolved ${ssoUser.email || needle} → employee #${employeeId} via AD employee-number pivot`);
+            return byId;
+        }
+        logger.warn(`[IBR] AD gave employeeID ${employeeId} for ${needle}, but no DB Employee row matched it`);
+    }
+    return null;
 };
 
 // Stage 1: employee self-initiates. The caller (controller) has already

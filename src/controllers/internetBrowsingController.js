@@ -75,10 +75,12 @@ const collectInitiatorSnapshot = async (req) => {
     if (!req.user || !req.user.email) {
         return { error: 'Sign-in required to initiate an Internet Browsing request. Please open this page from the IFL portal.', status: 401 };
     }
-    const empRow = await ibrService.lookupEmployeeByEmail(req.user.email);
+    // Match by email first, then pivot on the Employee Number (the AD email
+    // often differs from the HRMS email; the employee number is the shared key).
+    const empRow = await ibrService.resolveInitiatorEmployee(req.user);
     if (!empRow) {
         return {
-            error: `Your SSO identity (${req.user.email}) could not be matched to an employee record. Please contact HR before requesting internet access.`,
+            error: `Your SSO identity (${req.user.email}) could not be matched to an employee record by email or AD employee number. Please contact HR before requesting internet access.`,
             status: 403
         };
     }
