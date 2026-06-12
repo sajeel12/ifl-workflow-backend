@@ -115,13 +115,40 @@ export const lookupEmployeeByEmail = async (email) => {
 // `ssoUser` is req.user — { username (sAMAccountName), email, ... }.
 export const resolveInitiatorEmployee = async (ssoUser) => {
     if (!ssoUser) return null;
+    const email = (ssoUser.email || '').trim();
+    const uname = (ssoUser.username || '').trim();
 
-    const byEmail = await lookupEmployeeByEmail(ssoUser.email);
-    if (byEmail) {
-        logger.info(`[IBR] initiator matched by DB email: ${ssoUser.email} → #${byEmail.employeeId}`);
-        return byEmail;
+    // 1) Exact DB email (AD email == HRMS email).
+    let row = email ? await Employee.findOne({ where: { email } }) : null;
+    if (row) { logger.info(`[IBR] initiator matched by DB email: ${email} → #${row.employeeId}`); return row; }
+
+    // Load the table once for the in-memory, case-insensitive joins below.
+    const all = await Employee.findAll();
+
+    // 2) erpUser == AD sAMAccountName — the ERP login usually IS the AD login,
+    //    so this is a direct DB join with no AD round-trip (most reliable).
+    if (uname) {
+        const un = uname.toLowerCase();
+        const byErp = all.find(e => (e.erpUser || '').toLowerCase() === un);
+        if (byErp) { logger.info(`[IBR] initiator matched by erpUser="${uname}" → #${byErp.employeeId}`); return byErp; }
     }
-    logger.info(`[IBR] no DB email match for "${ssoUser.email}" (user=${ssoUser.username || '∅'}); pivoting on Employee Number via AD…`);
+
+    // 3) Same email local-part, different domain — the exact AD↔HRMS domain
+    //    split (israr.haq@igc.com.pk vs israr.haq@ifl.net). Accept only when it
+    //    is unambiguous so we never bind to the wrong person.
+    const localPart = email.split('@')[0].toLowerCase();
+    if (localPart) {
+        const matches = all.filter(e => (e.email || '').split('@')[0].toLowerCase() === localPart);
+        if (matches.length === 1) {
+            logger.info(`[IBR] initiator matched by email local-part "${localPart}" → #${matches[0].employeeId}`);
+            return matches[0];
+        }
+        if (matches.length > 1) {
+            logger.warn(`[IBR] email local-part "${localPart}" matched ${matches.length} employees — ambiguous, skipping`);
+        }
+    }
+
+    logger.info(`[IBR] no DB email/erpUser/local-part match for "${email}" (user=${uname || '∅'}); pivoting on Employee Number via AD…`);
 
     // Try both the AD username (sAMAccountName) and the email as adsearch needles
     // — whichever finds the account first wins.
