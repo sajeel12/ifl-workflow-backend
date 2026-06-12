@@ -329,10 +329,17 @@
         // Don't let an impatient submit fire a blank request before we hydrate.
         if (submitBtn) submitBtn.disabled = true;
 
-        const finish = () => { if (submitBtn && !submitBtn.dataset.locked) submitBtn.disabled = false; };
+        const setInfo = (html) => {
+            if (slot) slot.innerHTML = '<div class="ibr-existing-warn" style="background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a;">' + html + '</div>';
+        };
+        const finish = () => { if (slot) slot.innerHTML = ''; if (submitBtn && !submitBtn.dataset.locked) submitBtn.disabled = false; };
+
+        // Self-performed SSO: header.ejs's iflFetch fetches /token.aspx (IIS does
+        // Windows Auth) and attaches the sidecar token — no portal session needed.
+        setInfo('🔐 Verifying your identity…');
 
         if (typeof window.iflFetch !== 'function') {
-            // No portal SSO helper on the page — leave the POST gate to enforce.
+            // SSO helper not present — leave the POST gate to enforce identity.
             finish();
             return;
         }
