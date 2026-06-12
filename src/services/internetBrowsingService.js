@@ -81,6 +81,20 @@ export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) =>
     return { adOffice: adOffice || null, group };
 };
 
+// Preview the IT-Ops validator a group routes to (for display on the initiate
+// form so the employee sees exactly which IT-Ops location handles their request).
+// Uses the SAME resolver as createRequest, so the preview matches the real routing.
+export const getItOpsValidatorForGroup = async (groupKey, employeeId) => {
+    if (!groupKey) return null;
+    try {
+        const r = await RecipientService.getWithFallback('IT_OPS', { location: groupKey, employeeId, requestId: null });
+        return { name: (r && r.name) || '', email: (r && r.email) || '' };
+    } catch (e) {
+        logger.warn(`[IBR] preview IT_OPS validator for ${groupKey} failed: ${e.message}`);
+        return null;
+    }
+};
+
 // Map each IBR email type → the portal slug we want to bounce the
 // recipient through. Mirrors EMAIL_TYPE_TO_PORTAL_SLUG in onboardingService
 // and OFFBOARDING_TYPE_TO_PORTAL_SLUG in offboardingService.

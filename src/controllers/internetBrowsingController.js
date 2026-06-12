@@ -3,7 +3,7 @@ import InternetBrowsingRequest from '../models/InternetBrowsingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
 import HRMSService from '../services/hrmsService.js';
 import { emailsMatch } from '../utils/emailMatch.js';
-import { LOCATION_GROUPS } from '../utils/locationGroups.js';
+import { LOCATION_GROUPS, groupLabel } from '../utils/locationGroups.js';
 import { humanizeAction, humanizeDetails, humanizeDetailsHTML, narrate } from '../utils/historyFormatter.js';
 import logger from '../utils/logger.js';
 
@@ -94,6 +94,9 @@ const collectInitiatorSnapshot = async (req) => {
             status: 422
         };
     }
+    // Preview which IT-Ops location group / validator the request will route to,
+    // so the form can show it (transparency + routing verification in testing).
+    const validator = await ibrService.getItOpsValidatorForGroup(group, empRow.employeeId);
 
     let hodEmail = '';
     let hodName  = empRow.managerName || '';
@@ -117,7 +120,11 @@ const collectInitiatorSnapshot = async (req) => {
             // `adOffice` is persisted for audit.
             location:      adOffice || null,
             locationGroup: group,
+            locationGroupLabel: groupLabel(group),
             adOffice:      adOffice || null,
+            // Which IT-Ops location/validator this request forwards to (display).
+            itOpsValidatorName:  (validator && validator.name)  || '',
+            itOpsValidatorEmail: (validator && validator.email) || '',
             extension:     empRow.extension || null,
             contactNumber: empRow.mobile || null,
             hod:           hodName,

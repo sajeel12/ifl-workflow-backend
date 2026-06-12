@@ -166,6 +166,19 @@
                 </div>
             </div>
 
+            <div class="ibr-section-title">IT Ops Validation Routing</div>
+            <div class="grid-2">
+                <div class="form-row">
+                    <label>IT Ops Location Group</label>
+                    <input type="text" id="ibr-locationGroupLabel" value="<%= snapshot.locationGroupLabel || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Forwarded to (IT Ops Validator)</label>
+                    <input type="text" id="ibr-itOpsValidator" readonly
+                           value="<%= snapshot.itOpsValidatorName ? (snapshot.itOpsValidatorName + (snapshot.itOpsValidatorEmail ? ' <' + snapshot.itOpsValidatorEmail + '>' : '')) : (snapshot.itOpsValidatorEmail || '') %>">
+                </div>
+            </div>
+
             <div class="ibr-section-title">Your Inputs</div>
 
             <div class="form-row">
@@ -366,6 +379,10 @@
                 setVal('ibr-contactNumber', s.contactNumber);
                 setVal('ibr-hod', s.hod);
                 setVal('ibr-email', s.email);
+                setVal('ibr-locationGroupLabel', s.locationGroupLabel);
+                setVal('ibr-itOpsValidator', s.itOpsValidatorName
+                    ? (s.itOpsValidatorName + (s.itOpsValidatorEmail ? ' <' + s.itOpsValidatorEmail + '>' : ''))
+                    : (s.itOpsValidatorEmail || ''));
                 if (data.existing) {
                     if (submitBtn) submitBtn.dataset.locked = '1';
                     lockForm('You already have an active Internet Browsing request (Request #'
