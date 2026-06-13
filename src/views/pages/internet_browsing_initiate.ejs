@@ -48,6 +48,10 @@
     .ibr-radio:hover { border-color: #94a3b8; }
     .ibr-radio input { width: auto; margin: 0; }
     .ibr-radio input:checked + span { font-weight: 600; color: #0078D4; }
+    .ibr-sub-title {
+        font-size: 0.72rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;
+        letter-spacing: 0.06em; margin: 18px 0 8px; padding-left: 2px;
+    }
     .ibr-actions {
         display: flex; gap: 12px; margin-top: 22px;
         padding-top: 18px; border-top: 1px solid #e2e8f0;
@@ -123,7 +127,9 @@
             </div>
 
             <div class="ibr-section-title">Employee Details (auto-collected)</div>
-            <div class="grid-2">
+
+            <div class="ibr-sub-title">Personal Information</div>
+            <div class="grid-3">
                 <div class="form-row">
                     <label>Employee Number</label>
                     <input type="text" id="ibr-employeeId" value="<%= snapshot.employeeId || '' %>" readonly>
@@ -136,6 +142,10 @@
                     <label>Joining Date</label>
                     <input type="text" id="ibr-joiningDate" value="<%= fmtDate(snapshot.joiningDate) %>" readonly>
                 </div>
+            </div>
+
+            <div class="ibr-sub-title">Organisational Details</div>
+            <div class="grid-3">
                 <div class="form-row">
                     <label>Department</label>
                     <input type="text" id="ibr-department" value="<%= snapshot.department || '' %>" readonly>
@@ -145,20 +155,16 @@
                     <input type="text" id="ibr-designation" value="<%= snapshot.designation || '' %>" readonly>
                 </div>
                 <div class="form-row">
-                    <label>Location</label>
-                    <input type="text" id="ibr-location" value="<%= snapshot.location || '' %>" readonly>
-                </div>
-                <div class="form-row">
                     <label>Head of Department</label>
                     <input type="text" id="ibr-hod" value="<%= snapshot.hod || '' %>" readonly>
                 </div>
+            </div>
+
+            <div class="ibr-sub-title">Contact Information</div>
+            <div class="grid-3">
                 <div class="form-row">
                     <label>Email Address</label>
                     <input type="text" id="ibr-email" value="<%= snapshot.email || '' %>" readonly>
-                </div>
-                <div class="form-row">
-                    <label>NT Login (AD Username)</label>
-                    <input type="text" id="ibr-ntLogin" value="<%= snapshot.ntLogin || '' %>" readonly>
                 </div>
                 <div class="form-row">
                     <label>Extension</label>
@@ -169,6 +175,18 @@
                     <label>Contact Number</label>
                     <input type="text" id="ibr-contactNumber" value="<%= snapshot.contactNumber || '' %>" readonly
                            placeholder="(from Active Directory)">
+                </div>
+            </div>
+
+            <div class="ibr-sub-title">Access &amp; Location</div>
+            <div class="grid-2">
+                <div class="form-row">
+                    <label>NT Login (AD Username)</label>
+                    <input type="text" id="ibr-ntLogin" value="<%= snapshot.ntLogin || '' %>" readonly>
+                </div>
+                <div class="form-row">
+                    <label>Location (AD Office)</label>
+                    <input type="text" id="ibr-location" value="<%= snapshot.location || '' %>" readonly>
                 </div>
             </div>
 
