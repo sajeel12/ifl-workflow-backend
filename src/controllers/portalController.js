@@ -468,7 +468,7 @@ export async function showDashboard(req, res) {
         if (roleKey === 'IT_OPS_MGR') {
             const STAGE_START = { PendingIT: 'hrSubmittedAt', PendingOPSAction: 'dciImplementedAt' };
 
-            const [locationConfigs, globalITOPS, allPending, allRequests] = await Promise.all([
+            const [locationConfigs, globalITOPS, allPending, allRequests, ibrPendingRaw] = await Promise.all([
                 WorkflowApproverLocationOverride.findAll({
                     where: { roleKey: 'IT_OPS' },
                     order: [['location', 'ASC']],
@@ -481,6 +481,10 @@ export async function showDashboard(req, res) {
                 OnboardingRequest.findAll({
                     where: { status: { [Op.in]: ['PendingIT', 'PendingOPSAction', 'Completed'] } },
                     order: [['createdAt', 'DESC']],
+                }),
+                InternetBrowsingRequest.findAll({
+                    where: { status: 'PendingITOpsMgr' },
+                    order: [['updatedAt', 'ASC']],
                 }),
             ]);
 
@@ -511,6 +515,24 @@ export async function showDashboard(req, res) {
                 activeCount:   allPending.filter(r => r.location === cfg.location).length,
             }));
 
+            const appUrl = process.env.APP_URL || '';
+            const ibrPendingRequests = ibrPendingRaw.map(r => {
+                const json = r.toJSON();
+                const stageAgeHours = Math.round((Date.now() - new Date(json.updatedAt)) / 3600000);
+                return {
+                    ...json,
+                    stageAgeHours,
+                    isStale:   stageAgeHours > 48,
+                    actionUrl: r.currentStageToken
+                        ? `${appUrl}/portal/it-ops-mgr/enter?action=${r.currentStageToken}`
+                        : null,
+                };
+            });
+
+            const expandId   = parseInt(req.query.expand, 10) || null;
+            const expandKind = (req.query.expandKind || '').toLowerCase() === 'internet-browsing'
+                ? 'internet-browsing' : null;
+
             return res.render('pages/portal_it_ops_mgr', {
                 roleSlug,
                 roleKey,
@@ -520,12 +542,16 @@ export async function showDashboard(req, res) {
                 delegateName,
                 delegateEmail,
                 locationSummary,
-                pendingRequests: enrichedRequests,
-                pendingCount:    enrichedRequests.length,
-                allRequests:     allRequests.map(r => r.toJSON()),
-                totalCount:      allRequests.length,
-                token:           req.query.token,
-                appUrl:          process.env.APP_URL || '',
+                pendingRequests:    enrichedRequests,
+                pendingCount:       enrichedRequests.length,
+                allRequests:        allRequests.map(r => r.toJSON()),
+                totalCount:         allRequests.length,
+                ibrPendingRequests,
+                ibrPendingCount:    ibrPendingRequests.length,
+                expandId,
+                expandKind,
+                token:              req.query.token,
+                appUrl,
             });
         }
 

@@ -348,6 +348,7 @@ html, body { height: 100%; margin: 0; }
 
 <% const staleCount = pendingRequests.filter(r => r.isStale).length; %>
 <% const escalCount = pendingRequests.filter(r => r.isEscalated).length; %>
+<% const ibrStaleCount = (ibrPendingRequests || []).filter(r => r.isStale).length; %>
 
 <div class="pm-app">
 
@@ -409,13 +410,15 @@ html, body { height: 100%; margin: 0; }
                     IT Ops Overview
                     <span class="pm-side-nav-count"><%= totalCount %></span>
                 </button>
-                <button class="pm-side-nav-btn is-disabled" title="Network Operations monitoring is coming soon">
+                <button class="pm-side-nav-btn" data-panel="networks" onclick="switchTab('networks')">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
                         <circle cx="12" cy="12" r="2"/>
                         <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>
                     </svg>
                     Network Operations
-                    <span style="margin-left:auto; font-size:0.62rem; color:#cbd5e1; background:#f8fafc; padding:2px 6px; border-radius:10px; font-weight:600;">Soon</span>
+                    <% if (ibrPendingCount > 0) { %>
+                        <span class="pm-side-nav-count"><%= ibrPendingCount %></span>
+                    <% } %>
                 </button>
             </div>
 
@@ -429,19 +432,19 @@ html, body { height: 100%; margin: 0; }
                 <div class="pm-kpi-row">
                     <div class="pm-kpi-card">
                         <div class="pm-kpi-val"><%= pendingCount %></div>
-                        <div class="pm-kpi-lbl">Total in queue</div>
+                        <div class="pm-kpi-lbl">IT Ops in queue</div>
                     </div>
                     <div class="pm-kpi-card <%= staleCount > 0 ? 'is-warn' : '' %>">
                         <div class="pm-kpi-val"><%= staleCount %></div>
-                        <div class="pm-kpi-lbl">Past 48h (stale)</div>
+                        <div class="pm-kpi-lbl">IT Ops past 48h</div>
                     </div>
-                    <div class="pm-kpi-card <%= escalCount > 0 ? 'is-warn' : '' %>">
-                        <div class="pm-kpi-val"><%= escalCount %></div>
-                        <div class="pm-kpi-lbl">Escalated</div>
+                    <div class="pm-kpi-card <%= ibrPendingCount > 0 ? 'is-warn' : '' %>">
+                        <div class="pm-kpi-val"><%= ibrPendingCount %></div>
+                        <div class="pm-kpi-lbl">IBR awaiting RN</div>
                     </div>
-                    <div class="pm-kpi-card">
-                        <div class="pm-kpi-val"><%= locationSummary.length %></div>
-                        <div class="pm-kpi-lbl">Active locations</div>
+                    <div class="pm-kpi-card <%= ibrStaleCount > 0 ? 'is-warn' : '' %>">
+                        <div class="pm-kpi-val"><%= ibrStaleCount %></div>
+                        <div class="pm-kpi-lbl">IBR past 48h</div>
                     </div>
                     <div class="pm-kpi-card">
                         <div class="pm-kpi-val"><%= totalCount %></div>
@@ -470,8 +473,8 @@ html, body { height: 100%; margin: 0; }
                     <button class="pm-tab" onclick="switchTab('all-requests')" id="tab-all-requests">
                         IT Ops Overview (<%= totalCount %>)
                     </button>
-                    <button class="pm-tab is-disabled" title="Coming soon">
-                        Network Operations
+                    <button class="pm-tab" onclick="switchTab('networks')" id="tab-networks">
+                        Network Operations<% if (ibrPendingCount > 0) { %> (<%= ibrPendingCount %>)<% } %>
                     </button>
                 </div>
 
@@ -688,12 +691,68 @@ html, body { height: 100%; margin: 0; }
                     </div>
                 </div>
 
-                <!-- ══ Networks Panel (placeholder) ══ -->
+                <!-- ══ Network Operations Panel — Internet Browsing Requests ══ -->
                 <div class="pm-panel" id="panel-networks">
-                    <div class="pm-coming-soon">
-                        <div class="cs-icon">&#128311;</div>
-                        <h3>Network Operations Monitoring</h3>
-                        <p>Network workflow monitoring is being built and will be available here soon.</p>
+                    <div class="pm-section">
+                        <p class="pm-section-title">Internet Browsing Requests — Awaiting RN Approval</p>
+                        <% if (!ibrPendingRequests || ibrPendingRequests.length === 0) { %>
+                            <div class="pm-empty">No Internet Browsing requests pending your approval.</div>
+                        <% } else { %>
+                        <table class="req-table" id="ibr-req-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Employee</th>
+                                    <th>Location</th>
+                                    <th>NT Login</th>
+                                    <th>Time in Stage</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% ibrPendingRequests.forEach(r => { %>
+                                <tr id="ibr-req-<%= r.id %>"
+                                    class="<%= r.isStale ? 'is-stale' : '' %>">
+                                    <td>
+                                        <span class="req-link">#<%= r.id %></span>
+                                        <% if (r.employeeId) { %>
+                                            <div style="font-size:0.72rem;color:#94a3b8;margin-top:2px">EMP: <%= r.employeeId %></div>
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight:600;color:#0f172a"><%= r.fullName || '—' %></div>
+                                        <div style="font-size:0.77rem;color:#64748b">
+                                            <%= [r.designation, r.department].filter(Boolean).join(' · ') || '' %>
+                                        </div>
+                                        <% if (r.email) { %>
+                                            <div style="font-size:0.72rem;color:#94a3b8"><%= r.email %></div>
+                                        <% } %>
+                                    </td>
+                                    <td style="color:#475569;font-size:0.84rem"><%= r.location || '—' %></td>
+                                    <td>
+                                        <% if (r.ntLogin) { %>
+                                            <span class="emp-chip emp-chip--login"><%= r.ntLogin %></span>
+                                        <% } else { %>
+                                            <span style="color:#94a3b8;font-size:0.8rem">—</span>
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <div class="age-cell <%= r.isStale ? 'stale' : 'normal' %>">
+                                            <%= humanAge(r.stageAgeHours) %>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <% if (r.actionUrl) { %>
+                                            <a href="<%= r.actionUrl %>" class="btn-view" style="background:#5b21b6;color:#fff;border-color:#5b21b6;">Review</a>
+                                        <% } else { %>
+                                            <span style="color:#94a3b8;font-size:0.8rem">No link</span>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                        <% } %>
                     </div>
                 </div>
 
@@ -762,6 +821,19 @@ html, body { height: 100%; margin: 0; }
     document.getElementById('all-search')?.addEventListener('keydown', e => {
         if (e.key === 'Escape') { e.target.value = ''; applyAllFilters(); }
     });
+
+    // Auto-switch tab + highlight row when arriving via an action token link.
+    const expandId   = <%- JSON.stringify(typeof expandId !== 'undefined' ? expandId : null) %>;
+    const expandKind = <%- JSON.stringify(typeof expandKind !== 'undefined' ? expandKind : null) %>;
+    if (expandKind === 'internet-browsing' && expandId) {
+        switchTab('networks');
+        const row = document.getElementById('ibr-req-' + expandId);
+        if (row) {
+            row.style.outline = '2px solid #5b21b6';
+            row.style.backgroundColor = 'rgba(91,33,182,0.06)';
+            setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+        }
+    }
 })();
 </script>
 
