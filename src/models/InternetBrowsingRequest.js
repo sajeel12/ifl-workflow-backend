@@ -69,6 +69,11 @@ const InternetBrowsingRequest = sequelize.define('InternetBrowsingRequest', {
     email:         { type: DataTypes.STRING },
 
     // ─── Initiator-entered fields ─────────────────────────────────────────
+    requirementDetails: {
+        // Free-text reason entered by the employee at initiation
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
     userType: {
         // 'New' | 'Existing'
         type: DataTypes.STRING,

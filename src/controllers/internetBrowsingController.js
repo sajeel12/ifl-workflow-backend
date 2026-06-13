@@ -184,9 +184,10 @@ const handleSubmission = async (req, res, token) => {
                 // ntLogin comes from snapshot (req.user.username via AD) — the
                 // read-only display field carries no name attr so data.ntLogin
                 // would be empty. Never override the server-derived value here.
-                userType:         data.userType,
-                facilityDuration: data.facilityDuration,
-                browsingRights:   data.browsingRights
+                requirementDetails: data.requirementDetails,
+                userType:           data.userType,
+                facilityDuration:   data.facilityDuration,
+                browsingRights:     data.browsingRights
             };
             const created = await ibrService.createRequest(payload, req.user);
             return renderSuccess(

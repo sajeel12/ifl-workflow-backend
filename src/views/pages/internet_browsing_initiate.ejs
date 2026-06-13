@@ -149,14 +149,6 @@
                     <input type="text" id="ibr-location" value="<%= snapshot.location || '' %>" readonly>
                 </div>
                 <div class="form-row">
-                    <label>Extension</label>
-                    <input type="text" id="ibr-extension" value="<%= snapshot.extension || '' %>" readonly>
-                </div>
-                <div class="form-row">
-                    <label>Contact Number</label>
-                    <input type="text" id="ibr-contactNumber" value="<%= snapshot.contactNumber || '' %>" readonly>
-                </div>
-                <div class="form-row">
                     <label>Head of Department</label>
                     <input type="text" id="ibr-hod" value="<%= snapshot.hod || '' %>" readonly>
                 </div>
@@ -180,6 +172,19 @@
                     <label>Forwarded to (IT Ops Validator)</label>
                     <input type="text" id="ibr-itOpsValidator" readonly
                            value="<%= snapshot.itOpsValidatorName ? (snapshot.itOpsValidatorName + (snapshot.itOpsValidatorEmail ? ' <' + snapshot.itOpsValidatorEmail + '>' : '')) : (snapshot.itOpsValidatorEmail || '') %>">
+                </div>
+            </div>
+
+            <div class="ibr-section-title">Requirement Details</div>
+            <div class="form-row">
+                <label for="requirementDetails">Why do you need internet access?</label>
+                <textarea id="requirementDetails" name="requirementDetails" rows="4" required
+                          maxlength="2000"
+                          placeholder="Describe your business requirement for internet access — e.g. job role, specific tasks, tools or websites you need to use."
+                          <%= existing ? 'disabled' : '' %>
+                          style="resize:vertical;"></textarea>
+                <div style="font-size:0.75rem; color:#94a3b8; margin-top:4px; text-align:right;">
+                    <span id="reqDetailsCount">0</span> / 2000 characters
                 </div>
             </div>
 
@@ -329,8 +334,6 @@
                 setVal('ibr-department', s.department);
                 setVal('ibr-designation', s.designation);
                 setVal('ibr-location', s.location);
-                setVal('ibr-extension', s.extension);
-                setVal('ibr-contactNumber', s.contactNumber);
                 setVal('ibr-hod', s.hod);
                 setVal('ibr-email', s.email);
                 setVal('ibr-ntLogin', s.ntLogin);
@@ -352,4 +355,13 @@
             }
         })();
     });
+
+    // Character counter for requirement details.
+    const reqTa  = document.getElementById('requirementDetails');
+    const reqCnt = document.getElementById('reqDetailsCount');
+    if (reqTa && reqCnt) {
+        const update = () => { reqCnt.textContent = reqTa.value.length; };
+        reqTa.addEventListener('input', update);
+        update();
+    }
 </script>

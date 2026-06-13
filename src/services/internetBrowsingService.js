@@ -316,15 +316,16 @@ export const createRequest = async (data, initiator) => {
         designation:      data.designation || null,
         location:         data.locationGroup,       // group key, for routing/history
         adOffice:         data.adOffice || null,    // raw AD office, for audit
-        extension:        data.extension || null,
-        contactNumber:    data.contactNumber || null,
-        hod:              data.hod || null,
-        hodEmail:         data.hodEmail || null,
-        email:            data.email || null,
-        ntLogin:          data.ntLogin,
-        userType:         data.userType || '',          // set by IT-Ops at stage 2
-        facilityDuration: data.facilityDuration || '',  // set by IT-Ops at stage 2
-        browsingRights:   data.browsingRights || '',     // set by IT-Ops at stage 2
+        extension:          data.extension || null,
+        contactNumber:      data.contactNumber || null,
+        hod:                data.hod || null,
+        hodEmail:           data.hodEmail || null,
+        email:              data.email || null,
+        requirementDetails: (data.requirementDetails || '').trim() || null,
+        ntLogin:            data.ntLogin,
+        userType:           data.userType || '',          // set by IT-Ops at stage 2
+        facilityDuration:   data.facilityDuration || '',  // set by IT-Ops at stage 2
+        browsingRights:     data.browsingRights || '',     // set by IT-Ops at stage 2
         initiatedBy:      initiator && (initiator.email || initiator.username),
         initiatedAt:      new Date(),
         status:           'PendingITOpsValidation',

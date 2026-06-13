@@ -141,13 +141,6 @@
                 </div>
             </div>
             <div>
-                <div class="field-label">Extension / Contact</div>
-                <div class="field-value">
-                    <%= request.extension || '—' %>
-                    <% if (request.contactNumber) { %> / <%= request.contactNumber %><% } %>
-                </div>
-            </div>
-            <div>
                 <div class="field-label">Head of Department</div>
                 <div class="field-value"><%= request.hod || '—' %></div>
             </div>
@@ -159,6 +152,12 @@
                 <div class="field-label">NT Login</div>
                 <div class="field-value"><%= request.ntLogin || '—' %></div>
             </div>
+            <% if (request.requirementDetails) { %>
+            <div style="grid-column: 1 / -1;">
+                <div class="field-label">Requirement Details</div>
+                <div class="field-value" style="white-space:pre-wrap; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px 12px; font-size:0.9rem; line-height:1.55;"><%= request.requirementDetails %></div>
+            </div>
+            <% } %>
             <div>
                 <div class="field-label">User Type</div>
                 <div class="field-value"><%= request.userType || '—' %></div>

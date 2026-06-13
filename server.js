@@ -305,6 +305,7 @@ async function startServer() {
         await ensureColumn(sequelize, isSqlite, 'InternetBrowsingRequests', 'adOffice', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'InternetBrowsingRequests', 'specificSites', 'TEXT');
         await ensureColumn(sequelize, isSqlite, 'InternetBrowsingRequests', 'facilityDurationDays', 'INTEGER');
+        await ensureColumn(sequelize, isSqlite, 'InternetBrowsingRequests', 'requirementDetails', 'TEXT');
 
         // One-time status migration. Legacy offboarding rows used the
         // SystemManager/SystemTeam role names; rename to the new DCI Manager /
