@@ -181,8 +181,10 @@ const handleSubmission = async (req, res, token) => {
 
             const payload = {
                 ...snapshot,
+                // ntLogin comes from snapshot (req.user.username via AD) — the
+                // read-only display field carries no name attr so data.ntLogin
+                // would be empty. Never override the server-derived value here.
                 userType:         data.userType,
-                ntLogin:          (data.ntLogin || '').trim(),
                 facilityDuration: data.facilityDuration,
                 browsingRights:   data.browsingRights
             };
