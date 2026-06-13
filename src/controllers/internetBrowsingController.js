@@ -125,6 +125,10 @@ const collectInitiatorSnapshot = async (req) => {
             // Which IT-Ops location/validator this request forwards to (display).
             itOpsValidatorName:  (validator && validator.name)  || '',
             itOpsValidatorEmail: (validator && validator.email) || '',
+            // The requester's AD login (sAMAccountName) — auto-captured at
+            // initiation. The rights selection (User Type / Facility Duration /
+            // Browsing Rights) is filled later by the IT-Ops validator, not here.
+            ntLogin:       req.user.username || req.user.displayName || '',
             extension:     empRow.extension || null,
             contactNumber: empRow.mobile || null,
             hod:           hodName,
@@ -232,7 +236,13 @@ const handleSubmission = async (req, res, token) => {
         const remarks = data.remarks || data.managerRemarks || '';
 
         if (role === 'ITOps') {
-            const updated = await ibrService.handleITOpsValidation(token, data.action || 'Approve', remarks);
+            // The IT-Ops validator sets the rights selection at this stage.
+            const updated = await ibrService.handleITOpsValidation(token, data.action || 'Approve', remarks, {
+                ntLogin:          data.ntLogin,
+                userType:         data.userType,
+                facilityDuration: data.facilityDuration,
+                browsingRights:   data.browsingRights
+            });
             if (data.action === 'Reject') {
                 return renderSuccess(res, 'Request Rejected', 'The Internet Browsing request has been rejected and closed.', {
                     requestId: updated.id, statusLabel: 'Rejected', statusOwner: '—', statusColor: 'danger',
