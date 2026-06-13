@@ -240,11 +240,12 @@ const handleSubmission = async (req, res, token) => {
         if (role === 'ITOps') {
             // The IT-Ops validator sets the rights selection at this stage.
             const updated = await ibrService.handleITOpsValidation(token, data.action || 'Approve', remarks, {
-                ntLogin:          data.ntLogin,
-                userType:         data.userType,
-                facilityDuration: data.facilityDuration,
-                browsingRights:   data.browsingRights,
-                specificSites:    data.specificSites
+                ntLogin:              data.ntLogin,
+                userType:             data.userType,
+                facilityDuration:     data.facilityDuration,
+                facilityDurationDays: data.facilityDurationDays,
+                browsingRights:       data.browsingRights,
+                specificSites:        data.specificSites
             });
             if (data.action === 'Reject') {
                 return renderSuccess(res, 'Request Rejected', 'The Internet Browsing request has been rejected and closed.', {

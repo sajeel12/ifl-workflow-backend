@@ -304,6 +304,7 @@ async function startServer() {
         // derived from (location stores the group key; routing is AD-driven).
         await ensureColumn(sequelize, isSqlite, 'InternetBrowsingRequests', 'adOffice', 'STRING');
         await ensureColumn(sequelize, isSqlite, 'InternetBrowsingRequests', 'specificSites', 'TEXT');
+        await ensureColumn(sequelize, isSqlite, 'InternetBrowsingRequests', 'facilityDurationDays', 'INTEGER');
 
         // One-time status migration. Legacy offboarding rows used the
         // SystemManager/SystemTeam role names; rename to the new DCI Manager /

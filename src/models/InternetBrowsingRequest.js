@@ -80,6 +80,11 @@ const InternetBrowsingRequest = sequelize.define('InternetBrowsingRequest', {
         type: DataTypes.STRING,
         allowNull: false
     },
+    facilityDurationDays: {
+        // Number of days — populated only when facilityDuration='OneTime'
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     browsingRights: {
         // 'GeneralBrowsing' | 'GeneralBrowsingWithStreaming' | 'FinanceWebsites' | 'SpecificSites'
         type: DataTypes.STRING,

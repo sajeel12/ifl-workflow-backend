@@ -165,7 +165,27 @@
             </div>
             <div>
                 <div class="field-label">Facility Duration</div>
-                <div class="field-value"><%= request.facilityDuration === 'OneTime' ? 'One time' : request.facilityDuration %></div>
+                <div class="field-value">
+                    <% if (request.facilityDuration === 'OneTime') { %>
+                        One Time
+                        <% if (request.facilityDurationDays) { %>
+                            — <%= request.facilityDurationDays %> day<%= request.facilityDurationDays !== 1 ? 's' : '' %>
+                            <%
+                                const yrs  = Math.floor(request.facilityDurationDays / 365);
+                                const remD = request.facilityDurationDays % 365;
+                                const mos  = Math.floor(remD / 30);
+                                const days = remD % 30;
+                                const parts = [];
+                                if (yrs)  parts.push(yrs  + (yrs  === 1 ? ' year'  : ' years'));
+                                if (mos)  parts.push(mos  + (mos  === 1 ? ' month' : ' months'));
+                                if (days && !yrs) parts.push(days + (days === 1 ? ' day' : ' days'));
+                            %>
+                            <% if (parts.length) { %><span style="color:#64748b;font-size:0.85em;">(≈ <%= parts.join(', ') %>)</span><% } %>
+                        <% } %>
+                    <% } else { %>
+                        <%= request.facilityDuration || '—' %>
+                    <% } %>
+                </div>
             </div>
             <div>
                 <div class="field-label">Browsing Rights</div>
@@ -241,17 +261,31 @@
                     </div>
 
                     <label class="field-label">Facility Duration</label>
-                    <div class="ibr-radio-row" style="margin-bottom:12px;">
+                    <div class="ibr-radio-row" style="margin-bottom:10px;">
                         <label class="ibr-radio">
                             <input type="radio" name="facilityDuration" value="Permanent" required
+                                   onchange="ibrDurationChanged(this)"
                                    <%= request.facilityDuration === 'Permanent' ? 'checked' : '' %>>
                             <span>Permanent</span>
                         </label>
                         <label class="ibr-radio">
                             <input type="radio" name="facilityDuration" value="OneTime" required
+                                   onchange="ibrDurationChanged(this)"
                                    <%= request.facilityDuration === 'OneTime' ? 'checked' : '' %>>
-                            <span>One time</span>
+                            <span>One Time</span>
                         </label>
+                    </div>
+                    <div id="durationDaysWrap" style="display:<%= request.facilityDuration === 'OneTime' ? 'block' : 'none' %>; margin-bottom:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px 16px;">
+                        <label class="field-label" style="margin-bottom:6px;">Number of Days</label>
+                        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                            <input type="number" name="facilityDurationDays" id="facilityDurationDays"
+                                   min="1" max="3650"
+                                   value="<%= request.facilityDurationDays || '' %>"
+                                   placeholder="e.g. 30"
+                                   oninput="ibrDaysInput(this)"
+                                   style="width:120px; padding:9px 12px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem; font-family:inherit;">
+                            <span id="durationDaysLabel" style="font-size:0.92rem; color:#0f172a; font-weight:600;"></span>
+                        </div>
                     </div>
 
                     <label class="field-label">Browsing Rights</label>
@@ -407,6 +441,41 @@
         wrap.style.display = show ? 'block' : 'none';
         if (!show && input) input.value = '';
     }
+
+    function ibrDurationChanged(radio) {
+        const wrap = document.getElementById('durationDaysWrap');
+        if (!wrap) return;
+        const show = radio.value === 'OneTime' && radio.checked;
+        wrap.style.display = show ? 'block' : 'none';
+        if (!show) {
+            const inp = document.getElementById('facilityDurationDays');
+            if (inp) inp.value = '';
+            const lbl = document.getElementById('durationDaysLabel');
+            if (lbl) lbl.textContent = '';
+        }
+    }
+
+    function ibrDaysInput(input) {
+        const lbl  = document.getElementById('durationDaysLabel');
+        if (!lbl) return;
+        const days = parseInt(input.value, 10);
+        if (!days || days < 1) { lbl.textContent = ''; return; }
+        const yrs  = Math.floor(days / 365);
+        const remD = days % 365;
+        const mos  = Math.floor(remD / 30);
+        const remDays = remD % 30;
+        const parts = [];
+        if (yrs)     parts.push(yrs     + (yrs     === 1 ? ' year'  : ' years'));
+        if (mos)     parts.push(mos     + (mos     === 1 ? ' month' : ' months'));
+        if (remDays && !yrs) parts.push(remDays + (remDays === 1 ? ' day'   : ' days'));
+        lbl.textContent = parts.length ? '≈ ' + parts.join(', ') : days + ' days';
+    }
+
+    // Pre-fill conversion label if editing an existing one-time request.
+    document.addEventListener('DOMContentLoaded', () => {
+        const inp = document.getElementById('facilityDurationDays');
+        if (inp && inp.value) ibrDaysInput(inp);
+    });
 </script>
 <script>
     // Verification cloak — same pattern as offboarding_status.ejs.

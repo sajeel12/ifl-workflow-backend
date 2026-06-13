@@ -365,13 +365,18 @@ export const handleITOpsValidation = async (token, action, remarks, fields = {})
     }
 
     // Approve — the IT-Ops validator must have set the rights selection.
-    const ntLogin          = (fields.ntLogin || '').trim();
-    const userType         = (fields.userType || '').trim();
-    const facilityDuration = (fields.facilityDuration || '').trim();
-    const browsingRights   = (fields.browsingRights || '').trim();
-    const specificSites    = (fields.specificSites || '').trim();
+    const ntLogin              = (fields.ntLogin || '').trim();
+    const userType             = (fields.userType || '').trim();
+    const facilityDuration     = (fields.facilityDuration || '').trim();
+    const browsingRights       = (fields.browsingRights || '').trim();
+    const specificSites        = (fields.specificSites || '').trim();
+    const facilityDurationDays = fields.facilityDurationDays ? parseInt(fields.facilityDurationDays, 10) : null;
+
     if (!ntLogin || !userType || !facilityDuration || !browsingRights) {
         throw new Error('Set NT Login, User Type, Facility Duration and Browsing Rights before approving.');
+    }
+    if (facilityDuration === 'OneTime' && (!facilityDurationDays || facilityDurationDays < 1)) {
+        throw new Error('Enter the number of days for the One Time access duration before approving.');
     }
     if (browsingRights === 'SpecificSites' && !specificSites) {
         throw new Error('Enter the specific site URLs before approving.');
@@ -390,6 +395,7 @@ export const handleITOpsValidation = async (token, action, remarks, fields = {})
         ntLogin,
         userType,
         facilityDuration,
+        facilityDurationDays: facilityDuration === 'OneTime' ? facilityDurationDays : null,
         browsingRights,
         specificSites: browsingRights === 'SpecificSites' ? specificSites : null,
         status: 'PendingHOD',
