@@ -48,38 +48,29 @@
 <% } %>
 
 <style>
-    .app-container { height: auto; min-height: 0; overflow: visible; display: block; background: transparent; border-radius: 0; box-shadow: none; }
-    .ibr-card { background: #fff; border-radius: 12px; box-shadow: 0 6px 18px -10px rgba(15,23,42,0.18); padding: 28px; margin-bottom: 24px; border: 1px solid #e2e8f0; }
-    .ibr-card h2 { margin: 0 0 16px; font-size: 1.05rem; font-weight: 700; color: #0f172a; }
-    @keyframes ifl-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .ifl-spinner { animation: ifl-spin 0.7s linear infinite; vertical-align: -3px; margin-right: 6px; }
-    button.is-loading { opacity: 0.75; cursor: wait; pointer-events: none; }
-    button.is-loading > .ifl-btn-original { display: none; }
-    button:disabled { cursor: not-allowed; }
-    .ibr-info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px; }
+    /* IBR status page — uses the same app-container/steps/form-scroll/action-bar
+       flex layout as the onboarding form. Do NOT add height:auto or display:block
+       overrides to .app-container here — modern.css handles that. */
+    .ibr-section-hd {
+        font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase;
+        letter-spacing: 0.07em; padding: 14px 0 8px; border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 14px;
+    }
+    .ibr-section-hd:first-child { padding-top: 0; }
+    .ibr-info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 18px; margin-bottom: 4px; }
     @media (max-width: 700px) { .ibr-info-grid { grid-template-columns: 1fr; } }
     .field-label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; font-weight: 600; }
     .field-value { font-size: 0.95rem; color: #0f172a; word-break: break-word; }
-    .btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
     .btn { padding: 11px 18px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
     .btn-success { background: #16a34a; color: #fff; }
     .btn-danger  { background: #dc2626; color: #fff; }
     .btn-success:hover:not(:disabled) { background: #15803d; }
     .btn-danger:hover:not(:disabled)  { background: #b91c1c; }
-    .stage-summary {
+    .stage-banner {
         background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;
         padding: 12px 14px; font-size: 0.9rem; color: #075985; margin-bottom: 16px;
     }
-    .stage-summary strong { color: #0c4a6e; }
-    .ibr-history-list { margin-top: 6px; }
-    .ibr-history-row {
-        display: grid; grid-template-columns: 200px 1fr;
-        padding: 8px 0; border-bottom: 1px solid #f1f5f9;
-        font-size: 0.88rem;
-    }
-    .ibr-history-row:last-child { border-bottom: none; }
-    .ibr-history-row .when { color: #64748b; }
-    .ibr-history-row .what { color: #0f172a; }
+    .stage-banner strong { color: #0c4a6e; }
     .ibr-radio-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
     .ibr-radio {
         display: inline-flex; align-items: center; gap: 8px;
@@ -90,14 +81,368 @@
     .ibr-radio:hover { border-color: #94a3b8; }
     .ibr-radio input { width: auto; margin: 0; }
     .ibr-radio input:checked + span { font-weight: 600; color: #0078D4; }
-    .ibr-ops-fields { border-top: 1px solid #e2e8f0; margin-top: 14px; padding-top: 14px; }
-    .ibr-ops-fields .field-label { display: block; margin-bottom: 4px; margin-top: 12px; }
-    .ibr-ops-fields .field-label:first-child { margin-top: 0; }
+    .ibr-input { width:100%; padding:10px 12px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem; font-family:inherit; }
+    .ibr-input-ro { background:#f1f5f9; }
+    @keyframes ifl-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .ifl-spinner { animation: ifl-spin 0.7s linear infinite; vertical-align: -3px; margin-right: 6px; }
+    button.is-loading { opacity: 0.75; cursor: wait; pointer-events: none; }
+    button.is-loading > .ifl-btn-original { display: none; }
+    button:disabled { cursor: not-allowed; }
+    /* Workflow history */
+    .wf-history-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin-top:20px;}
+    .wf-history-title{font-size:0.78rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;}
+    .wf-history-list{margin:0;padding-left:0;list-style:none;}
+    .wf-step{position:relative;padding-left:34px;padding-bottom:14px;margin-left:11px;border-left:2px solid #e2e8f0;}
+    .wf-step.is-last{border-left-color:transparent;padding-bottom:0;}
+    .wf-step .wf-dot{position:absolute;left:-11px;top:0;width:22px;height:22px;border-radius:50%;background:#3b82f6;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;box-shadow:0 0 0 4px #f8fafc;}
+    .wf-step .wf-role{font-size:0.9rem;color:#0f172a;font-weight:600;line-height:1.3;}
+    .wf-step .wf-action{font-size:0.85rem;color:#334155;margin-top:2px;}
+    .wf-step .wf-time{font-size:0.75rem;color:#94a3b8;margin-top:2px;}
+    .wf-step .wf-remarks{font-size:0.8rem;color:#475569;margin-top:4px;background:#fff;border:1px solid #e2e8f0;border-radius:5px;padding:6px 10px;}
 </style>
 
-<div class="app-container" style="padding: 24px;">
+<%
+    const STAGE_META = {
+        ITOps:              { title: 'IT Operations Validation',  next: 'Approve &amp; Forward to HOD' },
+        HOD:                { title: 'Employee HOD Approval',     next: 'Approve &amp; Forward to FMS' },
+        FMS:                { title: 'FMS Validation',            next: 'Approve &amp; Forward to RN' },
+        ITOpsMgr:           { title: 'RN Approval',               next: 'Approve &amp; Forward to IT HOD' },
+        ITHOD:              { title: 'IT HOD Approval',           next: 'Approve &amp; Forward to Implementer' },
+        NetworkImplementer: { title: 'Network Implementation',   next: 'Confirm &amp; Complete' }
+    };
+    const meta = STAGE_META[role];
+    const locKey  = request.location || '';
+    const locShow = locKey && typeof locationGroupLabels !== 'undefined' && locationGroupLabels[locKey]
+                    ? locationGroupLabels[locKey] : (locKey || '—');
+%>
 
-    <!-- Request summary header -->
+<div class="app-container">
+
+    <!-- ── Fixed stepper ── -->
+    <div class="steps-container">
+        <div class="steps-row">
+            <% (steps || []).forEach(function(s, i) { %>
+                <div class="step-item <%= s.status %>">
+                    <div class="step-circle"><%= i + 1 %></div>
+                    <div class="step-label" title="<%= s.label %>"><%= s.label %></div>
+                </div>
+            <% }); %>
+        </div>
+    </div>
+
+    <!-- ── Form shell (or plain div for ReadOnly) ── -->
+    <% if (role !== 'ReadOnly') { %>
+    <form id="ibrStatusForm" class="onb-form" method="POST"
+          action="/api/internet-browsing/handle?token=<%= token %>"
+          <%= role === 'NetworkImplementer' ? 'enctype="multipart/form-data"' : '' %>>
+        <% if (locals.portalToken) { %><input type="hidden" name="pt" value="<%= locals.portalToken %>"><% } %>
+    <% } else { %>
+    <div id="ibrStatusForm" class="onb-form">
+    <% } %>
+
+        <!-- ── Scrollable content ── -->
+        <div class="form-scroll">
+            <div class="form-content">
+
+                <!-- ── Request Details ── -->
+                <div class="ibr-section-hd">Request Details</div>
+                <div class="ibr-info-grid">
+                    <div>
+                        <div class="field-label">Request #</div>
+                        <div class="field-value">#<%= request.id || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Status</div>
+                        <div class="field-value"><%= request.status || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Initiated On</div>
+                        <div class="field-value"><%= request.initiatedAt ? new Date(request.initiatedAt).toLocaleDateString() : '—' %></div>
+                    </div>
+                </div>
+
+                <div class="ibr-section-hd">Employee Information</div>
+                <div class="ibr-info-grid">
+                    <div>
+                        <div class="field-label">Employee Number</div>
+                        <div class="field-value"><%= request.employeeId || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Full Name</div>
+                        <div class="field-value"><%= request.fullName || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Department</div>
+                        <div class="field-value"><%= request.department || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Designation</div>
+                        <div class="field-value"><%= request.designation || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Location Group</div>
+                        <div class="field-value"><%= locShow %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Head of Department</div>
+                        <div class="field-value"><%= request.hod || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Email</div>
+                        <div class="field-value"><%= request.email || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">NT Login</div>
+                        <div class="field-value"><%= request.ntLogin || '—' %></div>
+                    </div>
+                    <% if (request.extension || request.contactNumber) { %>
+                    <div>
+                        <div class="field-label">Extension</div>
+                        <div class="field-value"><%= request.extension || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Contact Number</div>
+                        <div class="field-value"><%= request.contactNumber || '—' %></div>
+                    </div>
+                    <% } %>
+                    <% if (request.requirementDetails) { %>
+                    <div style="grid-column:1/-1;">
+                        <div class="field-label">Requirement Details</div>
+                        <div class="field-value" style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;font-size:0.9rem;line-height:1.55;"><%= request.requirementDetails %></div>
+                    </div>
+                    <% } %>
+                </div>
+
+                <!-- Access rights — only shown after IT Ops has set them (not at ITOps stage itself) -->
+                <% if (role !== 'ITOps' && (request.userType || request.facilityDuration || request.browsingRights)) { %>
+                <div class="ibr-section-hd">Access Rights (set by IT Ops)</div>
+                <div class="ibr-info-grid">
+                    <div>
+                        <div class="field-label">User Type</div>
+                        <div class="field-value"><%= request.userType || '—' %></div>
+                    </div>
+                    <div>
+                        <div class="field-label">Facility Duration</div>
+                        <div class="field-value">
+                            <% if (request.facilityDuration === 'OneTime') { %>
+                                One Time<% if (request.facilityDurationDays) { %> — <%= request.facilityDurationDays %> day<%= request.facilityDurationDays !== 1 ? 's' : '' %>
+                                <%
+                                    const _yrs  = Math.floor(request.facilityDurationDays / 365);
+                                    const _remD = request.facilityDurationDays % 365;
+                                    const _mos  = Math.floor(_remD / 30);
+                                    const _days = _remD % 30;
+                                    const _parts = [];
+                                    if (_yrs)  _parts.push(_yrs  + (_yrs  === 1 ? ' year'  : ' years'));
+                                    if (_mos)  _parts.push(_mos  + (_mos  === 1 ? ' month' : ' months'));
+                                    if (_days && !_yrs) _parts.push(_days + (_days === 1 ? ' day' : ' days'));
+                                %>
+                                <% if (_parts.length) { %><span style="color:#64748b;font-size:0.85em;">(≈ <%= _parts.join(', ') %>)</span><% } %>
+                                <% } %>
+                            <% } else { %>
+                                <%= request.facilityDuration || '—' %>
+                            <% } %>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="field-label">Browsing Rights</div>
+                        <div class="field-value">
+                            <%
+                                const _brLabel = request.browsingRights === 'GeneralBrowsingWithStreaming' ? 'General Browsing with Streaming'
+                                    : request.browsingRights === 'GeneralBrowsing'  ? 'General Browsing'
+                                    : request.browsingRights === 'FinanceWebsites'  ? 'Browsing with Finance Websites'
+                                    : request.browsingRights === 'SpecificSites'    ? 'Specific Sites'
+                                    : (request.browsingRights || '—');
+                            %>
+                            <%= _brLabel %>
+                        </div>
+                    </div>
+                    <% if (request.browsingRights === 'SpecificSites' && request.specificSites) { %>
+                    <div style="grid-column:1/-1;">
+                        <div class="field-label">Specific Site URLs</div>
+                        <div class="field-value" style="white-space:pre-wrap;font-size:0.88rem;"><%= request.specificSites %></div>
+                    </div>
+                    <% } %>
+                </div>
+                <% } %>
+
+                <!-- ── IT Ops validation form fields ── -->
+                <% if (role === 'ITOps') { %>
+                <div class="ibr-section-hd">IT Operations Validation</div>
+                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:0.88rem;color:#1e40af;margin-bottom:16px;">
+                    Fill in the access details below before approving. These fields are required to proceed.
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label class="field-label" style="display:block;margin-bottom:4px;">NT Login
+                        <span style="font-size:0.72rem;color:#64748b;font-weight:400;text-transform:none;letter-spacing:0;">(auto-filled from initiator's AD account)</span>
+                    </label>
+                    <input type="text" name="ntLogin" required maxlength="60"
+                           value="<%= request.ntLogin || '' %>"
+                           placeholder="e.g. john.doe"
+                           class="ibr-input ibr-input-ro">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label class="field-label" style="display:block;margin-bottom:6px;">User Type</label>
+                    <div class="ibr-radio-row">
+                        <label class="ibr-radio"><input type="radio" name="userType" value="New" required <%= request.userType === 'New' ? 'checked' : '' %>><span>New</span></label>
+                        <label class="ibr-radio"><input type="radio" name="userType" value="Existing" required <%= request.userType === 'Existing' ? 'checked' : '' %>><span>Existing</span></label>
+                    </div>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label class="field-label" style="display:block;margin-bottom:6px;">Facility Duration</label>
+                    <div class="ibr-radio-row">
+                        <label class="ibr-radio"><input type="radio" name="facilityDuration" value="Permanent" required onchange="ibrDurationChanged(this)" <%= request.facilityDuration === 'Permanent' ? 'checked' : '' %>><span>Permanent</span></label>
+                        <label class="ibr-radio"><input type="radio" name="facilityDuration" value="OneTime" required onchange="ibrDurationChanged(this)" <%= request.facilityDuration === 'OneTime' ? 'checked' : '' %>><span>One Time</span></label>
+                    </div>
+                    <div id="durationDaysWrap" style="display:<%= request.facilityDuration === 'OneTime' ? 'block' : 'none' %>;margin-top:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
+                        <label class="field-label" style="display:block;margin-bottom:6px;">Number of Days</label>
+                        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                            <input type="number" name="facilityDurationDays" id="facilityDurationDays"
+                                   min="1" max="3650" value="<%= request.facilityDurationDays || '' %>"
+                                   placeholder="e.g. 30" oninput="ibrDaysInput(this)"
+                                   style="width:120px;padding:9px 12px;border-radius:6px;border:1px solid #cbd5e1;font-size:0.95rem;font-family:inherit;">
+                            <span id="durationDaysLabel" style="font-size:0.92rem;color:#0f172a;font-weight:600;"></span>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom:4px;">
+                    <label class="field-label" style="display:block;margin-bottom:6px;">Browsing Rights</label>
+                    <div class="ibr-radio-row">
+                        <label class="ibr-radio"><input type="radio" name="browsingRights" value="GeneralBrowsing" required onchange="ibrRightsChanged(this)" <%= request.browsingRights === 'GeneralBrowsing' ? 'checked' : '' %>><span>General Browsing</span></label>
+                        <label class="ibr-radio"><input type="radio" name="browsingRights" value="GeneralBrowsingWithStreaming" required onchange="ibrRightsChanged(this)" <%= request.browsingRights === 'GeneralBrowsingWithStreaming' ? 'checked' : '' %>><span>General Browsing with Streaming</span></label>
+                        <label class="ibr-radio"><input type="radio" name="browsingRights" value="FinanceWebsites" required onchange="ibrRightsChanged(this)" <%= request.browsingRights === 'FinanceWebsites' ? 'checked' : '' %>><span>Browsing with Finance Websites</span></label>
+                        <label class="ibr-radio"><input type="radio" name="browsingRights" value="SpecificSites" required onchange="ibrRightsChanged(this)" <%= request.browsingRights === 'SpecificSites' ? 'checked' : '' %>><span>Specific Sites</span></label>
+                    </div>
+                    <div id="specificSitesWrap" style="display:<%= request.browsingRights === 'SpecificSites' ? 'block' : 'none' %>;margin-top:10px;">
+                        <label class="field-label" style="display:block;margin-bottom:4px;">Specific Site URLs <span style="font-size:0.72rem;color:#64748b;font-weight:400;text-transform:none;letter-spacing:0;">(one per line)</span></label>
+                        <textarea name="specificSites" id="specificSitesInput" rows="4" placeholder="https://example.com" class="ibr-input"><%= request.specificSites || '' %></textarea>
+                    </div>
+                </div>
+                <% } %>
+
+                <!-- ── Non-implementer approval remarks ── -->
+                <% if (meta && role !== 'NetworkImplementer') { %>
+                <div class="ibr-section-hd" style="margin-top:14px;">Remarks</div>
+                <% if (role !== 'ITOps') { %>
+                <div class="stage-banner">
+                    You are reviewing this request as <strong><%= meta.title %></strong>.
+                    Approve to forward, or Reject to close the request.
+                </div>
+                <% } %>
+                <textarea name="remarks" rows="3" class="ibr-input" placeholder="Optional — add a note for the next reviewer"></textarea>
+                <% } %>
+
+                <!-- ── Network Implementer fields ── -->
+                <% if (role === 'NetworkImplementer') { %>
+                <div class="ibr-section-hd">Apply Internet Browsing Rights</div>
+                <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;font-size:0.88rem;color:#075985;margin-bottom:14px;">
+                    Apply the requested proxy / firewall change on the user's AD account.
+                    Confirm below; submitting marks the request <strong>Completed</strong>.
+                </div>
+                <div style="margin-bottom:14px;">
+                    <label class="field-label" style="display:block;margin-bottom:4px;">Implementer Name <span style="color:#64748b;font-weight:400;font-size:0.78rem;">(auto-filled)</span></label>
+                    <input type="text" name="implementerName" data-ifl-sso-name="1"
+                           value="<%= (currentUser && (currentUser.displayName || currentUser.username)) || '' %>"
+                           disabled class="ibr-input" style="background:#f1f5f9;color:#0f172a;">
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fef9c3;border:1px solid #fde68a;border-radius:8px;margin-bottom:14px;">
+                    <input type="checkbox" name="confirmed" value="on" id="cb-implemented" required style="margin-top:3px;">
+                    <label for="cb-implemented" style="font-size:0.92rem;color:#713f12;font-weight:600;">
+                        I confirm that the requested internet browsing rights have been applied for this user on the firewall / proxy.
+                    </label>
+                </div>
+                <div style="margin-bottom:14px;">
+                    <label class="field-label" style="display:block;margin-bottom:4px;">Notes (optional)</label>
+                    <textarea name="implementerNotes" rows="2" class="ibr-input"></textarea>
+                </div>
+                <div style="padding:14px;border:2px dashed #cbd5e1;border-radius:8px;text-align:center;">
+                    <label style="cursor:pointer;color:#0078D4;font-weight:600;">Optional — upload proof screenshots</label>
+                    <input type="file" name="ibrProof" multiple accept="image/*,application/pdf" style="display:block;margin:8px auto 0;">
+                </div>
+                <% } %>
+
+                <!-- ── ReadOnly status banner ── -->
+                <% if (role === 'ReadOnly') { %>
+                <div class="ibr-section-hd" style="margin-top:4px;">Status</div>
+                <% if (request.status === 'Completed') { %>
+                    <div style="padding:16px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;">
+                        <strong style="color:#065f46;">Request Approved &amp; Applied</strong>
+                        <p style="color:#047857;margin:4px 0 0;font-size:0.9rem;">
+                            Completed on <%= request.completedAt ? new Date(request.completedAt).toLocaleString() : 'N/A' %>
+                            <% if (request.networkImplementerName) { %> · by <%= request.networkImplementerName %><% } %>
+                        </p>
+                    </div>
+                <% } else if (request.status === 'Rejected') { %>
+                    <div style="padding:16px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;">
+                        <strong style="color:#991b1b;">Request Rejected</strong>
+                    </div>
+                <% } else { %>
+                    <div style="padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+                        <span style="color:#64748b;">Status: </span><strong><%= request.status || 'Unknown' %></strong>
+                    </div>
+                <% } %>
+                <% } %>
+
+                <!-- ── Workflow history ── -->
+                <% if (typeof timeline !== 'undefined' && timeline && timeline.length) { %>
+                <%
+                    const _ibrRoleMap = {
+                        'Employee':          'Employee Initiation',
+                        'ITOps':             'IT Ops Validation',
+                        'HOD':               'HOD Approval',
+                        'FMS':               'FMS Validation',
+                        'ITOpsMgr':          'IT Ops Manager (RN Approval)',
+                        'ITHOD':             'IT HOD Sign-off',
+                        'NetworkImplementer':'Network Implementation',
+                        'System':            'System'
+                    };
+                %>
+                <div class="wf-history-card">
+                    <div class="wf-history-title">Workflow Progress</div>
+                    <ol class="wf-history-list">
+                        <% timeline.forEach(function(ev, i) { %>
+                            <li class="wf-step <%= i === timeline.length - 1 ? 'is-last' : '' %>">
+                                <span class="wf-dot"><%= i + 1 %></span>
+                                <div class="wf-role"><%= _ibrRoleMap[ev.actorRole] || ev.actorRole || '—' %></div>
+                                <div class="wf-action"><%= ev.actionLabel || ev.action %></div>
+                                <% if (ev.detailsText) { %><div class="wf-remarks"><%= ev.detailsText %></div><% } %>
+                                <div class="wf-time"><%= ev.timestamp ? new Date(ev.timestamp).toLocaleString() : '—' %></div>
+                            </li>
+                        <% }); %>
+                    </ol>
+                </div>
+                <% } %>
+
+            </div><!-- /.form-content -->
+        </div><!-- /.form-scroll -->
+
+        <!-- ── Fixed action bar ── -->
+        <% if (role !== 'ReadOnly') { %>
+        <div class="action-bar">
+            <span style="margin-right:auto;font-size:0.78rem;color:#94a3b8;">Request #<%= request.id %> · <%= meta && meta.title || role %></span>
+            <% if (role === 'NetworkImplementer') { %>
+                <button type="submit" class="btn btn-success">Confirm &amp; Complete</button>
+            <% } else if (meta) { %>
+                <button type="submit" name="action" value="Reject"
+                        class="btn btn-danger"
+                        data-ifl-confirm="Reject this Internet Browsing request? The workflow will be closed."
+                        data-ifl-confirm-title="Reject request"
+                        data-ifl-confirm-ok="Reject"
+                        data-ifl-confirm-danger="1">Reject</button>
+                <button type="submit" name="action" value="Approve" class="btn btn-success"><%= meta.next %></button>
+            <% } %>
+        </div>
+        <% } %>
+
+    <% if (role !== 'ReadOnly') { %>
+    </form>
+    <% } else { %>
+    </div>
+    <% } %>
+
+</div><!-- /.app-container -->
+
+<% /* ── Remove the old duplicate sections below (replaced by unified structure above) ── */ %>
+<% if (false) { /* old ibr-card blocks — now dead code kept for reference only */ %>
     <div class="ibr-card">
         <h2>Request Details</h2>
         <div class="ibr-info-grid">
@@ -454,8 +799,7 @@
         </div>
     </div>
     <% } %>
-
-</div>
+<% } /* end if(false) dead-code block */ %>
 
 <script>
     function ibrRightsChanged(radio) {

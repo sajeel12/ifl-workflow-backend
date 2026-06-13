@@ -448,7 +448,7 @@ const renderForm = async (req, res, token) => {
             const events = await TimelineEvent.findAll({
                 where: { requestId: request.id },
                 order: [['timestamp', 'ASC']],
-                attributes: ['id', 'action', 'actorRole', 'details', 'timestamp']
+                attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
             });
             timeline = events.map(e => {
                 const ev = e.toJSON();
