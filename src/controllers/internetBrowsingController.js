@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import * as ibrService from '../services/internetBrowsingService.js';
 import InternetBrowsingRequest from '../models/InternetBrowsingRequest.js';
 import TimelineEvent from '../models/TimelineEvent.js';
@@ -446,7 +447,7 @@ const renderForm = async (req, res, token) => {
     if (request && request.id) {
         try {
             const events = await TimelineEvent.findAll({
-                where: { requestId: request.id },
+                where: { requestId: request.id, action: { [Op.like]: 'IBR%' } },
                 order: [['timestamp', 'ASC']],
                 attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
             });
@@ -591,7 +592,7 @@ export const renderHistory = async (req, res) => {
         }
 
         const events = await TimelineEvent.findAll({
-            where: { requestId: id },
+            where: { requestId: id, action: { [Op.like]: 'IBR%' } },
             order: [['timestamp', 'ASC']],
             attributes: ['eventId', 'action', 'actorRole', 'details', 'timestamp']
         });
