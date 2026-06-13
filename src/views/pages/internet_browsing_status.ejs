@@ -80,6 +80,19 @@
     .ibr-history-row:last-child { border-bottom: none; }
     .ibr-history-row .when { color: #64748b; }
     .ibr-history-row .what { color: #0f172a; }
+    .ibr-radio-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+    .ibr-radio {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px;
+        cursor: pointer; user-select: none; font-size: 0.92rem; background: #fff;
+        transition: border-color 0.12s;
+    }
+    .ibr-radio:hover { border-color: #94a3b8; }
+    .ibr-radio input { width: auto; margin: 0; }
+    .ibr-radio input:checked + span { font-weight: 600; color: #0078D4; }
+    .ibr-ops-fields { border-top: 1px solid #e2e8f0; margin-top: 14px; padding-top: 14px; }
+    .ibr-ops-fields .field-label { display: block; margin-bottom: 4px; margin-top: 12px; }
+    .ibr-ops-fields .field-label:first-child { margin-top: 0; }
 </style>
 
 <div class="app-container" style="padding: 24px;">
@@ -188,7 +201,63 @@
             </div>
 
             <form action="/api/internet-browsing/handle?token=<%= token %>" method="POST">
-                <label class="field-label" style="display:block; margin-bottom:4px;">Remarks (optional)</label>
+                <% if (role === 'ITOps') { %>
+                <div class="ibr-ops-fields">
+                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 14px; font-size:0.88rem; color:#1e40af; margin-bottom:14px;">
+                        Fill in the access details below before approving. These fields are required to proceed.
+                    </div>
+
+                    <label class="field-label">NT Login</label>
+                    <input type="text" name="ntLogin" required maxlength="60"
+                           value="<%= request.ntLogin || '' %>"
+                           placeholder="e.g. john.doe"
+                           style="width:100%; padding:10px 12px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem; font-family:inherit; margin-bottom:12px;">
+
+                    <label class="field-label">User Type</label>
+                    <div class="ibr-radio-row" style="margin-bottom:12px;">
+                        <label class="ibr-radio">
+                            <input type="radio" name="userType" value="New" required
+                                   <%= request.userType === 'New' ? 'checked' : '' %>>
+                            <span>New</span>
+                        </label>
+                        <label class="ibr-radio">
+                            <input type="radio" name="userType" value="Existing" required
+                                   <%= request.userType === 'Existing' ? 'checked' : '' %>>
+                            <span>Existing</span>
+                        </label>
+                    </div>
+
+                    <label class="field-label">Facility Duration</label>
+                    <div class="ibr-radio-row" style="margin-bottom:12px;">
+                        <label class="ibr-radio">
+                            <input type="radio" name="facilityDuration" value="Permanent" required
+                                   <%= request.facilityDuration === 'Permanent' ? 'checked' : '' %>>
+                            <span>Permanent</span>
+                        </label>
+                        <label class="ibr-radio">
+                            <input type="radio" name="facilityDuration" value="OneTime" required
+                                   <%= request.facilityDuration === 'OneTime' ? 'checked' : '' %>>
+                            <span>One time</span>
+                        </label>
+                    </div>
+
+                    <label class="field-label">Browsing Rights</label>
+                    <div class="ibr-radio-row" style="margin-bottom:4px;">
+                        <label class="ibr-radio">
+                            <input type="radio" name="browsingRights" value="GeneralBrowsing" required
+                                   <%= request.browsingRights === 'GeneralBrowsing' ? 'checked' : '' %>>
+                            <span>General browsing</span>
+                        </label>
+                        <label class="ibr-radio">
+                            <input type="radio" name="browsingRights" value="GeneralBrowsingWithStreaming" required
+                                   <%= request.browsingRights === 'GeneralBrowsingWithStreaming' ? 'checked' : '' %>>
+                            <span>General browsing with streaming</span>
+                        </label>
+                    </div>
+                </div>
+                <% } %>
+
+                <label class="field-label" style="display:block; margin-top:14px; margin-bottom:4px;">Remarks (optional)</label>
                 <textarea name="remarks" rows="3" style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem; font-family:inherit;"></textarea>
 
                 <div class="btn-row">

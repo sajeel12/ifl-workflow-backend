@@ -88,9 +88,9 @@
         <h2>Internet Browsing Request</h2>
         <p class="sub">
             Submit a request to enable internet access on your AD account. Your details are
-            collected automatically from HRMS — only the four fields below are yours to fill.
-            The request will be validated by IT Operations, approved by your HOD, reviewed by
-            FMS, and finally signed off by IT senior management before being implemented.
+            collected automatically from HRMS. IT Operations will validate the request and
+            fill in the access rights (User Type, NT Login, Facility Duration, Browsing Rights).
+            The request then proceeds through HOD, FMS, and IT senior management sign-off.
         </p>
 
         <% if (existing) { %>
@@ -164,6 +164,10 @@
                     <label>Email Address</label>
                     <input type="text" id="ibr-email" value="<%= snapshot.email || '' %>" readonly>
                 </div>
+                <div class="form-row">
+                    <label>NT Login (AD Username)</label>
+                    <input type="text" id="ibr-ntLogin" value="<%= snapshot.ntLogin || '' %>" readonly>
+                </div>
             </div>
 
             <div class="ibr-section-title">IT Ops Validation Routing</div>
@@ -176,56 +180,6 @@
                     <label>Forwarded to (IT Ops Validator)</label>
                     <input type="text" id="ibr-itOpsValidator" readonly
                            value="<%= snapshot.itOpsValidatorName ? (snapshot.itOpsValidatorName + (snapshot.itOpsValidatorEmail ? ' <' + snapshot.itOpsValidatorEmail + '>' : '')) : (snapshot.itOpsValidatorEmail || '') %>">
-                </div>
-            </div>
-
-            <div class="ibr-section-title">Your Inputs</div>
-
-            <div class="form-row">
-                <label>User Type</label>
-                <div class="ibr-radio-row">
-                    <label class="ibr-radio">
-                        <input type="radio" name="userType" value="New" required <%= existing ? 'disabled' : '' %>>
-                        <span>New</span>
-                    </label>
-                    <label class="ibr-radio">
-                        <input type="radio" name="userType" value="Existing" required <%= existing ? 'disabled' : '' %>>
-                        <span>Existing</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <label for="ntLogin">NT Login</label>
-                <input type="text" id="ntLogin" name="ntLogin" required maxlength="60"
-                       placeholder="e.g. john.doe" <%= existing ? 'disabled' : '' %>>
-            </div>
-
-            <div class="form-row">
-                <label>Facility Duration</label>
-                <div class="ibr-radio-row">
-                    <label class="ibr-radio">
-                        <input type="radio" name="facilityDuration" value="Permanent" required <%= existing ? 'disabled' : '' %>>
-                        <span>Permanent</span>
-                    </label>
-                    <label class="ibr-radio">
-                        <input type="radio" name="facilityDuration" value="OneTime" required <%= existing ? 'disabled' : '' %>>
-                        <span>One time</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <label>Browsing Rights</label>
-                <div class="ibr-radio-row">
-                    <label class="ibr-radio">
-                        <input type="radio" name="browsingRights" value="GeneralBrowsing" required <%= existing ? 'disabled' : '' %>>
-                        <span>General browsing</span>
-                    </label>
-                    <label class="ibr-radio">
-                        <input type="radio" name="browsingRights" value="GeneralBrowsingWithStreaming" required <%= existing ? 'disabled' : '' %>>
-                        <span>General browsing with streaming</span>
-                    </label>
                 </div>
             </div>
 
@@ -379,6 +333,7 @@
                 setVal('ibr-contactNumber', s.contactNumber);
                 setVal('ibr-hod', s.hod);
                 setVal('ibr-email', s.email);
+                setVal('ibr-ntLogin', s.ntLogin);
                 setVal('ibr-locationGroupLabel', s.locationGroupLabel);
                 setVal('ibr-itOpsValidator', s.itOpsValidatorName
                     ? (s.itOpsValidatorName + (s.itOpsValidatorEmail ? ' <' + s.itOpsValidatorEmail + '>' : ''))
