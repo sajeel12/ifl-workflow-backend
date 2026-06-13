@@ -42,11 +42,17 @@ export const loadAdLocationGroupMap = async () => {
 // the caller blocks the request in that case (we never fall back to HRMS location).
 export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) => {
     let adOffice = null;
+    let adTelephoneNumber = null;
+    let adMobile = null;
     // Preferred: exact employeeID lookup via the adsearch sidecar.
     try {
         if (employee && employee.employeeId) {
             const rec = await findUserByEmployeeIdViaSidecar(String(employee.employeeId));
-            if (rec && rec.office) adOffice = rec.office;
+            if (rec) {
+                if (rec.office) adOffice = rec.office;
+                adTelephoneNumber = rec.telephoneNumber || null;
+                adMobile = rec.mobile || null;
+            }
         }
     } catch (e) {
         logger.warn(`[IBR] AD office lookup by employeeId failed: ${e.message}`);
@@ -63,7 +69,11 @@ export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) =>
                     (r.sAMAccountName && r.sAMAccountName.toLowerCase() === un) ||
                     (r.mail && r.mail.toLowerCase() === lc)
                 ) || (results.length === 1 ? results[0] : null);
-                if (m && m.office) adOffice = m.office;
+                if (m) {
+                    if (m.office) adOffice = m.office;
+                    if (!adTelephoneNumber) adTelephoneNumber = m.telephoneNumber || null;
+                    if (!adMobile) adMobile = m.mobile || null;
+                }
             } catch (e) {
                 logger.warn(`[IBR] AD office fallback search failed: ${e.message}`);
             }
@@ -78,7 +88,7 @@ export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) =>
         logger.warn(`[IBR] AD office "${adOffice || '∅'}" (emp #${employee && employee.employeeId}) maps to no location group — ` +
             `add it to SystemConfig "${AD_LOC_MAP_KEY}" (one of: ${LOCATION_GROUP_KEYS.join(', ')}).`);
     }
-    return { adOffice: adOffice || null, group };
+    return { adOffice: adOffice || null, group, adTelephoneNumber, adMobile };
 };
 
 // Preview the IT-Ops validator a group routes to (for display on the initiate

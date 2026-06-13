@@ -136,6 +136,8 @@
                 searcher.PropertiesToLoad.Add("whenCreated");
                 searcher.PropertiesToLoad.Add("memberOf");
                 searcher.PropertiesToLoad.Add("physicalDeliveryOfficeName");
+                searcher.PropertiesToLoad.Add("telephoneNumber");
+                searcher.PropertiesToLoad.Add("mobile");
                 searcher.PropertiesToLoad.Add("l");
                 searcher.PropertiesToLoad.Add("streetAddress");
                 searcher.PropertiesToLoad.Add("dNSHostName");
@@ -187,6 +189,8 @@
                         createdAt       = createdAt,
                         memberOf        = grps,
                         office          = Prop(r, "physicalDeliveryOfficeName"),
+                        telephoneNumber = Prop(r, "telephoneNumber"),
+                        mobile          = Prop(r, "mobile"),
                         locality        = Prop(r, "l"),
                         streetAddress   = Prop(r, "streetAddress"),
                         dNSHostName     = Prop(r, "dNSHostName"),

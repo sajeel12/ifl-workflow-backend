@@ -160,6 +160,16 @@
                     <label>NT Login (AD Username)</label>
                     <input type="text" id="ibr-ntLogin" value="<%= snapshot.ntLogin || '' %>" readonly>
                 </div>
+                <div class="form-row">
+                    <label>Extension</label>
+                    <input type="text" id="ibr-extension" value="<%= snapshot.extension || '' %>" readonly
+                           placeholder="(from Active Directory)">
+                </div>
+                <div class="form-row">
+                    <label>Contact Number</label>
+                    <input type="text" id="ibr-contactNumber" value="<%= snapshot.contactNumber || '' %>" readonly
+                           placeholder="(from Active Directory)">
+                </div>
             </div>
 
             <div class="ibr-section-title">IT Ops Validation Routing</div>
@@ -337,6 +347,8 @@
                 setVal('ibr-hod', s.hod);
                 setVal('ibr-email', s.email);
                 setVal('ibr-ntLogin', s.ntLogin);
+                setVal('ibr-extension', s.extension);
+                setVal('ibr-contactNumber', s.contactNumber);
                 setVal('ibr-locationGroupLabel', s.locationGroupLabel);
                 setVal('ibr-itOpsValidator', s.itOpsValidatorName
                     ? (s.itOpsValidatorName + (s.itOpsValidatorEmail ? ' <' + s.itOpsValidatorEmail + '>' : ''))
