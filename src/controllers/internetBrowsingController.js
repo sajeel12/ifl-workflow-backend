@@ -87,7 +87,7 @@ const collectInitiatorSnapshot = async (req) => {
     // IT-Ops validation is routed by the AD-derived LOCATION GROUP — NOT the
     // HRMS location. Resolve the user's AD office and map it to a group; if it
     // can't be mapped, block the request (we never fall back to HRMS location).
-    const { adOffice, group, adTelephoneNumber, adMobile } = await ibrService.resolveLocationGroupForEmployee(empRow, req.user);
+    const { adOffice, group, adEmail, adTelephoneNumber, adMobile } = await ibrService.resolveLocationGroupForEmployee(empRow, req.user);
     if (!group) {
         return {
             error: `Your office${adOffice ? ` "${adOffice}"` : ''} is not mapped to a location group, so we can't route your request to the right IT Operations team. Please contact IT to configure your office in the location-group mapping.`,
@@ -133,7 +133,7 @@ const collectInitiatorSnapshot = async (req) => {
             contactNumber: adMobile || null,
             hod:           hodName,
             hodEmail:      hodEmail,
-            email:         empRow.email || req.user.email
+            email:         adEmail || req.user.email
         }
     };
 };

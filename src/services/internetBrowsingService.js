@@ -42,6 +42,7 @@ export const loadAdLocationGroupMap = async () => {
 // the caller blocks the request in that case (we never fall back to HRMS location).
 export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) => {
     let adOffice = null;
+    let adEmail = null;
     let adTelephoneNumber = null;
     let adMobile = null;
     // Preferred: exact employeeID lookup via the adsearch sidecar.
@@ -50,6 +51,7 @@ export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) =>
             const rec = await findUserByEmployeeIdViaSidecar(String(employee.employeeId));
             if (rec) {
                 if (rec.office) adOffice = rec.office;
+                adEmail = rec.mail || rec.email || null;
                 adTelephoneNumber = rec.telephoneNumber || null;
                 adMobile = rec.mobile || null;
             }
@@ -71,6 +73,7 @@ export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) =>
                 ) || (results.length === 1 ? results[0] : null);
                 if (m) {
                     if (m.office) adOffice = m.office;
+                    if (!adEmail) adEmail = m.mail || m.email || null;
                     if (!adTelephoneNumber) adTelephoneNumber = m.telephoneNumber || null;
                     if (!adMobile) adMobile = m.mobile || null;
                 }
@@ -88,7 +91,7 @@ export const resolveLocationGroupForEmployee = async (employee, ssoUser = {}) =>
         logger.warn(`[IBR] AD office "${adOffice || '∅'}" (emp #${employee && employee.employeeId}) maps to no location group — ` +
             `add it to SystemConfig "${AD_LOC_MAP_KEY}" (one of: ${LOCATION_GROUP_KEYS.join(', ')}).`);
     }
-    return { adOffice: adOffice || null, group, adTelephoneNumber, adMobile };
+    return { adOffice: adOffice || null, group, adEmail, adTelephoneNumber, adMobile };
 };
 
 // Preview the IT-Ops validator a group routes to (for display on the initiate
