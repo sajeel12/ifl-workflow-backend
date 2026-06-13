@@ -313,6 +313,41 @@ export const findUserByEmployeeIdViaSidecar = async (employeeId) => {
 };
 
 /**
+ * Resolve a logged-in NT account (sAMAccountName) to its AD record via the
+ * adsearch.aspx sidecar `?login=` mode. That mode queries the primary-domain
+ * LDAP first, so the returned record reliably carries the employeeID attribute
+ * (the Global Catalog does NOT replicate employeeID — a plain ?q= search would
+ * return the account with an empty employeeID). Returns the user object or null.
+ */
+export const findUserByLoginViaSidecar = async (login) => {
+    if (!login || !ADSEARCH_URL) return null;
+    try {
+        const url = new URL(ADSEARCH_URL);
+        url.searchParams.set('login', String(login));
+        const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6000) });
+        if (!res.ok) { logger.warn(`[ADSearch] login HTTP ${res.status}`); return null; }
+        const data = await res.json();
+        if (!Array.isArray(data.results) || data.results.length === 0) return null;
+        const age      = Math.abs(Date.now() / 1000 - data.timestamp);
+        const expected = _hmacHex(`search|login:${login}|${data.timestamp}|${data.results.length}`);
+        if (age > 30 || data.signature !== expected) {
+            logger.warn(`[ADSearch] HMAC mismatch for login "${login}"`);
+            return null;
+        }
+        const user = data.results.find(r => !_isComputerAccount(r.sAMAccountName));
+        if (!user) {
+            logger.warn(`[ADSearch] login(${login}) matched only computer accounts — ignored`);
+            return null;
+        }
+        logger.info(`[ADSearch] login(${login}) → ${user.sAMAccountName}|empID=${user.employeeID || '∅'}`);
+        return user;
+    } catch (e) {
+        logger.warn(`[ADSearch] login sidecar error: ${e.message}`);
+        return null;
+    }
+};
+
+/**
  * Search AD users by name / sAMAccountName / email via the adsearch.aspx sidecar.
  * Returns an array of { sAMAccountName, displayName, email, title, employeeID } — empty on failure.
  */

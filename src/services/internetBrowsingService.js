@@ -6,7 +6,7 @@ import * as emailService from './emailService.js';
 import RecipientService from './recipientService.js';
 import HRMSService from './hrmsService.js';
 import SystemConfig from '../models/SystemConfig.js';
-import { searchUsersByName, findUserByEmployeeIdViaSidecar } from './adService.js';
+import { searchUsersByName, findUserByEmployeeIdViaSidecar, findUserByLoginViaSidecar } from './adService.js';
 import { groupKeyForAdOffice, normalizeLoc, LOCATION_GROUPS } from '../utils/locationGroups.js';
 import logger from '../utils/logger.js';
 
@@ -223,17 +223,30 @@ export const resolveInitiatorEmployee = async (ssoUser) => {
     // employeeID attribute, which is the SAME key as the Employee table's primary
     // key. We deliberately DO NOT match on email — the AD email and the HRMS/DB
     // email are different addresses, so an email match is unreliable.
+    //
+    // Use the sidecar `?login=` mode (primary-domain LDAP first) — the Global
+    // Catalog does NOT replicate employeeID, so a plain ?q= name search returns
+    // the account with an EMPTY employeeID. The login mode guarantees employeeID,
+    // exactly like the 360° profile's employeeId pivot. Fall back to ?q= search
+    // only to recover a displayName for the name-based fallback below.
     let adAcct = null;
     if (uname) {
         try {
-            const results = await searchUsersByName(uname);
-            adAcct = results.find(r => r.sAMAccountName && r.sAMAccountName.toLowerCase() === uname.toLowerCase())
-                   || (results.length === 1 ? results[0] : null);
-            logger.info(`[IBR] AD account for "${uname}": ` +
-                (adAcct ? `${adAcct.sAMAccountName}|empID=${adAcct.employeeID || '∅'}` : '(none found)'));
+            adAcct = await findUserByLoginViaSidecar(uname);
         } catch (e) {
-            logger.warn(`[IBR] AD lookup for "${uname}" failed: ${e.message}`);
+            logger.warn(`[IBR] AD login lookup for "${uname}" failed: ${e.message}`);
         }
+        if (!adAcct) {
+            try {
+                const results = await searchUsersByName(uname);
+                adAcct = results.find(r => r.sAMAccountName && r.sAMAccountName.toLowerCase() === uname.toLowerCase())
+                       || (results.length === 1 ? results[0] : null);
+            } catch (e) {
+                logger.warn(`[IBR] AD name lookup for "${uname}" failed: ${e.message}`);
+            }
+        }
+        logger.info(`[IBR] AD account for "${uname}": ` +
+            (adAcct ? `${adAcct.sAMAccountName}|empID=${adAcct.employeeID || '∅'}` : '(none found)'));
     }
 
     // PRIMARY — the employeeID on the logged-in AD account IS the Employee PK.

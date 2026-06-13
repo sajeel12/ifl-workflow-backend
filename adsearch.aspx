@@ -24,10 +24,17 @@
         string employeeId = (Request.QueryString["employeeId"] ?? "").Trim();
         string groups     = (Request.QueryString["groups"]     ?? "").Trim();
         string computer   = (Request.QueryString["computer"]   ?? "").Trim();
+        string login      = (Request.QueryString["login"]      ?? "").Trim();
 
         string filter;
         string sigKey; // used in HMAC — tells Node which path was taken
         int    limit = 15;
+        // primaryFirst: query the primary-domain LDAP BEFORE the Global Catalog.
+        // The GC does not replicate the employeeID attribute, so a GC-first search
+        // returns the account with an EMPTY employeeID. The login path needs
+        // employeeID, so it queries primary-domain LDAP first (employeeID lives
+        // there), then falls back to the GC for child-domain accounts.
+        bool primaryFirst = false;
 
         if (!string.IsNullOrEmpty(computer)) {
             // ── Computer path: search COMPUTER objects (objectCategory=computer) ──
@@ -77,6 +84,20 @@
             // an employeeID would be returned as if it were the employee.
             filter = "(&(objectCategory=person)(objectClass=user)(employeeID=" + esc + "))";
             sigKey = employeeId;
+        } else if (!string.IsNullOrEmpty(login)) {
+            // ── Login path: exact sAMAccountName match, employeeID guaranteed ──────
+            // Resolves a logged-in NT account to its employeeID. Queries the
+            // primary-domain LDAP first (the GC does not hold employeeID), so the
+            // returned record reliably carries employeeID for the DB pivot.
+            if (login.Length < 2) {
+                Response.StatusCode = 400;
+                Response.Write("{\"error\":\"login min 2 chars\"}");
+                return;
+            }
+            string esc = EscLdap(login);
+            filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=" + esc + "))";
+            sigKey = "login:" + login;
+            primaryFirst = true;
         } else {
             // ── Name/email path (existing behaviour) ─────────────────────────────
             if (q.Length < 2) {
@@ -98,14 +119,23 @@
 
         var results = new System.Collections.Generic.List<object>();
 
-        // Try Global Catalog first — covers every domain in the ifl.net forest
-        bool ok = false;
-        if (!string.IsNullOrEmpty(gcHost))
-            ok = TrySearch("LDAP://" + gcHost + ":3268", filter, results, limit);
+        if (primaryFirst) {
+            // Primary-domain LDAP first — it holds the employeeID attribute that the
+            // Global Catalog does not replicate. GC is the fallback for accounts in
+            // child domains that the primary-domain bind cannot see.
+            bool ok = TrySearch(null, filter, results, limit);
+            if ((!ok || results.Count == 0) && !string.IsNullOrEmpty(gcHost))
+                TrySearch("LDAP://" + gcHost + ":3268", filter, results, limit);
+        } else {
+            // Try Global Catalog first — covers every domain in the ifl.net forest
+            bool ok = false;
+            if (!string.IsNullOrEmpty(gcHost))
+                ok = TrySearch("LDAP://" + gcHost + ":3268", filter, results, limit);
 
-        // Fallback: primary-domain LDAP (uses app-pool Windows identity, no explicit credentials)
-        if (!ok || results.Count == 0)
-            TrySearch(null, filter, results, limit);
+            // Fallback: primary-domain LDAP (uses app-pool Windows identity, no explicit credentials)
+            if (!ok || results.Count == 0)
+                TrySearch(null, filter, results, limit);
+        }
 
         long   timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         string sig       = Sign("search|" + sigKey + "|" + timestamp + "|" + results.Count);
