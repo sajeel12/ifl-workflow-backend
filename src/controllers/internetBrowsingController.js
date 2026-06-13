@@ -442,11 +442,29 @@ const renderForm = async (req, res, token) => {
         else                step.status = 'pending';
     });
 
+    let timeline = [];
+    if (request && request.id) {
+        try {
+            const events = await TimelineEvent.findAll({
+                where: { requestId: request.id },
+                order: [['timestamp', 'ASC']],
+                attributes: ['id', 'action', 'actorRole', 'details', 'timestamp']
+            });
+            timeline = events.map(e => {
+                const ev = e.toJSON();
+                ev.actionLabel = humanizeAction(ev.action);
+                ev.detailsText = humanizeDetails(ev.details);
+                return ev;
+            });
+        } catch (_) {}
+    }
+
     return res.render('pages/internet_browsing_status', {
         request,
         steps,
         role,
         token,
+        timeline,
         locationGroupLabels: LOCATION_GROUP_LABELS,
         currentUser: req.user || null,
         expectedAssigneeEmail: (token && request.currentStageAssigneeEmail) || null
