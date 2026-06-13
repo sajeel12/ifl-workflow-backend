@@ -218,24 +218,26 @@ export const resolveInitiatorEmployee = async (ssoUser) => {
     const email = (ssoUser.email || '').trim();
     const uname = (ssoUser.username || '').trim();
 
-    // 1) Exact DB email (AD email == HRMS email).
-    let row = email ? await Employee.findOne({ where: { email } }) : null;
-    if (row) { logger.info(`[IBR] initiator matched by DB email: ${email} → #${row.employeeId}`); return row; }
-
-    // Load the table once for the in-memory, case-insensitive joins below.
+    // Load the table once for all in-memory lookups below.
     const all = await Employee.findAll();
 
-    // 2) erpUser == AD sAMAccountName — the ERP login usually IS the AD login,
-    //    so this is a direct DB join with no AD round-trip (most reliable).
+    // 1) sAMAccountName (AD username) == erpUser — most stable key; try FIRST
+    //    before email because AD and HRMS emails frequently differ in domain.
     if (uname) {
         const un = uname.toLowerCase();
         const byErp = all.find(e => (e.erpUser || '').toLowerCase() === un);
         if (byErp) { logger.info(`[IBR] initiator matched by erpUser="${uname}" → #${byErp.employeeId}`); return byErp; }
     }
 
-    // 3) Same email local-part, different domain — the exact AD↔HRMS domain
-    //    split (israr.haq@igc.com.pk vs israr.haq@ifl.net). Accept only when it
-    //    is unambiguous so we never bind to the wrong person.
+    // 2) Exact DB email match.
+    if (email) {
+        const byEmail = all.find(e => (e.email || '').toLowerCase() === email.toLowerCase());
+        if (byEmail) { logger.info(`[IBR] initiator matched by DB email: ${email} → #${byEmail.employeeId}`); return byEmail; }
+    }
+
+    // 3) Same email local-part, different domain — cross-domain variant
+    //    (adnan.javaid@igc.com.pk vs adnan.javaid@ifl.net). Accept only when
+    //    unambiguous.
     const localPart = email.split('@')[0].toLowerCase();
     if (localPart) {
         const matches = all.filter(e => (e.email || '').split('@')[0].toLowerCase() === localPart);
@@ -248,45 +250,63 @@ export const resolveInitiatorEmployee = async (ssoUser) => {
         }
     }
 
-    logger.info(`[IBR] no DB email/erpUser/local-part match for "${email}" (user=${uname || '∅'}); pivoting on Employee Number via AD…`);
+    logger.info(`[IBR] no erpUser/email/local-part match for "${uname || '∅'}" / "${email}"; pivoting via AD…`);
 
-    // Try both the AD username (sAMAccountName) and the email as adsearch needles
-    // — whichever finds the account first wins.
-    const needles = [ssoUser.username, ssoUser.email].map(s => (s || '').trim()).filter(s => s.length >= 2);
-    const un = (ssoUser.username || '').toLowerCase();
-    const lc = (ssoUser.email || '').toLowerCase();
+    // 4) AD pivot — search by sAMAccountName first, then email as fallback needle.
+    //    If the AD account carries an employeeID attribute, use it as the DB key.
+    //    If the employeeID is empty, fall back to matching the AD displayName
+    //    against the Employee DB name column (unambiguous match only).
+    const needles = [uname, email].filter(s => s.length >= 2);
+    const un = uname.toLowerCase();
+    const lc = email.toLowerCase();
 
-    let employeeId = null;
+    let adMatch = null;
     for (const needle of needles) {
         try {
             const results = await searchUsersByName(needle);
             logger.info(`[IBR] adsearch("${needle}") → ${results.length} result(s): ` +
                 (results.map(r => `${r.sAMAccountName || '?'}|${r.mail || '?'}|empID=${r.employeeID || '∅'}`).join('  ') || '(none)'));
-            const match = results.find(r =>
+            const m = results.find(r =>
                 (r.sAMAccountName && r.sAMAccountName.toLowerCase() === un) ||
                 (r.mail && r.mail.toLowerCase() === lc)
             ) || (results.length === 1 ? results[0] : null);
-            if (match && match.employeeID) {
-                employeeId = String(match.employeeID).trim();
-                logger.info(`[IBR] AD match: ${match.sAMAccountName || '?'} → employeeID=${employeeId}`);
-                break;
-            }
-            if (match) logger.warn(`[IBR] AD matched ${match.sAMAccountName || '?'} but its employeeID attribute is EMPTY — cannot pivot.`);
+            if (m) { adMatch = m; break; }
         } catch (e) {
             logger.warn(`[IBR] adsearch("${needle}") failed: ${e.message}`);
         }
     }
 
-    if (employeeId) {
-        const byId = await Employee.findByPk(employeeId);
-        if (byId) {
-            logger.info(`[IBR] Resolved ${ssoUser.email || un} → employee #${employeeId} via AD employee-number pivot`);
-            return byId;
+    if (adMatch) {
+        // 4a) employeeID attribute → direct DB PK lookup (most reliable).
+        if (adMatch.employeeID) {
+            const empId = String(adMatch.employeeID).trim();
+            const byId = await Employee.findByPk(empId);
+            if (byId) {
+                logger.info(`[IBR] Resolved "${uname}" → employee #${empId} via AD employeeID pivot`);
+                return byId;
+            }
+            logger.warn(`[IBR] AD employeeID="${empId}" has no matching DB row (format mismatch?)`);
+        } else {
+            logger.warn(`[IBR] AD matched ${adMatch.sAMAccountName || '?'} but employeeID attribute is EMPTY`);
         }
-        logger.warn(`[IBR] AD gave employeeID="${employeeId}" but no DB Employee row has that primary key (number/format mismatch?).`);
+
+        // 4b) displayName fallback — when employeeID is absent, try matching
+        //     the AD full name against the Employee.name column (unambiguous only).
+        const adName = (adMatch.displayName || adMatch.name || '').trim().toLowerCase();
+        if (adName.length >= 3) {
+            const byName = all.filter(e => (e.name || '').toLowerCase() === adName);
+            if (byName.length === 1) {
+                logger.info(`[IBR] Resolved "${uname}" → employee #${byName[0].employeeId} via AD displayName match`);
+                return byName[0];
+            }
+            if (byName.length > 1) {
+                logger.warn(`[IBR] AD displayName "${adMatch.displayName}" matched ${byName.length} employees — ambiguous, skipping`);
+            }
+        }
     } else {
-        logger.warn(`[IBR] Could not derive an Employee Number from AD for user="${ssoUser.username || ssoUser.email}".`);
+        logger.warn(`[IBR] AD search found no account for username="${uname}" / email="${email}"`);
     }
+
     return null;
 };
 
