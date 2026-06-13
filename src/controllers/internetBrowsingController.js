@@ -16,7 +16,7 @@ const LOCATION_GROUP_LABELS = Object.fromEntries(LOCATION_GROUPS.map(g => [g.key
 const IBR_ROLE_TO_PORTAL = {
     ITOps:              { key: 'IT_OPS',              label: 'IT Operations' },
     FMS:                { key: 'NETWORK_VALIDATOR',   label: 'Network Validator (FMS)' },
-    ITOpsMgr:           { key: 'IT_OPS',              label: 'IT Operations' },
+    ITOpsMgr:           { key: 'IT_OPS_MGR',          label: 'IT Operations Manager' },
     ITHOD:              { key: 'IT_HOD',              label: 'IT HOD' },
     NetworkImplementer: { key: 'NETWORK_IMPLEMENTER', label: 'Network Implementer' }
 };
