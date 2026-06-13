@@ -18,7 +18,6 @@
         padding: 30px; box-shadow: 0 8px 18px -10px rgba(15,23,42,0.18);
     }
     .ibr-card h2 { margin: 0 0 8px; font-size: 1.1rem; font-weight: 700; color: #0f172a; }
-    .ibr-card p.sub { margin: 0 0 22px; color: #475569; font-size: 0.92rem; }
     .ibr-section-title {
         font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase;
         letter-spacing: 0.08em; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;
@@ -88,14 +87,40 @@
 %>
 
 <div class="ibr-card">
+    <div class="steps-container" style="padding: 24px 0 16px;">
+        <div class="steps-row">
+            <div class="step-item active">
+                <div class="step-circle">1</div>
+                <div class="step-label">Initiation</div>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">2</div>
+                <div class="step-label">IT Ops Validation</div>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">3</div>
+                <div class="step-label">HOD Approval</div>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">4</div>
+                <div class="step-label">FMS Validation</div>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">5</div>
+                <div class="step-label">IT Ops Manager</div>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">6</div>
+                <div class="step-label">IT HOD Sign-off</div>
+            </div>
+            <div class="step-item">
+                <div class="step-circle">7</div>
+                <div class="step-label">Implementation</div>
+            </div>
+        </div>
+    </div>
+
     <div class="panel">
-        <h2>Internet Browsing Request</h2>
-        <p class="sub">
-            Submit a request to enable internet access on your AD account. Your details are
-            collected automatically from HRMS. IT Operations will validate the request and
-            fill in the access rights (User Type, NT Login, Facility Duration, Browsing Rights).
-            The request then proceeds through HOD, FMS, and IT senior management sign-off.
-        </p>
 
         <% if (existing) { %>
             <div class="ibr-existing-warn">
