@@ -73,15 +73,17 @@ export const handleRequest = async (req, res) => {
 // from HRMS + the SSO identity. Returns a `data` object ready to hand to
 // ibrService.createRequest, or null + an error message if the lookup fails.
 const collectInitiatorSnapshot = async (req) => {
-    if (!req.user || !req.user.email) {
+    if (!req.user || (!req.user.username && !req.user.email)) {
         return { error: 'Sign-in required to initiate an Internet Browsing request. Please open this page from the IFL portal.', status: 401 };
     }
-    // Match by email first, then pivot on the Employee Number (the AD email
-    // often differs from the HRMS email; the employee number is the shared key).
+    // Resolution is keyed on the logged-in NT account's AD employeeID (the same
+    // key as the Employee primary key) — never on email, since the AD email and
+    // the HRMS/DB email differ.
     const empRow = await ibrService.resolveInitiatorEmployee(req.user);
     if (!empRow) {
+        const who = req.user.username || req.user.email || 'your account';
         return {
-            error: `Your SSO identity (${req.user.email}) could not be matched to an employee record by email or AD employee number. Please contact HR before requesting internet access.`,
+            error: `Your AD account (${who}) could not be matched to an employee record. This usually means your AD account is missing its Employee ID, or that ID is not yet in HRMS. Please contact IT to set the Employee ID on your AD account.`,
             status: 403
         };
     }
