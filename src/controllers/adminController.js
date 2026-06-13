@@ -52,12 +52,11 @@ const EMAIL_TYPE_TO_PORTAL_SLUG = {
 // Map the current pending INTERNET BROWSING status → role + email type +
 // portal slug. Shared by the IBR resend preview + send handlers below.
 // HOD_APPROVAL has no portal slug (HODs act from the emailed link only).
-// The RN Approval stage (PendingITOpsMgr) routes to the existing IT_OPS team.
 const IBR_STAGE_MAP = {
     PendingITOpsValidation: { roleKey: 'IT_OPS',              type: 'IT_OPS_VALIDATION', slug: 'it-ops' },
     PendingHOD:             { roleKey: 'HOD',                 type: 'HOD_APPROVAL',      slug: null },
     PendingFMS:             { roleKey: 'NETWORK_VALIDATOR',   type: 'FMS_VALIDATION',    slug: 'network-validator' },
-    PendingITOpsMgr:        { roleKey: 'IT_OPS',              type: 'IT_OPS_MGR',        slug: 'it-ops' },
+    PendingITOpsMgr:        { roleKey: 'IT_OPS_MGR',          type: 'IT_OPS_MGR',        slug: 'it-ops-mgr' },
     PendingITHOD:           { roleKey: 'IT_HOD',              type: 'IT_HOD_APPROVAL',   slug: 'it-hod' },
     PendingImplementation:  { roleKey: 'NETWORK_IMPLEMENTER', type: 'IMPLEMENTATION',    slug: 'network-implementer' },
 };

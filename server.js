@@ -29,6 +29,7 @@ const DEFAULT_APPROVER_CONFIGS = [
     { roleKey: 'IT_HOD', label: 'IT Head of Department', description: 'IT HOD review in Step 5b (email required)', workflowStage: 'Step 5b – IT HOD Review', approverEmail: process.env.EMAIL_IT_HOD || null, approverName: 'IT HOD' },
     { roleKey: 'DCI_IMPLEMENTER', label: 'DCI Implementer', description: 'Implements DCI changes in Step 6', workflowStage: 'Step 6 – DCI Implementation', approverEmail: process.env.EMAIL_DCI_IMPLEMENTER || null, approverName: 'DCI Implementer' },
     { roleKey: 'NETWORK_VALIDATOR',   label: 'Network Validator (FMS)', description: 'Validates Internet Browsing requests against network/firewall policy.', workflowStage: 'IBR – FMS Validation', approverEmail: process.env.EMAIL_NETWORK_VALIDATOR || null, approverName: 'Network Validator' },
+    { roleKey: 'IT_OPS_MGR',          label: 'IT Operations Manager (RN)', description: 'RN approval stage for Internet Browsing requests — after FMS validation, before IT HOD sign-off.', workflowStage: 'IBR – RN Approval', approverEmail: process.env.EMAIL_IT_OPS_MGR || null, approverName: 'IT Ops Manager' },
     { roleKey: 'NETWORK_IMPLEMENTER', label: 'Network Implementer',     description: 'Applies approved Internet Browsing requests (proxy / firewall changes).', workflowStage: 'IBR – Network Implementation', approverEmail: process.env.EMAIL_NETWORK_IMPLEMENTER || null, approverName: 'Network Implementer' },
 ];
 
@@ -360,18 +361,6 @@ async function startServer() {
             if (deleted > 0) logger.info(`[Schema] Removed ${deleted} stale OPS_TEAM row(s) from WorkflowApproverConfig.`);
         } catch (err) {
             logger.warn(`[Schema] OPS_TEAM cleanup skipped: ${err.message}`);
-        }
-
-        // Remove the phantom IT_OPS_MGR approver row. IT_OPS_MGR is a
-        // monitoring-only role (it reads the IT_OPS config, not its own row);
-        // a config row was briefly seeded when RN Approval was wired to it, but
-        // RN now routes to the existing IT_OPS team. The stray row only makes a
-        // spurious card appear in the Workflow Approvers admin page.
-        try {
-            const deleted = await WorkflowApproverConfig.destroy({ where: { roleKey: 'IT_OPS_MGR' } });
-            if (deleted > 0) logger.info(`[Schema] Removed ${deleted} stale IT_OPS_MGR row(s) from WorkflowApproverConfig.`);
-        } catch (err) {
-            logger.warn(`[Schema] IT_OPS_MGR cleanup skipped: ${err.message}`);
         }
 
         // Seed default system configs if table is empty. Non-fatal.

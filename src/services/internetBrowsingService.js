@@ -107,7 +107,7 @@ const IBR_TYPE_TO_PORTAL_SLUG = {
     IT_OPS_VALIDATION: 'it-ops',
     HOD_APPROVAL:       null,
     FMS_VALIDATION:    'network-validator',
-    IT_OPS_MGR:        'it-ops',
+    IT_OPS_MGR:        'it-ops-mgr',
     IT_HOD_APPROVAL:   'it-hod',
     IMPLEMENTATION:    'network-implementer',
 };
@@ -283,10 +283,10 @@ export const resolveInitiatorEmployee = async (ssoUser) => {
 export const createRequest = async (data, initiator) => {
     logger.info('[IBR] Creating new request');
     if (!data.employeeId) throw new Error('Employee record could not be resolved for your SSO identity.');
-    if (!data.ntLogin) throw new Error('NT Login is required.');
-    if (!data.userType) throw new Error('User Type is required.');
-    if (!data.facilityDuration) throw new Error('Facility Duration is required.');
-    if (!data.browsingRights) throw new Error('Browsing Rights is required.');
+    if (!data.ntLogin) throw new Error('NT Login could not be determined from your AD account.');
+    // User Type / Facility Duration / Browsing Rights are NO LONGER entered by the
+    // requester — the IT-Ops validator sets them at stage 2. We persist empty
+    // placeholders here (the columns are NOT NULL) and they get filled on approval.
 
     // Guard: refuse if an active IBR already exists for this employee.
     const existing = await InternetBrowsingRequest.findOne({
@@ -321,10 +321,10 @@ export const createRequest = async (data, initiator) => {
         hod:              data.hod || null,
         hodEmail:         data.hodEmail || null,
         email:            data.email || null,
-        userType:         data.userType,
         ntLogin:          data.ntLogin,
-        facilityDuration: data.facilityDuration,
-        browsingRights:   data.browsingRights,
+        userType:         data.userType || '',          // set by IT-Ops at stage 2
+        facilityDuration: data.facilityDuration || '',  // set by IT-Ops at stage 2
+        browsingRights:   data.browsingRights || '',     // set by IT-Ops at stage 2
         initiatedBy:      initiator && (initiator.email || initiator.username),
         initiatedAt:      new Date(),
         status:           'PendingITOpsValidation',
@@ -342,8 +342,10 @@ export const createRequest = async (data, initiator) => {
     return request;
 };
 
-// Stage 2: Location Ops / IT Ops validation.
-export const handleITOpsValidation = async (token, action, remarks) => {
+// Stage 2: Location Ops / IT Ops validation. The IT-Ops validator now ALSO sets
+// the rights selection (User Type / NT Login / Facility Duration / Browsing
+// Rights) — the requester no longer enters these at initiation.
+export const handleITOpsValidation = async (token, action, remarks, fields = {}) => {
     logger.info('[IBR] IT Ops validation');
     const request = await InternetBrowsingRequest.findOne({ where: { currentStageToken: token } });
     if (!request || request.status !== 'PendingITOpsValidation') throw new Error('Invalid Token');
@@ -362,6 +364,15 @@ export const handleITOpsValidation = async (token, action, remarks) => {
         return request;
     }
 
+    // Approve — the IT-Ops validator must have set the rights selection.
+    const ntLogin          = (fields.ntLogin || '').trim();
+    const userType         = (fields.userType || '').trim();
+    const facilityDuration = (fields.facilityDuration || '').trim();
+    const browsingRights   = (fields.browsingRights || '').trim();
+    if (!ntLogin || !userType || !facilityDuration || !browsingRights) {
+        throw new Error('Set NT Login, User Type, Facility Duration and Browsing Rights before approving.');
+    }
+
     const newToken = crypto.randomBytes(20).toString('hex');
     // Stage 3 → HOD. We snapshotted hodEmail at initiation; prefer that.
     let hodEmail = request.hodEmail;
@@ -372,6 +383,11 @@ export const handleITOpsValidation = async (token, action, remarks) => {
     }
 
     await request.update({
+        // Persist the IT-Ops-entered rights selection.
+        ntLogin,
+        userType,
+        facilityDuration,
+        browsingRights,
         status: 'PendingHOD',
         itOpsRemarks: remarks,
         itOpsValidatedAt: new Date(),
@@ -446,9 +462,7 @@ export const handleFMSValidation = async (token, action, remarks) => {
     }
 
     const newToken = crypto.randomBytes(20).toString('hex');
-    // RN Approval routes to the existing IT_OPS team (location-aware), not a
-    // separate IT Ops Manager role.
-    const recipient = await RecipientService.getWithFallback('IT_OPS', {
+    const recipient = await RecipientService.getWithFallback('IT_OPS_MGR', {
         location:   request.location,
         employeeId: request.employeeId,
         requestId:  request.id

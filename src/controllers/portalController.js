@@ -133,8 +133,7 @@ const OFFBOARDING_STATUS_TO_SLUG = {
 const IBR_STATUS_TO_SLUG = {
     PendingITOpsValidation: 'it-ops',
     PendingFMS:             'network-validator',
-    // RN Approval is handled by the IT Ops team via the IT Ops portal.
-    PendingITOpsMgr:        'it-ops',
+    PendingITOpsMgr:        'it-ops-mgr',
     PendingITHOD:           'it-hod',
     PendingImplementation:  'network-implementer',
 };
