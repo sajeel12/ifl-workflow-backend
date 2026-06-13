@@ -516,6 +516,7 @@ export async function showDashboard(req, res) {
             }));
 
             const appUrl = process.env.APP_URL || '';
+            const portalSessionToken = req.query.token || '';
             const ibrPendingRequests = ibrPendingRaw.map(r => {
                 const json = r.toJSON();
                 const stageAgeHours = Math.round((Date.now() - new Date(json.updatedAt)) / 3600000);
@@ -524,7 +525,7 @@ export async function showDashboard(req, res) {
                     stageAgeHours,
                     isStale:   stageAgeHours > 48,
                     actionUrl: r.currentStageToken
-                        ? `${appUrl}/portal/it-ops-mgr/enter?action=${r.currentStageToken}`
+                        ? `${appUrl}/api/internet-browsing/handle?token=${r.currentStageToken}&pt=${portalSessionToken}`
                         : null,
                 };
             });
