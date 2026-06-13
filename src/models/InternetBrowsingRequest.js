@@ -81,9 +81,14 @@ const InternetBrowsingRequest = sequelize.define('InternetBrowsingRequest', {
         allowNull: false
     },
     browsingRights: {
-        // 'GeneralBrowsing' | 'GeneralBrowsingWithStreaming'
+        // 'GeneralBrowsing' | 'GeneralBrowsingWithStreaming' | 'FinanceWebsites' | 'SpecificSites'
         type: DataTypes.STRING,
         allowNull: false
+    },
+    specificSites: {
+        // Comma/newline separated URLs — populated only when browsingRights='SpecificSites'
+        type: DataTypes.TEXT,
+        allowNull: true
     },
 
     // ─── Per-stage decision fields ────────────────────────────────────────

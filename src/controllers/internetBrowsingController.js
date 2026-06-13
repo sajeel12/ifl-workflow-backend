@@ -241,7 +241,8 @@ const handleSubmission = async (req, res, token) => {
                 ntLogin:          data.ntLogin,
                 userType:         data.userType,
                 facilityDuration: data.facilityDuration,
-                browsingRights:   data.browsingRights
+                browsingRights:   data.browsingRights,
+                specificSites:    data.specificSites
             });
             if (data.action === 'Reject') {
                 return renderSuccess(res, 'Request Rejected', 'The Internet Browsing request has been rejected and closed.', {

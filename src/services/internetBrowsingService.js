@@ -369,8 +369,12 @@ export const handleITOpsValidation = async (token, action, remarks, fields = {})
     const userType         = (fields.userType || '').trim();
     const facilityDuration = (fields.facilityDuration || '').trim();
     const browsingRights   = (fields.browsingRights || '').trim();
+    const specificSites    = (fields.specificSites || '').trim();
     if (!ntLogin || !userType || !facilityDuration || !browsingRights) {
         throw new Error('Set NT Login, User Type, Facility Duration and Browsing Rights before approving.');
+    }
+    if (browsingRights === 'SpecificSites' && !specificSites) {
+        throw new Error('Enter the specific site URLs before approving.');
     }
 
     const newToken = crypto.randomBytes(20).toString('hex');
@@ -383,11 +387,11 @@ export const handleITOpsValidation = async (token, action, remarks, fields = {})
     }
 
     await request.update({
-        // Persist the IT-Ops-entered rights selection.
         ntLogin,
         userType,
         facilityDuration,
         browsingRights,
+        specificSites: browsingRights === 'SpecificSites' ? specificSites : null,
         status: 'PendingHOD',
         itOpsRemarks: remarks,
         itOpsValidatedAt: new Date(),

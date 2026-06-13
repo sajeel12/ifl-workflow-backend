@@ -170,11 +170,22 @@
             <div>
                 <div class="field-label">Browsing Rights</div>
                 <div class="field-value">
-                    <%= request.browsingRights === 'GeneralBrowsingWithStreaming' ? 'General browsing with streaming'
-                      : request.browsingRights === 'GeneralBrowsing' ? 'General browsing'
-                      : (request.browsingRights || '—') %>
+                    <%
+                        const brLabel = request.browsingRights === 'GeneralBrowsingWithStreaming' ? 'General Browsing with Streaming'
+                            : request.browsingRights === 'GeneralBrowsing'  ? 'General Browsing'
+                            : request.browsingRights === 'FinanceWebsites'  ? 'Browsing with Finance Websites'
+                            : request.browsingRights === 'SpecificSites'    ? 'Specific Sites'
+                            : (request.browsingRights || '—');
+                    %>
+                    <%= brLabel %>
                 </div>
             </div>
+            <% if (request.browsingRights === 'SpecificSites' && request.specificSites) { %>
+            <div style="grid-column: 1 / -1;">
+                <div class="field-label">Specific Site URLs</div>
+                <div class="field-value" style="white-space:pre-wrap; font-size:0.88rem;"><%= request.specificSites %></div>
+            </div>
+            <% } %>
         </div>
     </div>
 
@@ -207,11 +218,13 @@
                         Fill in the access details below before approving. These fields are required to proceed.
                     </div>
 
-                    <label class="field-label">NT Login</label>
+                    <label class="field-label">NT Login
+                        <span style="font-size:0.72rem; color:#64748b; font-weight:400; text-transform:none; letter-spacing:0;">(auto-filled from initiator's AD account)</span>
+                    </label>
                     <input type="text" name="ntLogin" required maxlength="60"
                            value="<%= request.ntLogin || '' %>"
                            placeholder="e.g. john.doe"
-                           style="width:100%; padding:10px 12px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem; font-family:inherit; margin-bottom:12px;">
+                           style="width:100%; padding:10px 12px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.95rem; font-family:inherit; margin-bottom:12px; background:#f8fafc;">
 
                     <label class="field-label">User Type</label>
                     <div class="ibr-radio-row" style="margin-bottom:12px;">
@@ -242,17 +255,39 @@
                     </div>
 
                     <label class="field-label">Browsing Rights</label>
-                    <div class="ibr-radio-row" style="margin-bottom:4px;">
+                    <div class="ibr-radio-row" style="margin-bottom:10px;">
                         <label class="ibr-radio">
                             <input type="radio" name="browsingRights" value="GeneralBrowsing" required
+                                   onchange="ibrRightsChanged(this)"
                                    <%= request.browsingRights === 'GeneralBrowsing' ? 'checked' : '' %>>
-                            <span>General browsing</span>
+                            <span>General Browsing</span>
                         </label>
                         <label class="ibr-radio">
                             <input type="radio" name="browsingRights" value="GeneralBrowsingWithStreaming" required
+                                   onchange="ibrRightsChanged(this)"
                                    <%= request.browsingRights === 'GeneralBrowsingWithStreaming' ? 'checked' : '' %>>
-                            <span>General browsing with streaming</span>
+                            <span>General Browsing with Streaming</span>
                         </label>
+                        <label class="ibr-radio">
+                            <input type="radio" name="browsingRights" value="FinanceWebsites" required
+                                   onchange="ibrRightsChanged(this)"
+                                   <%= request.browsingRights === 'FinanceWebsites' ? 'checked' : '' %>>
+                            <span>Browsing with Finance Websites</span>
+                        </label>
+                        <label class="ibr-radio">
+                            <input type="radio" name="browsingRights" value="SpecificSites" required
+                                   onchange="ibrRightsChanged(this)"
+                                   <%= request.browsingRights === 'SpecificSites' ? 'checked' : '' %>>
+                            <span>Specific Sites</span>
+                        </label>
+                    </div>
+                    <div id="specificSitesWrap" style="display:<%= request.browsingRights === 'SpecificSites' ? 'block' : 'none' %>; margin-bottom:4px;">
+                        <label class="field-label" style="margin-top:6px;">Specific Site URLs
+                            <span style="font-size:0.72rem; color:#64748b; font-weight:400; text-transform:none; letter-spacing:0;">(one URL per line)</span>
+                        </label>
+                        <textarea name="specificSites" id="specificSitesInput" rows="4"
+                                  placeholder="https://example.com&#10;https://another.com"
+                                  style="width:100%; padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:0.92rem; font-family:inherit; resize:vertical;"><%= request.specificSites || '' %></textarea>
                     </div>
                 </div>
                 <% } %>
@@ -363,6 +398,16 @@
 
 </div>
 
+<script>
+    function ibrRightsChanged(radio) {
+        const wrap  = document.getElementById('specificSitesWrap');
+        const input = document.getElementById('specificSitesInput');
+        if (!wrap) return;
+        const show = radio.value === 'SpecificSites' && radio.checked;
+        wrap.style.display = show ? 'block' : 'none';
+        if (!show && input) input.value = '';
+    }
+</script>
 <script>
     // Verification cloak — same pattern as offboarding_status.ejs.
     document.addEventListener('DOMContentLoaded', async () => {
