@@ -256,12 +256,11 @@
 
   <% const itOps=approvers.find(a=> a.roleKey === 'IT_OPS');
     const hrInit = approvers.find(a => a.roleKey === 'HR_INITIATOR');
-    const delegationKeys = ['IT_HOD', 'DCI_MANAGER'];
-    // NETWORK_VALIDATOR + NETWORK_IMPLEMENTER are the two IBR teams.
-    // IT_OPS_MGR is the RN Approval stage (IBR step 4). Same 2-day primary/
-    // secondary fallback semantics as DCI_TEAM + DCI_IMPLEMENTER, so they all
-    // render in the Fallback Roles section below.
-    const fallbackKeys = ['DCI_TEAM', 'DCI_IMPLEMENTER', 'NETWORK_VALIDATOR', 'IT_OPS_MGR', 'NETWORK_IMPLEMENTER'];
+    const delegationKeys = ['IT_HOD', 'DCI_MANAGER', 'IT_OPS_MGR'];
+    // NETWORK_VALIDATOR + NETWORK_IMPLEMENTER are the two IBR teams. Same
+    // 2-day primary/secondary fallback semantics as DCI_TEAM + DCI_IMPLEMENTER,
+    // so they get rendered in the same Fallback Roles section below.
+    const fallbackKeys = ['DCI_TEAM', 'DCI_IMPLEMENTER', 'NETWORK_VALIDATOR', 'NETWORK_IMPLEMENTER'];
     const knownKeys = new
     Set(['IT_OPS','HR_INITIATOR','IT_HOD','DCI_MANAGER','DCI_TEAM','DCI_IMPLEMENTER','IT_OPS_MGR','NETWORK_VALIDATOR','NETWORK_IMPLEMENTER']);
     %>
